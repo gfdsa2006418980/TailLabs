@@ -32,10 +32,16 @@ export class SpawnSystem {
     return !this.dropped.some(({ body }) => held.min.x < body.bounds.max.x && held.max.x > body.bounds.min.x
       && held.min.y < body.bounds.max.y && held.max.y > body.bounds.min.y);
   }
-  setSpawnY(y: number): void { this.spawnY = y; this.held?.moveTo(this.x, y); }
+  setSpawnY(y: number): void {
+    if (this.spawnY === y) return;
+    this.spawnY = y;
+    this.held?.moveTo(this.x, y);
+  }
   moveTo(x: number): void {
     if (!this.held) return;
-    this.lastX = Phaser.Math.Clamp(x, this.layout.safeLeft + this.held.leftExtent, this.layout.safeRight - this.held.rightExtent);
+    const nextX = Phaser.Math.Clamp(x, this.layout.safeLeft + this.held.leftExtent, this.layout.safeRight - this.held.rightExtent);
+    if (nextX === this.lastX && this.held.body.position.y === this.spawnY) return;
+    this.lastX = nextX;
     this.held.moveTo(this.lastX, this.spawnY);
   }
   drop(): Serpentela | undefined {

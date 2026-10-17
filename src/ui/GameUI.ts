@@ -40,9 +40,6 @@ export class GameUI {
     let storage: Storage | undefined;
     try { storage = localStorage; } catch { /* Browser privacy settings may block storage. */ }
     this.leaderboard = new LeaderboardSystem(storage);
-    element('leaderboard-description').textContent = this.sharedLeaderboard.enabled
-      ? '全體玩家共用排行榜；各挑戰分開排名。'
-      : '目前保存在這個瀏覽器；連線共用排行榜後，所有玩家都能看到相同名次。';
     this.music = new LoopingMusic();
     this.cleanups.push(audioPreferences.subscribe(() => this.renderAudioControls()));
     this.listen('audio-settings-toggle', 'click', () => {
@@ -203,6 +200,7 @@ export class GameUI {
     const rows = this.leaderboard.top(target);
     this.renderBoardRows(rows);
     const storage = element('leaderboard-storage');
+    storage.hidden = false;
     if (!this.sharedLeaderboard.enabled) {
       storage.textContent = this.leaderboard.persistent ? '僅此瀏覽器的個人紀錄。完成者優先，各挑戰保留前 10 名。' : '瀏覽器儲存不可用，重新開啟後不會保留這次的紀錄。';
       return;
@@ -212,7 +210,8 @@ export class GameUI {
     void this.sharedLeaderboard.top(target).then((sharedRows) => {
       if (request !== this.boardRequest || this.boardTarget.value !== String(target)) return;
       this.renderBoardRows(sharedRows);
-      storage.textContent = '全體玩家共用紀錄；各挑戰分開排名，每種挑戰保留前 10 名。';
+      storage.textContent = '';
+      storage.hidden = true;
     }).catch(() => {
       if (request !== this.boardRequest || this.boardTarget.value !== String(target)) return;
       storage.textContent = '共用排行榜暫時無法連線，現在顯示這個瀏覽器的個人紀錄。';

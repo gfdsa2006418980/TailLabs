@@ -35,6 +35,10 @@ export class GameScene extends Phaser.Scene {
   private readonly pillarBodies: MatterJS.BodyType[] = [];
   private pillarVisual?: Phaser.GameObjects.Graphics;
   private lastHudAt = -Infinity;
+  private guideVisible = false;
+  private lastGuideX = Number.NaN;
+  private lastGuideOffset = Number.NaN;
+  private outlinesWereVisible = false;
   private touchId?: number;
   private layout!: StageLayout;
   private worldContainer!: Phaser.GameObjects.Container;
@@ -188,11 +192,12 @@ export class GameScene extends Phaser.Scene {
     if (this.isPlaying) {
       this.stickiness.update(this.round.elapsedMilliseconds + delta, delta);
       const pieces = this.spawner.pieces;
-      const ended = this.round.update(delta, pieces.map((piece) => ({ id: piece.id, frozen: piece.isFrozen, bounds: piece.body.bounds })), this.layout.platformY, this.layout);
+      const ended = this.round.update(delta, pieces, this.layout.platformY, this.layout);
       let top: number | undefined;
       for (const piece of pieces) if (piece.hasLanded && piece.body.bounds.max.x >= this.layout.safeLeft && piece.body.bounds.min.x <= this.layout.safeRight) top = Math.min(top ?? Infinity, piece.body.bounds.min.y);
       const offset = this.towerCamera.update(top, delta, this.layout.chamberTop + this.layout.chamberHeight * 0.46);
-      this.worldCamera.setScroll(this.layout.chamberLeft, this.layout.chamberTop + offset);
+      const cameraY = this.layout.chamberTop + offset;
+      if (this.worldCamera.scrollX !== this.layout.chamberLeft || this.worldCamera.scrollY !== cameraY) this.worldCamera.setScroll(this.layout.chamberLeft, cameraY);
       this.spawner.setSpawnY(this.layout.spawnY + offset);
       if (ended) {
         const result = this.round.result();
@@ -204,13 +209,26 @@ export class GameScene extends Phaser.Scene {
       if (this.time.now - this.lastHudAt > 80) { this.refreshReadout(); this.refreshControls(); this.lastHudAt = this.time.now; }
     }
     this.spawner.sync(this.isPlaying ? delta : 0);
-    this.outlines.clear(); if (this.showOutlines) this.spawner.drawOutlines(this.outlines);
-    this.guide.clear();
-    if (this.round.state === 'playing' && this.round.remaining) {
-      this.guide.lineStyle(1, INK, 0.15);
-      const offset = this.towerCamera.offset;
-      for (let y = this.layout.spawnY + offset + 36; y < this.layout.chamberBottom + offset; y += 14) this.guide.lineBetween(this.spawner.x, y, this.spawner.x, y + 5);
+    if (this.showOutlines) {
+      this.outlines.clear(); this.spawner.drawOutlines(this.outlines); this.outlinesWereVisible = true;
+    } else if (this.outlinesWereVisible) {
+      this.outlines.clear(); this.outlinesWereVisible = false;
     }
+    this.refreshGuide();
+  }
+  private refreshGuide(): void {
+    const visible = this.round.state === 'playing' && this.round.remaining > 0;
+    if (!visible) {
+      if (this.guideVisible) this.guide.clear();
+      this.guideVisible = false; this.lastGuideX = Number.NaN; this.lastGuideOffset = Number.NaN;
+      return;
+    }
+    const x = this.spawner.x;
+    const offset = this.towerCamera.offset;
+    if (this.guideVisible && x === this.lastGuideX && offset === this.lastGuideOffset) return;
+    this.guide.clear(); this.guide.lineStyle(1, INK, 0.15);
+    for (let y = this.layout.spawnY + offset + 36; y < this.layout.chamberBottom + offset; y += 14) this.guide.lineBetween(x, y, x, y + 5);
+    this.guideVisible = true; this.lastGuideX = x; this.lastGuideOffset = offset;
   }
   private drop(): void {
     if (!this.isPlaying || !this.round.remaining || this.time.now - this.lastDropAt < ROUND.dropCooldownMs) return;
