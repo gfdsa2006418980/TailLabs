@@ -4,6 +4,8 @@ type Catalog = Record<string, Message>;
 
 const messages: Record<Language, Catalog> = {
   en: {
+    gameMenu: 'Menu', openMenu: 'Open menu', closeMenu: 'Close menu',
+    powerSaving: 'Power saving', powerSavingDescription: '30 FPS · No collision bounce effects · Lighter glow',
     documentTitle: 'The Serpentela Copying Incident',
     metaDescription: 'A Serpentela has invaded your magic circle. Stack them all back onto it.',
     gameArea: 'TL001 game area', helpButton: 'Help', leaderboardButton: 'Leaderboard', resetButton: 'Restart',
@@ -36,6 +38,8 @@ const messages: Record<Language, Catalog> = {
     placedStable: '{{count}} placed safely', completedStatus: 'Challenge complete', failedStatus: 'Challenge failed', startupError: 'Could not start the game. Please refresh.',
   },
   zh: {
+    gameMenu: '選單', openMenu: '開啟選單', closeMenu: '關閉選單',
+    powerSaving: '省電模式', powerSavingDescription: '30 FPS · 關閉碰撞回彈特效 · 精簡光效',
     documentTitle: '誰複製了 500 隻蛇貂？',
     metaDescription: '有隻蛇貂闖進你的魔法陣了！把蛇貂全部疊回魔法陣上。',
     gameArea: 'TL001 遊戲實驗場', helpButton: '玩法', leaderboardButton: '排行榜', resetButton: '重新開始',
@@ -68,6 +72,8 @@ const messages: Record<Language, Catalog> = {
     placedStable: '已放穩 {{count}} 隻', completedStatus: '挑戰完成', failedStatus: '挑戰失敗', startupError: '啟動失敗，請重新整理。',
   },
   ja: {
+    gameMenu: 'メニュー', openMenu: 'メニューを開く', closeMenu: 'メニューを閉じる',
+    powerSaving: '省電力モード', powerSavingDescription: '30 FPS・衝突時の弾む演出をオフ・発光を軽減',
     documentTitle: '増殖したテンレラを積み戻せ！',
     metaDescription: 'テンレラが魔法陣に入り込んだ！全員を魔法陣の上に積み戻そう。',
     gameArea: 'TL001 ゲームエリア', helpButton: '遊び方', leaderboardButton: 'ランキング', resetButton: 'やり直す',

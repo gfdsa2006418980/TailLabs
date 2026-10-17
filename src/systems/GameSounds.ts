@@ -48,6 +48,8 @@ export class GameSounds {
   }
 
   private tone(type: OscillatorType, from: number, to: number, duration: number, volume: number, delay = 0): void {
+    const preferences = audioPreferences.get();
+    if (preferences.effectsMuted || preferences.effectsVolume === 0) return;
     const context = this.getContext();
     if (!context) return;
     const start = context.currentTime + delay;
@@ -61,6 +63,7 @@ export class GameSounds {
     gain.gain.exponentialRampToValueAtTime(0.0001, start + duration);
     oscillator.connect(gain);
     gain.connect(this.output ?? context.destination);
+    oscillator.onended = () => { oscillator.disconnect(); gain.disconnect(); };
     oscillator.start(start);
     oscillator.stop(start + duration + 0.01);
   }

@@ -14,16 +14,7 @@
       <section class="experiment" aria-label="TL001 遊戲實驗場" data-i18n-aria="gameArea">
         <div class="stage-toolbar">
           <div class="stage-actions">
-            <button id="help-button" type="button" aria-label="玩法" data-i18n-aria="helpButton">?</button>
-            <button id="leaderboard-button" type="button" aria-label="排行榜" data-i18n-aria="leaderboardButton">≡</button>
-            <button id="reset-button" type="button" aria-label="重新開始" data-i18n-aria="resetButton" disabled>↻</button>
-            <div class="audio-mixer">
-              <button id="audio-settings-toggle" type="button" aria-label="音量" data-i18n-aria="volume" aria-expanded="false" aria-controls="audio-controls">♫</button>
-              <div id="audio-controls" class="audio-controls" role="group" aria-label="音量控制" data-i18n-aria="audioControls" hidden>
-                <div class="audio-channel"><label for="music-volume" data-i18n="music">音樂</label><input id="music-volume" type="range" min="0" max="100" step="1" value="100" aria-label="背景音樂音量" data-i18n-aria="musicVolume" /><button id="music-toggle" type="button" aria-pressed="false">靜音</button></div>
-                <div class="audio-channel"><label for="effects-volume" data-i18n="effects">音效</label><input id="effects-volume" type="range" min="0" max="200" step="1" value="200" aria-label="遊戲音效音量" data-i18n-aria="effectsVolume" /><button id="effects-toggle" type="button" aria-pressed="false">靜音</button></div>
-              </div>
-            </div>
+            <button class="menu-trigger" data-menu-open type="button" aria-label="開啟選單" data-i18n-aria="openMenu" aria-haspopup="dialog" aria-controls="settings-dialog" aria-expanded="false"><span class="menu-icon" aria-hidden="true"><i></i><i></i><i></i></span></button>
           </div>
         </div>
         <div class="game-progress">
@@ -40,7 +31,7 @@
     </div>
   </main>
   <dialog id="tutorial-dialog" aria-labelledby="tutorial-title"><div class="dialog-card tutorial-card">
-    <div class="language-picker" role="group" aria-label="語言" data-i18n-aria="languageSelector"><button type="button" data-language="en" aria-label="English" aria-pressed="false">EN</button><button type="button" data-language="zh" aria-label="繁體中文" aria-pressed="true">ZH</button><button type="button" data-language="ja" aria-label="日本語" aria-pressed="false">JA</button></div>
+    <div class="dialog-tools"><button class="menu-trigger" data-menu-open type="button" aria-label="開啟選單" data-i18n-aria="openMenu" aria-haspopup="dialog" aria-controls="settings-dialog" aria-expanded="false"><span class="menu-icon" aria-hidden="true"><i></i><i></i><i></i></span></button></div>
     <h2 id="tutorial-title" tabindex="-1" autofocus><span class="tutorial-oops" data-i18n="tutorialOops">喔不！</span><span data-i18n="tutorialTitle">有隻蛇貂闖進你的魔法陣了！</span></h2>
     <p id="tutorial-description" class="dialog-description">10 隻完全一樣的蛇貂塞滿了實驗室，<br />復原方法只有一個：把牠們全部疊回魔法陣上。</p>
     <div class="tutorial-steps">
@@ -53,6 +44,7 @@
     <button id="start-button" class="primary-action" type="button"><span id="start-label" data-i18n="start">把牠們疊回去</span><span aria-hidden="true">→</span></button>
   </div></dialog>
   <dialog id="result-dialog" aria-labelledby="result-title"><div class="dialog-card result-card">
+    <div class="dialog-tools"><button class="menu-trigger" data-menu-open type="button" aria-label="開啟選單" data-i18n-aria="openMenu" aria-haspopup="dialog" aria-controls="settings-dialog" aria-expanded="false"><span class="menu-icon" aria-hidden="true"><i></i><i></i><i></i></span></button></div>
     <img class="result-art" src="./assets/serpentelas/serpentela-w1-01.webp" width="96" height="96" alt="蛇貂" data-i18n-alt="resultArt" />
     <h2 id="result-title" tabindex="-1">魔法失敗了！</h2><p id="result-description" class="dialog-description"></p>
     <div class="result-total"><span data-i18n="resultScore">本次分數</span><strong id="result-score">0</strong></div>
@@ -61,10 +53,32 @@
     <p id="save-status" role="status" class="dialog-footnote"></p><button id="again-button" class="primary-action" type="button"><span id="again-label">再試一次</span><span id="again-icon" aria-hidden="true">↻</span></button><div class="result-links"><button id="result-board-button" class="text-action" type="button"><span data-i18n="viewLeaderboard">查看排行榜</span> ↗</button><button id="menu-button" class="text-action" type="button"><span data-i18n="moreChallenges">挑戰更多隻</span> ↗</button></div>
   </div></dialog>
   <dialog id="leaderboard-dialog" aria-labelledby="leaderboard-title"><div class="dialog-card leaderboard-card">
+    <div class="dialog-tools"><button class="menu-trigger" data-menu-open type="button" aria-label="開啟選單" data-i18n-aria="openMenu" aria-haspopup="dialog" aria-controls="settings-dialog" aria-expanded="false"><span class="menu-icon" aria-hidden="true"><i></i><i></i><i></i></span></button></div>
     <p class="eyebrow" data-i18n="leaderboardEyebrow">GLOBAL RANKING / TOP 10</p><h2 id="leaderboard-title" tabindex="-1" data-i18n="leaderboardTitle">最佳紀錄</h2>
     <label for="board-target" data-i18n="viewChallenge">查看挑戰</label><select id="board-target"><option value="10" data-count-option="10">10 隻</option><option value="50" data-count-option="50">50 隻</option><option value="100" data-count-option="100">100 隻</option><option value="500" data-count-option="500">500 隻</option></select>
     <ol id="leaderboard-list" class="leaderboard-list"></ol><p id="leaderboard-storage" class="dialog-footnote"></p><button id="board-close-button" class="primary-action" type="button"><span data-i18n="back">返回</span><span aria-hidden="true">→</span></button>
   </div></dialog>
+  <dialog id="settings-dialog" class="settings-dialog" aria-labelledby="settings-title">
+    <div class="settings-card">
+      <div class="settings-heading"><h2 id="settings-title" tabindex="-1" data-i18n="gameMenu">選單</h2><button class="settings-close" data-menu-close type="button" aria-label="關閉選單" data-i18n-aria="closeMenu">×</button></div>
+      <nav class="settings-nav" aria-label="遊戲選單" data-i18n-aria="gameMenu">
+        <button id="help-button" type="button"><span aria-hidden="true">?</span><span data-i18n="helpButton">玩法</span><span aria-hidden="true">→</span></button>
+        <button id="leaderboard-button" type="button"><span aria-hidden="true">≡</span><span data-i18n="leaderboardButton">排行榜</span><span aria-hidden="true">→</span></button>
+        <button id="reset-button" type="button"><span aria-hidden="true">↻</span><span data-i18n="resetButton">重新開始</span><span aria-hidden="true">→</span></button>
+      </nav>
+      <div class="settings-section settings-language"><span data-i18n="languageSelector">語言</span><div class="language-picker" role="group" aria-label="語言" data-i18n-aria="languageSelector"><button type="button" data-language="en" aria-label="English" aria-pressed="false">EN</button><button type="button" data-language="zh" aria-label="繁體中文" aria-pressed="true">ZH</button><button type="button" data-language="ja" aria-label="日本語" aria-pressed="false">JA</button></div></div>
+      <div class="settings-section">
+        <label class="power-saving-setting" for="power-saving-toggle"><span><strong data-i18n="powerSaving">省電模式</strong><small id="power-saving-description" data-i18n="powerSavingDescription">30 FPS · 關閉碰撞回彈特效 · 精簡光效</small></span><input id="power-saving-toggle" type="checkbox" role="switch" aria-describedby="power-saving-description" /><span class="switch-track" aria-hidden="true"></span></label>
+      </div>
+      <div class="settings-section"><p class="settings-section-label" data-i18n="volume">音量</p>
+        <div id="audio-controls" class="settings-audio" role="group" aria-label="音量控制" data-i18n-aria="audioControls">
+          <div class="audio-channel"><label for="music-volume" data-i18n="music">音樂</label><input id="music-volume" type="range" min="0" max="100" step="1" value="100" aria-label="背景音樂音量" data-i18n-aria="musicVolume" /><button id="music-toggle" type="button" aria-pressed="false">靜音</button></div>
+          <div class="audio-channel"><label for="effects-volume" data-i18n="effects">音效</label><input id="effects-volume" type="range" min="0" max="200" step="1" value="200" aria-label="遊戲音效音量" data-i18n-aria="effectsVolume" /><button id="effects-toggle" type="button" aria-pressed="false">靜音</button></div>
+        </div>
+      </div>
+      <button class="primary-action" data-menu-close type="button"><span data-i18n="back">返回</span><span aria-hidden="true">→</span></button>
+    </div>
+  </dialog>
   <script type="module" src="/src/main.ts"></script>
 </body>
 </html>

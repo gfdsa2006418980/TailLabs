@@ -5,6 +5,10 @@ import type { StickyTarget } from '../systems/StickinessSystem';
 import { SERPENTELA_PHYSICS } from '../game/PhysicsTuning';
 import { compoundInertia } from '../systems/CompoundInertia';
 import { ElasticArtwork } from './ElasticArtwork';
+import { addSettleGlow } from './SettleGlow';
+import { performancePreferences } from '../systems/PerformancePreferences';
+
+export interface VisibilityBounds { left: number; right: number; top: number; bottom: number; }
 
 export class Serpentela implements StickyTarget {
   readonly definition: SerpentelaDefinition;
@@ -13,6 +17,8 @@ export class Serpentela implements StickyTarget {
   private readonly visual: Phaser.GameObjects.Container;
   private readonly artwork: ElasticArtwork;
   private frozenState = false;
+  private glow?: Phaser.GameObjects.Container;
+  private glowTween?: Phaser.Tweens.Tween;
   hasLanded = false;
 
   constructor(scene: Phaser.Scene, x: number, y: number, definition: SerpentelaDefinition, parent?: Phaser.GameObjects.Container, private readonly onStable?: () => void) {
@@ -42,6 +48,7 @@ export class Serpentela implements StickyTarget {
   get id(): number { return this.body.id; }
   get isFrozen(): boolean { return this.frozenState; }
   get frozen(): boolean { return this.frozenState; }
+  get hasVisualActivity(): boolean { return this.artwork.isActive || !!this.glow; }
   get bounds(): MatterJS.IBound { return this.body.bounds; }
   get x(): number { return this.physics.x; }
   get leftExtent(): number { return (this.definition.center.x - this.definition.bounds.minX) * SERPENTELA_SCALE; }
@@ -65,6 +72,8 @@ export class Serpentela implements StickyTarget {
     if (this.frozenState) return;
     this.frozenState = true;
     this.physics.setVelocity(0, 0).setAngularVelocity(0).setStatic(true);
+    this.visual.setPosition(this.body.position.x, this.body.position.y).setRotation(this.body.angle);
+    this.artwork.stopEffects();
     const x = (this.definition.bounds.maxX - this.definition.center.x) * SERPENTELA_SCALE - 4;
     const y = (this.definition.bounds.minY - this.definition.center.y) * SERPENTELA_SCALE + 4;
     this.visual.add(this.scene.add.circle(x, y, 2.5, 0x73966a));
@@ -73,36 +82,26 @@ export class Serpentela implements StickyTarget {
   }
 
   private flashGlow(): void {
-    const glow = this.scene.add.graphics().setBlendMode(Phaser.BlendModes.ADD);
-    const trace = () => {
-      glow.beginPath();
-      this.definition.outline.forEach((point, index) => {
-        const x = (point.x - this.definition.center.x) * SERPENTELA_SCALE;
-        const y = (point.y - this.definition.center.y) * SERPENTELA_SCALE;
-        if (index === 0) glow.moveTo(x, y); else glow.lineTo(x, y);
-      });
-      glow.closePath();
-    };
-    trace(); glow.fillStyle(0xffedac, 0.12).fillPath();
-    trace(); glow.lineStyle(8, 0xffd76c, 0.28).strokePath();
-    trace(); glow.lineStyle(2, 0xfff5ce, 0.92).strokePath();
-    const flash = this.scene.add.container(0, 0, [glow]).setScale(0.96);
+    const saving = performancePreferences.powerSaving;
+    const glow = addSettleGlow(this.scene, this.definition).setBlendMode(Phaser.BlendModes.ADD);
+    const flash = this.scene.add.container(0, 0, [glow]).setScale(saving ? 1 : 0.96);
+    this.glow = flash;
     this.visual.add(flash);
-    this.scene.tweens.add({
+    this.glowTween = this.scene.tweens.add({
       targets: flash,
       alpha: { from: 0.95, to: 0 },
-      scaleX: { from: 0.96, to: 1.1 },
-      scaleY: { from: 0.96, to: 1.1 },
-      duration: 340,
+      scaleX: { from: saving ? 1 : 0.96, to: saving ? 1 : 1.1 },
+      scaleY: { from: saving ? 1 : 0.96, to: saving ? 1 : 1.1 },
+      duration: saving ? 180 : 340,
       ease: 'Cubic.Out',
-      onComplete: () => flash.destroy(),
+      onComplete: () => { flash.destroy(); this.glow = undefined; this.glowTween = undefined; },
     });
   }
 
   impact(worldX: number, worldY: number, normalX: number, normalY: number, strength: number): void {
     // Settled pieces are static supports; deforming every support on impact
     // creates unnecessary mesh updates as the tower grows.
-    if (this.frozenState) return;
+    if (this.frozenState || !this.visual.visible || performancePreferences.powerSaving) return;
     const dx = worldX - this.body.position.x;
     const dy = worldY - this.body.position.y;
     // Direct the contact impulse inward for either side of a collision pair.
@@ -115,7 +114,13 @@ export class Serpentela implements StickyTarget {
     this.artwork.impact(localX, localY, nx, ny, strength, this.scene.time.now);
   }
 
-  sync(delta: number): void {
+  sync(delta: number, view?: VisibilityBounds): void {
+    if (view) {
+      const bounds = this.body.bounds;
+      this.visual.setVisible(bounds.max.x >= view.left && bounds.min.x <= view.right
+        && bounds.max.y >= view.top && bounds.min.y <= view.bottom);
+      if (!this.visual.visible && this.artwork.isActive) this.artwork.stopEffects();
+    }
     if (this.frozenState && !this.artwork.isActive) return;
     const position = this.body.position;
     const angle = this.body.angle;
@@ -144,8 +149,12 @@ export class Serpentela implements StickyTarget {
   }
 
   destroy(): void {
+    this.glowTween?.remove(); this.glowTween = undefined;
+    this.glow?.destroy(); this.glow = undefined;
     this.artwork.destroy();
     this.physics.destroy();
     this.visual.destroy();
   }
+
+  applyPerformanceMode(): void { this.artwork.stopEffects(); }
 }

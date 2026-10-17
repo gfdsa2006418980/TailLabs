@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { Serpentela } from '../entities/Serpentela';
+import { Serpentela, type VisibilityBounds } from '../entities/Serpentela';
 import { SERPENTELAS } from '../data/serpentelas';
 import type { SerpentelaDefinition } from '../data/serpentelas';
 import { SerpentelaPicker } from './SerpentelaPicker';
@@ -10,6 +10,8 @@ export class SpawnSystem {
   private held?: Serpentela;
   private dropped: Serpentela[] = [];
   private orbs = new Map<number, Serpentela>();
+  private readonly moving = new Set<Serpentela>();
+  private visualActivity = false;
   private readonly picker = new SerpentelaPicker(SERPENTELAS);
   private readonly pinned = SERPENTELAS.find((item) => item.id === new URLSearchParams(location.search).get('shape'));
   private queue!: DrawQueue<SerpentelaDefinition>;
@@ -26,6 +28,8 @@ export class SpawnSystem {
   get next(): SerpentelaDefinition | undefined { return this.queue.next; }
   get current(): SerpentelaDefinition | undefined { return this.queue.current; }
   get pieces(): readonly Serpentela[] { return this.dropped; }
+  get hasMovingPieces(): boolean { return this.moving.size > 0; }
+  get hasVisualActivity(): boolean { return this.visualActivity; }
   get canRelease(): boolean {
     if (!this.held) return false;
     const held = this.held.body.bounds;
@@ -47,24 +51,34 @@ export class SpawnSystem {
   drop(): Serpentela | undefined {
     if (!this.held || !this.canRelease) return;
     const dropped = this.held;
-    dropped.release(); this.dropped.push(dropped);
+    dropped.release(); this.dropped.push(dropped); this.moving.add(dropped);
     this.queue.consume(); this.held = undefined;
     if (this.queue.current) this.held = this.create(this.queue.current);
     this.updateName();
     return dropped;
   }
   getOrb(id: number): Serpentela | undefined { return this.orbs.get(id); }
-  sync(delta: number): void { this.orbs.forEach((orb) => orb.sync(delta)); }
+  sync(delta: number, view?: VisibilityBounds): void {
+    this.visualActivity = false;
+    this.orbs.forEach((orb) => { orb.sync(delta, view); this.visualActivity ||= orb.hasVisualActivity; });
+  }
+  applyPerformanceMode(): void { this.orbs.forEach((orb) => orb.applyPerformanceMode()); }
   drawOutlines(graphics: Phaser.GameObjects.Graphics): void { this.orbs.forEach((orb) => orb.drawOutline(graphics)); }
-  reset(target: number): void {
+  destroy(): void {
     this.orbs.forEach((orb) => orb.destroy()); this.orbs.clear(); this.dropped = [];
+    this.moving.clear(); this.visualActivity = false; this.held = undefined;
+  }
+  reset(target: number): void {
+    this.destroy();
     this.picker.reset(); this.spawnY = this.layout.spawnY; this.lastX = this.layout.width / 2;
     this.queue = new DrawQueue(() => this.pinned ?? this.picker.next(), target);
     this.held = this.queue.current ? this.create(this.queue.current) : undefined;
     this.updateName();
   }
   private create(definition: SerpentelaDefinition): Serpentela {
-    const orb = new Serpentela(this.scene, this.lastX, this.spawnY, definition, this.parent, this.onStable);
+    const orb = new Serpentela(this.scene, this.lastX, this.spawnY, definition, this.parent, () => {
+      this.moving.delete(orb); this.onStable();
+    });
     this.orbs.set(orb.id, orb);
     this.lastX = Phaser.Math.Clamp(this.lastX, this.layout.safeLeft + orb.leftExtent, this.layout.safeRight - orb.rightExtent);
     orb.moveTo(this.lastX, this.spawnY);

@@ -319,6 +319,60 @@ button:not(:disabled):active, .controls button:not(:disabled):active { transform
   --controls-bottom: calc(env(safe-area-inset-bottom, 0px) + 30px);
   --controls-height: 46px;
 }
+
+/* A single, touch-friendly menu entry on every game screen. */
+.menu-trigger, .stage-actions .menu-trigger {
+  display: grid; place-items: center; width: 44px; height: 44px; padding: 0;
+  border: 1px solid #d8dccf; border-radius: 12px; color: var(--ink);
+  background: #faf9f2f2; box-shadow: 0 2px 10px #20372e08;
+}
+.menu-icon { display: grid; gap: 4px; width: 18px; }
+.menu-icon i { display: block; height: 2px; border-radius: 1px; background: currentColor; }
+.dialog-tools { display: flex; justify-content: flex-end; margin: -8px -8px 10px 0; }
+.dialog-tools .menu-trigger { background: transparent; box-shadow: none; }
+#settings-dialog {
+  position: fixed; inset: calc(env(safe-area-inset-top, 0px) + 12px) 16px auto auto;
+  width: min(380px, calc(100vw - 32px)); max-width: calc(100vw - 32px);
+  max-height: calc(100dvh - env(safe-area-inset-top, 0px) - 24px);
+  margin: 0; border-radius: 18px; overscroll-behavior: contain;
+}
+#settings-dialog::backdrop { background: #20372e55; backdrop-filter: none; }
+.settings-card { padding: 22px; }
+.settings-heading { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 14px; }
+.settings-heading h2 { margin: 0; font-size: 23px; font-weight: 650; }
+.settings-heading h2:focus { outline: none; }
+.settings-close { display: grid; place-items: center; width: 44px; height: 44px; border: 0; border-radius: 10px; background: #eeefe5; color: var(--ink); font-size: 25px; }
+.settings-nav { display: grid; gap: 3px; }
+.settings-nav button { display: grid; grid-template-columns: 24px 1fr 16px; align-items: center; gap: 9px; width: 100%; min-height: 46px; padding: 8px 10px; border: 0; border-radius: 9px; background: transparent; color: var(--ink); font-size: 14px; text-align: left; }
+.settings-nav button:hover { background: #eeefe5; }
+.settings-nav button > :first-child, .settings-nav button > :last-child { color: #7f8e77; text-align: center; }
+.settings-section { border-top: 1px solid var(--line); margin-top: 16px; padding-top: 16px; }
+.settings-language { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 13px; }
+.settings-language .language-picker { margin: 0; gap: 5px; }
+.settings-language .language-picker button { min-width: 44px; min-height: 40px; font-size: 12px; }
+.power-saving-setting { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) 44px; align-items: center; gap: 12px; min-height: 48px; cursor: pointer; }
+.power-saving-setting strong { display: block; font-size: 14px; font-weight: 600; }
+.power-saving-setting small { display: block; margin-top: 5px; color: var(--muted); font-size: 11px; line-height: 1.65; }
+.power-saving-setting input { position: absolute; right: 0; width: 44px; height: 44px; margin: 0; opacity: 0; cursor: pointer; }
+.switch-track { width: 44px; height: 26px; border-radius: 15px; background: #d5dacc; pointer-events: none; }
+.switch-track::after { content: ''; display: block; width: 20px; height: 20px; margin: 3px; border-radius: 50%; background: #fffef8; box-shadow: 0 1px 3px #20372e25; }
+.power-saving-setting input:checked + .switch-track { background: var(--ink); }
+.power-saving-setting input:checked + .switch-track::after { transform: translateX(18px); }
+.power-saving-setting input:focus-visible + .switch-track { outline: 3px solid #d2844c; outline-offset: 4px; }
+.settings-section-label { margin: 0 0 7px; font-size: 13px; }
+.settings-audio { display: grid; gap: 8px; }
+.settings-audio .audio-channel { grid-template-columns: 40px minmax(0, 1fr) auto; gap: 10px; min-height: 42px; font-size: 12px; }
+.settings-audio input[type='range'] { width: 100%; min-width: 0; height: 36px; margin: 0; accent-color: var(--ink); }
+.settings-audio .audio-channel button { min-width: 52px; min-height: 36px; padding: 5px 9px; border: 1px solid var(--line); border-radius: 7px; background: #eeefe5; color: var(--ink); font-size: 12px; }
+.settings-card > .primary-action { margin-top: 20px; font-size: 14px; }
+html.power-saving dialog::backdrop { backdrop-filter: none; -webkit-backdrop-filter: none; }
+html.power-saving button { transition: none; }
+html.power-saving .leaderboard-list li { animation: none; }
+@media (max-height: 560px) {
+  .settings-card { padding: 16px 20px; }
+  .settings-heading { margin-bottom: 6px; }
+  .settings-section { margin-top: 10px; padding-top: 10px; }
+}
 .controls { bottom: var(--controls-bottom); }
 .controls button { height: var(--controls-height); }
 .control-hint {

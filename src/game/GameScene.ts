@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { preloadSerpentelas, SERPENTELAS } from '../data/serpentelas';
-import { Serpentela } from '../entities/Serpentela';
+import { Serpentela, type VisibilityBounds } from '../entities/Serpentela';
 import { SpawnSystem } from '../systems/SpawnSystem';
 import { StickinessSystem } from '../systems/StickinessSystem';
 import { RoundSession } from '../systems/RoundSession';
@@ -12,6 +12,8 @@ import { subscribeLanguage, t } from '../ui/i18n';
 import { createStageLayout, type StageLayout } from './StageConfig';
 import { ROUND } from './RoundConfig';
 import { CONTACT_TUNING_THRESHOLDS, CONTACT_TUNING_TIERS } from './PhysicsTuning';
+import { performancePreferences } from '../systems/PerformancePreferences';
+import { PlayClock } from '../systems/PlayClock';
 
 const INK = 0x345442;
 const FONT = '"Segoe UI", "Microsoft JhengHei", sans-serif';
@@ -48,6 +50,9 @@ export class GameScene extends Phaser.Scene {
   private prewarmIndex = 0;
   private prewarmTexture?: Phaser.GameObjects.Image;
   private contactTuningTier = -1;
+  private readonly playClock = new PlayClock();
+  private idleHudTimer?: ReturnType<typeof setTimeout>;
+  private readonly visibleBounds: VisibilityBounds = { left: 0, right: 0, top: 0, bottom: 0 };
 
   constructor() { super('GameScene'); }
   preload(): void {
@@ -82,7 +87,9 @@ export class GameScene extends Phaser.Scene {
       this.updatePreview();
       this.refreshControls();
       this.refreshReadout();
+      this.requestFrame();
     });
+    const unsubscribePerformance = performancePreferences.subscribe(() => this.applyPerformanceProfile());
 
     const onCollisionStart = (event: Phaser.Physics.Matter.Events.CollisionStartEvent) => {
       const impacts = new Map<number, { x: number; y: number; nx: number; ny: number; strength: number }>();
@@ -126,7 +133,7 @@ export class GameScene extends Phaser.Scene {
     this.matter.world.on('collisionend', onCollisionEnd);
     const toggle = document.querySelector<HTMLInputElement>('#outline-toggle');
     if (toggle) toggle.checked = this.showOutlines;
-    const onToggle = () => { this.showOutlines = toggle?.checked ?? false; };
+    const onToggle = () => { this.showOutlines = toggle?.checked ?? false; this.requestFrame(); };
     toggle?.addEventListener('change', onToggle);
     this.cursors = this.input.keyboard?.createCursorKeys();
     // Native dialog inputs and selects must retain their arrow/space behavior.
@@ -167,26 +174,92 @@ export class GameScene extends Phaser.Scene {
     this.input.keyboard?.on('keydown-LEFT', onKeyboardMove);
     this.input.keyboard?.on('keydown-RIGHT', onKeyboardMove);
     const unbind = bindControls({
-      move: (direction) => { if (this.isPlaying) this.spawner.moveTo(this.spawner.x + direction * 28); },
-      drop: () => this.drop(), reset: () => this.startRound(this.round.target),
+      move: (direction) => {
+        if (this.isPlaying) { this.spawner.moveTo(this.spawner.x + direction * 28); this.requestFrame(); }
+      },
+      drop: () => this.drop(),
     });
     const onVisibility = () => { this.hidden = document.hidden; this.touchId = undefined; this.refreshPaused(); };
     document.addEventListener('visibilitychange', onVisibility);
+    // DOM events wake the loop after Phaser has received the input event.
+    const wakePointer = () => { if (this.isPlaying) queueMicrotask(this.requestFrame); };
+    const wakeKeyboard = (event: KeyboardEvent) => {
+      if (this.isPlaying && ['ArrowLeft', 'ArrowRight', 'ArrowDown', ' '].includes(event.key)) queueMicrotask(this.requestFrame);
+    };
+    const wakeResize = () => queueMicrotask(this.requestFrame);
+    const canvas = this.game.canvas;
+    for (const event of ['pointerdown', 'pointermove', 'pointerup', 'pointercancel']) canvas.addEventListener(event, wakePointer);
+    window.addEventListener('pointerup', wakePointer);
+    window.addEventListener('keydown', wakeKeyboard); window.addEventListener('keyup', wakeKeyboard);
+    this.scale.on(Phaser.Scale.Events.RESIZE, wakeResize);
+    this.game.events.on(Phaser.Core.Events.POST_RENDER, this.afterRender);
     this.refreshControls();
-    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
-      this.ui.destroy(); unbind(); unsubscribeLanguage();
+    const matterWorld = this.matter.world;
+    const cleanup = () => {
+      this.events.off(Phaser.Scenes.Events.SHUTDOWN, cleanup);
+      this.events.off(Phaser.Scenes.Events.DESTROY, cleanup);
+      this.clearIdleHud();
+      this.ui.destroy(); unbind(); unsubscribeLanguage(); unsubscribePerformance();
       this.input.off('pointermove', onMove); this.input.off('pointerdown', onDown);
       this.input.off('pointerup', onUp); this.input.off('pointerupoutside', cancelTouch);
       this.input.keyboard?.off('keydown-SPACE', onKeyboardDrop); this.input.keyboard?.off('keydown-DOWN', onKeyboardDrop);
       this.input.keyboard?.off('keydown-LEFT', onKeyboardMove); this.input.keyboard?.off('keydown-RIGHT', onKeyboardMove);
-      this.matter.world.off('collisionstart', onCollisionStart); this.matter.world.off('collisionend', onCollisionEnd);
+      matterWorld.off('collisionstart', onCollisionStart); matterWorld.off('collisionend', onCollisionEnd);
       toggle?.removeEventListener('change', onToggle); document.removeEventListener('visibilitychange', onVisibility);
+      for (const event of ['pointerdown', 'pointermove', 'pointerup', 'pointercancel']) canvas.removeEventListener(event, wakePointer);
+      window.removeEventListener('pointerup', wakePointer);
+      window.removeEventListener('keydown', wakeKeyboard); window.removeEventListener('keyup', wakeKeyboard);
+      this.scale.off(Phaser.Scale.Events.RESIZE, wakeResize);
+      this.game.events.off(Phaser.Core.Events.POST_RENDER, this.afterRender);
+      this.spawner.destroy(); this.stickiness.clear();
       this.sounds.destroy();
-    });
+    };
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, cleanup);
+    this.events.once(Phaser.Scenes.Events.DESTROY, cleanup);
   }
 
   private get isPlaying(): boolean { return this.round.state === 'playing' && !this.paused && !this.hidden; }
-  private refreshPaused(): void { this.matter.world.enabled = this.isPlaying; this.refreshControls(); }
+  private refreshPaused(): void {
+    this.playClock.setRunning(this.isPlaying, performance.now());
+    this.refreshControls(); this.requestFrame();
+  }
+  private readonly requestFrame = (): void => {
+    this.clearIdleHud();
+    this.matter.world.enabled = this.isPlaying && !!this.spawner?.hasMovingPieces;
+    if (this.hidden) { this.game.loop.sleep(); return; }
+    if (!this.game.loop.running) {
+      this.game.loop.resetDelta();
+      Object.assign(this.matter.world.runner, { timeLastTick: 0, timeBuffer: 0 });
+      this.game.loop.wake();
+    }
+  };
+  private readonly afterRender = (): void => {
+    if (!this.spawner || this.prewarmIndex < SERPENTELAS.length) return;
+    this.matter.world.enabled = this.isPlaying && this.spawner.hasMovingPieces;
+    const inputActive = this.touchId !== undefined || this.cursors?.left.isDown || this.cursors?.right.isDown;
+    if (this.isPlaying && (this.spawner.hasMovingPieces || this.spawner.hasVisualActivity || !this.towerCamera.settled || inputActive)) return;
+    this.game.loop.sleep();
+    if (this.isPlaying && this.idleHudTimer === undefined) {
+      this.idleHudTimer = setTimeout(() => {
+        this.idleHudTimer = undefined;
+        if (!this.isPlaying) return;
+        this.round.elapsedMilliseconds += this.playClock.consume(performance.now());
+        this.refreshReadout(); this.refreshControls();
+        this.afterRender();
+      }, performancePreferences.powerSaving ? 500 : 250);
+    }
+  };
+  private clearIdleHud(): void {
+    if (this.idleHudTimer !== undefined) clearTimeout(this.idleHudTimer);
+    this.idleHudTimer = undefined;
+  }
+  private applyPerformanceProfile(): void {
+    this.game.loop.sleep();
+    this.game.loop.fpsLimit = performancePreferences.profile.frameRate;
+    this.spawner.applyPerformanceMode();
+    this.lastHudAt = -Infinity;
+    this.requestFrame();
+  }
   private refreshControls(): void {
     for (const id of ['move-left', 'move-right', 'drop-button']) {
       const button = document.getElementById(id) as HTMLButtonElement | null;
@@ -194,33 +267,35 @@ export class GameScene extends Phaser.Scene {
     }
     const drop = document.getElementById('drop-button') as HTMLButtonElement | null;
     if (drop && this.spawner) {
-      const waiting = this.isPlaying && this.round.remaining > 0 && (!this.spawner.canRelease || this.time.now - this.lastDropAt < ROUND.dropCooldownMs);
+      const waiting = this.isPlaying && this.round.remaining > 0 && (!this.spawner.canRelease || performance.now() - this.lastDropAt < ROUND.dropCooldownMs);
       drop.disabled ||= waiting;
       const label = !this.round.remaining ? t('dropWaitingFinal') : waiting ? t('dropWaiting') : t('drop');
       const text = document.getElementById('drop-label');
       if (text && text.textContent !== label) text.textContent = label;
     }
-    const reset = document.getElementById('reset-button') as HTMLButtonElement | null;
-    if (reset) reset.disabled = this.round.state !== 'playing' || this.paused;
   }
   private startRound(target: number): void {
     this.round = new RoundSession([10, 50, 100, 500].includes(target) ? target : ROUND.target);
     this.updateContactTuning(0);
     this.spawner.reset(this.round.target); this.stickiness.clear();
     this.updateLightPillars(this.round.target);
+    // Flush the detector's references to the destroyed round before sleeping again.
+    this.matter.world.step(1000 / 60);
     this.towerCamera.reset(); this.worldCamera.setScroll(this.layout.chamberLeft, this.layout.chamberTop);
     this.lastDropAt = -Infinity; this.lastHudAt = -Infinity; this.touchId = undefined;
+    this.playClock.reset(performance.now());
     this.round.start(); this.paused = false;
-    this.ui.setMode(this.round.target); this.refreshPaused(); this.updatePreview();
-    this.refreshReadout();
+    this.ui.setMode(this.round.target); this.updatePreview();
+    this.refreshReadout(); this.refreshPaused();
   }
   update(_time: number, delta: number): void {
     if (!this.spawner) return;
     this.prewarmNextSerpentela();
+    const elapsed = this.playClock.consume(performance.now());
     if (this.isPlaying) {
-      this.stickiness.update(this.round.elapsedMilliseconds + delta, delta);
+      this.stickiness.update(this.round.elapsedMilliseconds + elapsed, delta);
       const pieces = this.spawner.pieces;
-      const ended = this.round.update(delta, pieces, this.layout.platformY, this.layout);
+      const ended = this.round.update(elapsed, pieces, this.layout.platformY, this.layout);
       this.updateContactTuning(pieces.length);
       const offset = this.towerCamera.update(this.round.towerTop, delta, this.layout.chamberTop + this.layout.chamberHeight * 0.46);
       const cameraY = this.layout.chamberTop + offset;
@@ -233,9 +308,18 @@ export class GameScene extends Phaser.Scene {
       }
       const direction = Number(this.cursors?.right.isDown) - Number(this.cursors?.left.isDown);
       if (direction && !document.querySelector('dialog[open]')) this.spawner.moveTo(this.spawner.x + direction * Math.min(delta, 50) * 0.32);
-      if (this.time.now - this.lastHudAt > 80) { this.refreshReadout(); this.refreshControls(); this.lastHudAt = this.time.now; }
+      if (performance.now() - this.lastHudAt > performancePreferences.profile.hudIntervalMs) {
+        this.refreshReadout(); this.refreshControls(); this.lastHudAt = performance.now();
+      }
+    } else if (this.round.state === 'playing' && elapsed > 0) {
+      this.round.elapsedMilliseconds += elapsed; this.refreshReadout();
     }
-    if (this.isPlaying) this.spawner.sync(delta);
+    const margin = 80;
+    Object.assign(this.visibleBounds, {
+      left: this.worldCamera.scrollX - margin, right: this.worldCamera.scrollX + this.worldCamera.width + margin,
+      top: this.worldCamera.scrollY - margin, bottom: this.worldCamera.scrollY + this.worldCamera.height + margin,
+    });
+    this.spawner.sync(this.isPlaying ? delta : 0, this.visibleBounds);
     if (this.showOutlines) {
       this.outlines.clear(); this.spawner.drawOutlines(this.outlines); this.outlinesWereVisible = true;
     } else if (this.outlinesWereVisible) {
@@ -302,11 +386,14 @@ export class GameScene extends Phaser.Scene {
     this.guideVisible = true; this.lastGuideX = x; this.lastGuideOffset = offset;
   }
   private drop(): void {
-    if (!this.isPlaying || !this.round.remaining || this.time.now - this.lastDropAt < ROUND.dropCooldownMs) return;
+    const now = performance.now();
+    if (!this.isPlaying || !this.round.remaining || now - this.lastDropAt < ROUND.dropCooldownMs) return;
     const piece = this.spawner.drop(); if (!piece) return;
     this.sounds.playDrop();
-    this.round.recordDrop(); this.stickiness.track(piece); this.lastDropAt = this.time.now;
+    this.round.elapsedMilliseconds += this.playClock.consume(now);
+    this.round.recordDrop(); this.stickiness.track(piece); this.lastDropAt = now;
     this.updatePreview(); this.refreshControls(); this.refreshReadout();
+    this.requestFrame();
   }
   private updatePreview(): void {
     const next = this.spawner.next;
@@ -394,5 +481,10 @@ export class GameScene extends Phaser.Scene {
     art.fillStyle(0xf1f0e5, 0.7).fillRoundedRect(previewLeft, previewTop, previewWidth, previewHeight, 12);
     this.nextLabel = label(previewCenter, previewTop + 9, t('next'), 14).setOrigin(0.5, 0).setStyle({ fontStyle: 'bold', align: 'center' });
     this.nextImage = this.add.image(previewCenter, previewTop + 58, 'serpentela-w50-01').setDisplaySize(38.25, 38.25); parent.add(this.nextImage);
+    // Graphics commands otherwise rebuild and triangulate all 504 dots every frame.
+    const backgroundKey = 'chamber-background-' + this.layout.width + 'x' + this.layout.height;
+    if (!this.textures.exists(backgroundKey)) art.generateTexture(backgroundKey, this.layout.width, this.layout.height);
+    parent.addAt(this.add.image(0, 0, backgroundKey).setOrigin(0), 0);
+    art.destroy();
   }
 }

@@ -1,16 +1,21 @@
 import Phaser from 'phaser';
 import type { SerpentelaDefinition } from '../data/serpentelas';
 import { SERPENTELA_SCALE } from '../data/serpentelas';
-import { LocalElasticMesh } from '../systems/LocalElasticMesh';
+import { ELASTICITY, LocalElasticMesh } from '../systems/LocalElasticMesh';
+import { performancePreferences } from '../systems/PerformancePreferences';
 
 const PADDING = 4;
 
 /** A temporary canvas mesh deforms only the source pixels near an actual contact. */
 export class ElasticArtwork {
+  private static readonly activeMeshes = new WeakMap<Phaser.Scene, Set<ElasticArtwork>>();
   private readonly scene: Phaser.Scene;
   private readonly definition: SerpentelaDefinition;
   private readonly image: Phaser.GameObjects.Image;
-  private readonly mesh: LocalElasticMesh;
+  private mesh?: LocalElasticMesh;
+  private bounce?: Phaser.Tweens.Tween;
+  private lastImpactAt = -Infinity;
+  private paintElapsed = 0;
   private readonly source: CanvasImageSource;
   private texture?: Phaser.Textures.CanvasTexture;
   private readonly textureKey: string;
@@ -20,22 +25,53 @@ export class ElasticArtwork {
     this.definition = definition;
     this.textureKey = `elastic-${ownerId}`;
     this.source = scene.textures.get(definition.texture).getSourceImage() as CanvasImageSource;
-    this.mesh = new LocalElasticMesh(definition.width, definition.height);
     this.image = scene.add.image(-definition.center.x * SERPENTELA_SCALE, -definition.center.y * SERPENTELA_SCALE, definition.texture)
       .setOrigin(0, 0).setScale(SERPENTELA_SCALE);
     parent.add(this.image);
   }
 
-  get isActive(): boolean { return this.mesh.isActive; }
+  get isActive(): boolean { return !!this.mesh?.isActive || !!this.bounce; }
 
   impact(x: number, y: number, normalX: number, normalY: number, speed: number, now: number): void {
-    this.mesh.impact(x, y, normalX, normalY, speed, now);
+    const profile = performancePreferences.profile;
+    if (profile.powerSaving || speed < ELASTICITY.minImpactSpeed || now - this.lastImpactAt < ELASTICITY.cooldownMs) return;
+    let active = ElasticArtwork.activeMeshes.get(this.scene);
+    if (!active) { active = new Set(); ElasticArtwork.activeMeshes.set(this.scene, active); }
+    if (profile.canvasDeformation && (active.has(this) || active.size < profile.maxDeformations)) {
+      this.mesh ??= new LocalElasticMesh(this.definition.width, this.definition.height);
+      if (this.mesh.impact(x, y, normalX, normalY, speed, now)) {
+        active.add(this);
+        this.lastImpactAt = now;
+      }
+      return;
+    }
+    // Touch devices and excess simultaneous contacts use a shared-image transform.
+    this.lastImpactAt = now;
+    this.bounce?.remove();
+    this.image.setScale(SERPENTELA_SCALE);
+    this.bounce = this.scene.tweens.add({
+      targets: this.image,
+      scaleX: SERPENTELA_SCALE * 1.035,
+      scaleY: SERPENTELA_SCALE * 0.965,
+      duration: 90, yoyo: true, ease: 'Sine.Out',
+      onComplete: () => { this.image.setScale(SERPENTELA_SCALE); this.bounce = undefined; },
+    });
   }
 
   update(delta: number): void {
     if (delta <= 0) return;
-    if (!this.mesh.update(delta)) return;
-    if (!this.mesh.isActive) { this.restoreOriginal(); return; }
+    if (performancePreferences.powerSaving) { this.stopEffects(); return; }
+    const mesh = this.mesh;
+    if (!mesh?.update(delta)) return;
+    if (!mesh.isActive) {
+      this.restoreOriginal(); this.mesh = undefined;
+      ElasticArtwork.activeMeshes.get(this.scene)?.delete(this);
+      return;
+    }
+    this.paintElapsed += delta;
+    const paintInterval = performancePreferences.profile.effectFrameMs;
+    if (this.texture && this.paintElapsed < paintInterval) return;
+    this.paintElapsed %= paintInterval;
     if (!this.texture) {
       const texture = this.scene.textures.createCanvas(this.textureKey, this.definition.width + PADDING * 2, this.definition.height + PADDING * 2);
       if (!texture) return;
@@ -47,9 +83,9 @@ export class ElasticArtwork {
     }
     const ctx = this.texture.context;
     ctx.clearRect(0, 0, this.texture.width, this.texture.height);
-    const row = this.mesh.cells + 1;
-    for (let y = 0; y < this.mesh.cells; y++) {
-      for (let x = 0; x < this.mesh.cells; x++) {
+    const row = mesh.cells + 1;
+    for (let y = 0; y < mesh.cells; y++) {
+      for (let x = 0; x < mesh.cells; x++) {
         const topLeft = y * row + x;
         this.drawTriangle(ctx, topLeft, topLeft + 1, topLeft + row);
         this.drawTriangle(ctx, topLeft + 1, topLeft + row + 1, topLeft + row);
@@ -59,9 +95,9 @@ export class ElasticArtwork {
   }
 
   private drawTriangle(ctx: CanvasRenderingContext2D, first: number, second: number, third: number): void {
-    const a = this.mesh.nodes[first];
-    const b = this.mesh.nodes[second];
-    const c = this.mesh.nodes[third];
+    const a = this.mesh!.nodes[first];
+    const b = this.mesh!.nodes[second];
+    const c = this.mesh!.nodes[third];
     const dx1 = b.x - a.x, dy1 = b.y - a.y;
     const dx2 = c.x - a.x, dy2 = c.y - a.y;
     const sx1 = b.restX - a.restX, sy1 = b.restY - a.restY;
@@ -96,10 +132,18 @@ export class ElasticArtwork {
 
   private restoreOriginal(): void {
     if (!this.texture) return;
-    this.image.setTexture(this.definition.texture).setPosition(-this.definition.center.x * SERPENTELA_SCALE, -this.definition.center.y * SERPENTELA_SCALE);
+    if (this.image.scene) this.image.setTexture(this.definition.texture).setPosition(-this.definition.center.x * SERPENTELA_SCALE, -this.definition.center.y * SERPENTELA_SCALE);
     this.texture.destroy();
     this.texture = undefined;
   }
 
-  destroy(): void { this.restoreOriginal(); }
+  stopEffects(): void {
+    this.bounce?.remove(); this.bounce = undefined;
+    this.image.setScale(SERPENTELA_SCALE);
+    this.restoreOriginal();
+    this.mesh = undefined;
+    ElasticArtwork.activeMeshes.get(this.scene)?.delete(this);
+  }
+
+  destroy(): void { this.stopEffects(); }
 }

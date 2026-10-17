@@ -1,7 +1,6 @@
 export interface GameControls {
   move: (direction: -1 | 1) => void;
   drop: () => void;
-  reset: () => void;
 }
 
 export function bindControls(controls: GameControls): () => void {
@@ -9,7 +8,6 @@ export function bindControls(controls: GameControls): () => void {
     ['move-left', () => controls.move(-1)],
     ['move-right', () => controls.move(1)],
     ['drop-button', controls.drop],
-    ['reset-button', controls.reset],
   ] as const;
   const bindings = actions.map(([id, action]) => {
     const button = document.querySelector<HTMLButtonElement>(`#${id}`);

@@ -4,6 +4,7 @@ import type { LeaderboardEntry } from '../systems/LeaderboardSystem';
 import { SharedLeaderboard } from '../systems/SharedLeaderboard';
 import { LoopingMusic } from '../systems/LoopingMusic';
 import { audioPreferences } from '../systems/AudioPreferences';
+import { performancePreferences } from '../systems/PerformancePreferences';
 import { GameSounds } from '../systems/GameSounds';
 import { FailureBackdrop } from './FailureBackdrop';
 import { applyTranslations, formatNumber, formatPlacedCount, setLanguage, subscribeLanguage, t, type Language } from './i18n';
@@ -23,6 +24,7 @@ export class GameUI {
   private readonly tutorial = element<HTMLDialogElement>('tutorial-dialog');
   private readonly result = element<HTMLDialogElement>('result-dialog');
   private readonly board = element<HTMLDialogElement>('leaderboard-dialog');
+  private readonly settings = element<HTMLDialogElement>('settings-dialog');
   private readonly target = element<HTMLSelectElement>('target-select');
   private readonly boardTarget = element<HTMLSelectElement>('board-target');
   private readonly failureBackdrop = new FailureBackdrop(this.result);
@@ -33,7 +35,8 @@ export class GameUI {
   private readonly cleanups: Array<() => void> = [];
   private entry?: LeaderboardEntry;
   private started = false;
-  private returnToResult = false;
+  private boardReturn?: HTMLDialogElement;
+  private resumeAfterSettings = false;
   private resultCompleted = false;
   private boardRequest = 0;
   private lastResult?: RoundResult;
@@ -63,11 +66,24 @@ export class GameUI {
     });
     this.music = new LoopingMusic();
     this.cleanups.push(audioPreferences.subscribe(() => this.renderAudioControls()));
-    this.listen('audio-settings-toggle', 'click', () => {
-      const panel = element<HTMLDivElement>('audio-controls');
-      const button = element<HTMLButtonElement>('audio-settings-toggle');
-      panel.hidden = !panel.hidden;
-      button.setAttribute('aria-expanded', String(!panel.hidden));
+    this.cleanups.push(performancePreferences.subscribe(() => this.renderPerformanceControls()));
+    this.listen('power-saving-toggle', 'change', () => {
+      performancePreferences.setPowerSaving(element<HTMLInputElement>('power-saving-toggle').checked);
+    });
+    for (const [selector, action] of [
+      ['[data-menu-open]', () => this.openSettings()],
+      ['[data-menu-close]', () => this.closeSettings()],
+    ] as const) {
+      document.querySelectorAll<HTMLButtonElement>(selector).forEach((button) => {
+        button.addEventListener('click', action);
+        this.cleanups.push(() => button.removeEventListener('click', action));
+      });
+    }
+    this.listen('settings-dialog', 'cancel', (event) => { event.preventDefault(); this.closeSettings(); });
+    this.listen('settings-dialog', 'click', (event) => {
+      if (event.target !== this.settings) return;
+      const pointer = event as MouseEvent, bounds = this.settings.getBoundingClientRect();
+      if (pointer.clientX < bounds.left || pointer.clientX > bounds.right || pointer.clientY < bounds.top || pointer.clientY > bounds.bottom) this.closeSettings();
     });
     this.listen('music-volume', 'input', (event) => audioPreferences.setVolume('music', Number((event.currentTarget as HTMLInputElement).value)));
     this.listen('effects-volume', 'input', (event) => audioPreferences.setVolume('effects', Number((event.currentTarget as HTMLInputElement).value)));
@@ -82,6 +98,7 @@ export class GameUI {
       actions.pause(false);
     });
     this.listen('help-button', 'click', () => {
+      this.closeSettings(false); this.board.close(); this.result.close();
       this.target.disabled = this.started;
       this.renderStartLabel();
       actions.pause(true); this.show(this.tutorial, 'tutorial-title');
@@ -90,7 +107,7 @@ export class GameUI {
     this.listen('again-button', 'click', () => {
       this.failureBackdrop.clear(); this.result.close(); this.entry = undefined;
       if (this.resultCompleted) this.openNewChallenge();
-      else { actions.restart(); actions.pause(false); }
+      else { this.started = true; actions.restart(); actions.pause(false); }
     });
     this.listen('menu-button', 'click', () => {
       this.failureBackdrop.clear(); this.result.close(); this.entry = undefined;
@@ -113,6 +130,7 @@ export class GameUI {
     }
     this.renderTutorialCount();
     this.renderAudioControls();
+    this.renderPerformanceControls();
     this.show(this.tutorial, 'tutorial-title');
   }
   private readonly onButtonClick = (event: Event): void => {
@@ -141,10 +159,28 @@ export class GameUI {
   private renderTutorialCount(): void {
     element('tutorial-description').textContent = t('tutorialDescription', { count: Number(this.target.value) });
   }
+  private renderPerformanceControls(): void {
+    element<HTMLInputElement>('power-saving-toggle').checked = performancePreferences.powerSaving;
+    document.documentElement.classList.toggle('power-saving', performancePreferences.powerSaving);
+  }
+  private openSettings(): void {
+    this.resumeAfterSettings = this.started && ![this.tutorial, this.result, this.board].some((dialog) => dialog.open);
+    this.actions.pause(true);
+    document.querySelectorAll('[data-menu-open]').forEach((button) => button.setAttribute('aria-expanded', 'true'));
+    this.show(this.settings, 'settings-title');
+  }
+  private closeSettings(resume = true): void {
+    const wasOpen = this.settings.open;
+    this.settings.close();
+    document.querySelectorAll('[data-menu-open]').forEach((button) => button.setAttribute('aria-expanded', 'false'));
+    if (wasOpen && resume && this.resumeAfterSettings) this.actions.pause(false);
+  }
   private renderStartLabel(): void {
     element('start-label').textContent = t(this.started ? 'resume' : 'start');
   }
   private openNewChallenge(): void {
+    this.closeSettings(false); this.board.close(); this.result.close(); this.tutorial.close();
+    this.failureBackdrop.clear(); this.entry = undefined;
     this.started = false;
     this.target.disabled = false;
     this.renderStartLabel();
@@ -152,12 +188,14 @@ export class GameUI {
     this.show(this.tutorial, 'tutorial-title');
   }
   render(remaining: number, elapsed: number, score: number, message: string, statusSymbol: string, placed: number, warning: boolean): void {
-    element('remaining-count').textContent = String(remaining);
-    element('remaining-readout').setAttribute('aria-label', t('remainingCountAria', { count: remaining }));
-    element('elapsed-time').textContent = formatTime(elapsed);
-    element('score-count').textContent = formatNumber(score);
-    element('status-symbol').textContent = statusSymbol;
-    element('placed-count').textContent = String(placed);
+    const text = (id: string, value: string) => { const node = element(id); if (node.textContent !== value) node.textContent = value; };
+    text('remaining-count', String(remaining));
+    const aria = t('remainingCountAria', { count: remaining }), readout = element('remaining-readout');
+    if (readout.getAttribute('aria-label') !== aria) readout.setAttribute('aria-label', aria);
+    text('elapsed-time', formatTime(elapsed));
+    text('score-count', formatNumber(score));
+    text('status-symbol', statusSymbol);
+    text('placed-count', String(placed));
     element('status-readout').classList.toggle('is-warning', warning);
     const status = element('game-status');
     if (status.textContent !== message) status.textContent = message;
@@ -166,6 +204,7 @@ export class GameUI {
     this.boardTarget.value = String(target);
   }
   finish(result: RoundResult): void {
+    this.started = false;
     this.lastResult = result;
     this.resultCompleted = result.completed;
     this.renderResultDetails(result);
@@ -227,12 +266,14 @@ export class GameUI {
     this.persistEntry();
   }
   private showBoard(fromResult: boolean): void {
-    this.returnToResult = fromResult;
+    if (!this.board.open) this.boardReturn = fromResult ? this.result : [this.tutorial, this.result].find((dialog) => dialog.open);
+    this.closeSettings(false); this.tutorial.close(); this.result.close();
     this.actions.pause(true); this.renderBoard(); this.show(this.board, 'leaderboard-title');
   }
   private closeBoard(): void {
     this.board.close();
-    if (this.returnToResult) this.show(this.result, 'result-title'); else this.actions.pause(false);
+    if (this.boardReturn) this.show(this.boardReturn, this.boardReturn === this.result ? 'result-title' : 'tutorial-title');
+    else this.actions.pause(false);
   }
   private renderBoard(): void {
     const list = element('leaderboard-list'); list.replaceChildren();
@@ -277,7 +318,8 @@ export class GameUI {
     this.cleanups.push(() => target.removeEventListener(type, callback));
   }
   private show(dialog: HTMLDialogElement, heading: string): void {
-    dialog.showModal(); element(heading).focus({ preventScroll: true }); dialog.scrollTop = 0;
+    if (!dialog.open) dialog.showModal();
+    element(heading).focus({ preventScroll: true }); dialog.scrollTop = 0;
   }
-  destroy(): void { this.failureBackdrop.destroy(); this.music.destroy(); this.cleanups.forEach((cleanup) => cleanup()); [this.tutorial, this.result, this.board].forEach((dialog) => dialog.close()); }
+  destroy(): void { this.failureBackdrop.destroy(); this.music.destroy(); this.cleanups.forEach((cleanup) => cleanup()); [this.tutorial, this.result, this.board, this.settings].forEach((dialog) => dialog.close()); }
 }

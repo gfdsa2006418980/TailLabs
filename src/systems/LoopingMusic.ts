@@ -13,13 +13,14 @@ export class LoopingMusic {
 
   constructor() {
     this.audio.loop = true;
-    this.audio.preload = 'auto';
+    this.audio.preload = 'none';
     this.applyPreferences();
     this.unsubscribe = audioPreferences.subscribe(this.applyPreferences);
   }
 
   start(): void {
     this.started = true;
+    this.audio.preload = 'auto';
     this.ensureAudioGraph();
     this.applyPreferences();
   }
