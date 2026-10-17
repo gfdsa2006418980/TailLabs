@@ -53,12 +53,12 @@
     <div class="result-total"><span>本次分數</span><strong id="result-score">0</strong></div>
     <dl class="result-breakdown"><div><dt>成功放穩</dt><dd id="result-count"></dd></div><div><dt>經過時間</dt><dd id="result-time"></dd></div><div><dt>放置分數</dt><dd id="result-base"></dd></div><div><dt>高度獎勵</dt><dd id="result-height"></dd></div><div><dt>完成時間獎勵</dt><dd id="result-speed"></dd></div></dl>
     <form id="name-form"><label for="player-name">你的名字</label><div class="name-row"><input id="player-name" name="playerName" maxlength="24" placeholder="匿名飼主" autocomplete="nickname" /><button type="submit">儲存名字</button></div><small>最多 12 個字</small></form>
-    <p id="save-status" role="status" class="dialog-footnote"></p><button id="again-button" class="primary-action" type="button"><span id="again-label">再試一次</span><span id="again-icon" aria-hidden="true">↻</span></button><div class="result-links"><button id="result-board-button" class="text-action" type="button">查看我的排行榜 ↗</button><button id="menu-button" class="text-action" type="button">挑戰更多隻 ↗</button></div>
+    <p id="save-status" role="status" class="dialog-footnote"></p><button id="again-button" class="primary-action" type="button"><span id="again-label">再試一次</span><span id="again-icon" aria-hidden="true">↻</span></button><div class="result-links"><button id="result-board-button" class="text-action" type="button">查看排行榜 ↗</button><button id="menu-button" class="text-action" type="button">挑戰更多隻 ↗</button></div>
   </div></dialog>
   <dialog id="leaderboard-dialog" aria-labelledby="leaderboard-title"><div class="dialog-card leaderboard-card">
-    <p class="eyebrow">GLOBAL ALCHEMIST RANKING / TOP 10</p><h2 id="leaderboard-title" tabindex="-1">這間實驗室的<br />最佳紀錄<span>。</span></h2><p id="leaderboard-description" class="dialog-description">排行榜連線後由所有玩家共用；各挑戰分開排名。</p>
+    <p class="eyebrow">GLOBAL RANKING / TOP 10</p><h2 id="leaderboard-title" tabindex="-1">最佳紀錄</h2>
     <label for="board-target">查看挑戰</label><select id="board-target"><option value="10">10隻</option><option value="50">50隻</option><option value="100">100隻</option><option value="500">500隻</option></select>
-    <ol id="leaderboard-list" class="leaderboard-list"></ol><p id="leaderboard-storage" class="dialog-footnote"></p><button id="board-close-button" class="primary-action" type="button">回到實驗 <span>→</span></button>
+    <ol id="leaderboard-list" class="leaderboard-list"></ol><p id="leaderboard-storage" class="dialog-footnote"></p><button id="board-close-button" class="primary-action" type="button">返回 <span>→</span></button>
   </div></dialog>
   <script type="module" src="/src/main.ts"></script>
 </body>
