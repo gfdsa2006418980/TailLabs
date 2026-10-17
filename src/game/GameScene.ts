@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { createOrbTexture } from '../entities/TestOrb';
+import { preloadSerpentelas } from '../data/serpentelas';
 import { SpawnSystem } from '../systems/SpawnSystem';
 import { StickinessSystem } from '../systems/StickinessSystem';
 import { bindControls, updateReadout } from '../ui/controls';
@@ -14,34 +14,54 @@ export class GameScene extends Phaser.Scene {
   private cursors?: Phaser.Types.Input.Keyboard.CursorKeys;
   private lastDropAt = -Infinity;
   private stickiness!: StickinessSystem;
+  private outlines!: Phaser.GameObjects.Graphics;
+  private showOutlines = new URLSearchParams(location.search).get('outline') === '1';
 
   constructor() { super('GameScene'); }
+
+  preload(): void { preloadSerpentelas(this); }
 
   create(): void {
     this.lastDropAt = -Infinity;
     this.stickiness = new StickinessSystem();
     this.drawChamber();
     this.createPlatforms();
-    createOrbTexture(this);
     this.spawner = new SpawnSystem(this);
     const onCollisionStart = (event: Phaser.Physics.Matter.Events.CollisionStartEvent) => {
+      const impacts = new Map<number, { x: number; y: number; nx: number; ny: number; strength: number }>();
       for (const pair of event.pairs) {
-        const a = pair.bodyA;
-        const b = pair.bodyB;
-        this.stickiness.beginContact(a.id, b.id, this.time.now);
+        const a = pair.bodyA.parent;
+        const b = pair.bodyB.parent;
+        this.stickiness.beginContact(a.id, b.id, this.time.now, pair.id);
         const normal = pair.collision.normal;
-        const strength = Math.abs((a.velocity.x - b.velocity.x) * normal.x
-          + (a.velocity.y - b.velocity.y) * normal.y);
-        this.spawner.getOrb(a.id)?.impact(normal.x, normal.y, strength);
-        this.spawner.getOrb(b.id)?.impact(normal.x, normal.y, strength);
+        // Phaser's event typings omit the contactCount in its bundled Matter version.
+        const contactCount = (pair as typeof pair & { contactCount: number }).contactCount;
+        const supports = pair.collision.supports.slice(0, contactCount).filter((point) => point != null);
+        const x = supports.length ? supports.reduce((sum, point) => sum + point.x, 0) / supports.length : (a.position.x + b.position.x) / 2;
+        const y = supports.length ? supports.reduce((sum, point) => sum + point.y, 0) / supports.length : (a.position.y + b.position.y) / 2;
+        const vx = a.velocity.x - a.angularVelocity * (y - a.position.y) - b.velocity.x + b.angularVelocity * (y - b.position.y);
+        const vy = a.velocity.y + a.angularVelocity * (x - a.position.x) - b.velocity.y - b.angularVelocity * (x - b.position.x);
+        const strength = Math.abs(vx * normal.x + vy * normal.y);
+        // One contact response per root body, even when several convex parts hit.
+        for (const body of [a, b]) {
+          if (this.spawner.getOrb(body.id) && strength > (impacts.get(body.id)?.strength ?? -Infinity)) {
+            impacts.set(body.id, { x, y, nx: normal.x, ny: normal.y, strength });
+          }
+        }
       }
+      impacts.forEach((impact, id) => this.spawner.getOrb(id)?.impact(impact.x, impact.y, impact.nx, impact.ny, impact.strength));
     };
     const onCollisionEnd = (event: Phaser.Physics.Matter.Events.CollisionEndEvent) => {
-      for (const pair of event.pairs) this.stickiness.endContact(pair.bodyA.id, pair.bodyB.id);
+      for (const pair of event.pairs) this.stickiness.endContact(pair.bodyA.parent.id, pair.bodyB.parent.id, pair.id);
     };
     this.matter.world.on('collisionstart', onCollisionStart);
     this.matter.world.on('collisionend', onCollisionEnd);
     this.guide = this.add.graphics().setDepth(0);
+    this.outlines = this.add.graphics().setDepth(5);
+    const toggle = document.querySelector<HTMLInputElement>('#outline-toggle');
+    if (toggle) toggle.checked = this.showOutlines;
+    const onToggle = () => { this.showOutlines = toggle?.checked ?? false; };
+    toggle?.addEventListener('change', onToggle);
     this.cursors = this.input.keyboard?.createCursorKeys();
     const onMove = (pointer: Phaser.Input.Pointer) => this.spawner.moveTo(pointer.x);
     const onDrop = (pointer: Phaser.Input.Pointer) => {
@@ -77,12 +97,15 @@ export class GameScene extends Phaser.Scene {
       this.input.keyboard?.off('keydown-DOWN', onKeyboardDrop);
       this.matter.world.off('collisionstart', onCollisionStart);
       this.matter.world.off('collisionend', onCollisionEnd);
+      toggle?.removeEventListener('change', onToggle);
     });
   }
 
   update(_time: number, delta: number): void {
     if (this.stickiness.update(this.time.now, delta)) this.refreshReadout();
-    this.spawner.sync();
+    this.spawner.sync(delta);
+    this.outlines.clear();
+    if (this.showOutlines) this.spawner.drawOutlines(this.outlines);
     const direction = Number(this.cursors?.right.isDown) - Number(this.cursors?.left.isDown);
     if (direction) this.spawner.moveTo(this.spawner.x + direction * Math.min(delta, 50) * 0.32);
     this.guide.clear().lineStyle(1, INK, 0.15);
@@ -136,7 +159,7 @@ export class GameScene extends Phaser.Scene {
     const label = (x: number, y: number, text: string, size = 11, color = '#7c8b7e') =>
       this.add.text(x, y, text, { fontFamily: FONT, fontSize: size, color });
     label(30, 23, '01 / DROP CHAMBER', 12, '#345442');
-    label(30, 44, '召喚實驗室 · 測試圓球');
+    label(30, 44, '召喚實驗室 · 蛇貂碰撞輪廓');
     art.lineStyle(1, INK, 0.2).strokeRoundedRect(386, 14, 104, 59, 6);
     label(398, 24, 'NEXT', 10);
     label(398, 43, '待接入', 12, '#98a095');

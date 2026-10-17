@@ -92,6 +92,17 @@ test('ending one contact preserves another valid support', () => {
   assert.equal(sticky.frozenCount, 1);
 });
 
+test('ending one compound-part contact preserves another contact with the same body', () => {
+  const { sticky, body, support } = fixture();
+  sticky.beginContact(body.id, support.id, 0, 'child-contact-A');
+  sticky.beginContact(body.id, support.id, 0, 'child-contact-B');
+  sticky.endContact(body.id, support.id, 'child-contact-A');
+  sticky.update(3000, 16);
+  sticky.update(3450, 16);
+  assert.equal(body.isStatic, true);
+  assert.equal(sticky.frozenCount, 1);
+});
+
 for (const hz of [30, 60, 120]) {
   test(`actual Phaser Matter engine settles, freezes, and resists later impacts at ${hz} Hz`, () => {
     const engine = Engine.create({ enableSleeping: true });

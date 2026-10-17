@@ -2,7 +2,7 @@
 
 TailLabs 遊戲實驗專案，第一個實驗是 **TL001《誰複製了500隻蛇貂》**。
 
-目前完成可執行的最小場景：測試圓球可左右定位、落下、碰撞與堆疊，支援柔軟回彈及漸進黏住。正式蛇貂素材、抽選與遊戲勝敗規則會在後續階段接入。
+目前為 0.2 輪廓原型：15 張蛇貂圖片已接入各自的凹形碰撞外框，可左右定位、落下、碰撞與堆疊，支援柔軟回彈及漸進黏住。一般試玩依圖片檔名的權重抽選並排除最近兩抽；NEXT 預覽與正式勝敗規則仍待後續接入。
 
 ## 啟動
 
@@ -25,10 +25,12 @@ npm run dev
 - 鍵盤左右方向鍵移動，空白鍵或下方向鍵落下。
 - 下方的左右按鈕與「放下這一隻」支援觸控及鍵盤操作。
 - 按「重新開始」清空已放下物件、黏性狀態與計數。
-- 碰撞時有輕微壓扁與回彈，外觀約 0.4 秒恢復；碰撞範圍維持固定圓形。
-- 首次接觸魔法陣、底部或其他已放下圓球後，保留約 3 秒自然運動，再逐漸減速。
+- 碰撞處附近有輕微壓縮與回彈，局部彈簧自然回復；碰撞範圍維持各自的蛇貂輪廓。
+- 首次接觸魔法陣、底部或其他已放下蛇貂後，保留約 3 秒自然運動，再逐漸減速，黏性會持續增強直到停穩。
 - 移動與旋轉均低於停止門檻，且保持接觸並穩定約 0.45 秒後，固定位置與角度。
 - 固定後的小綠點代表已黏住，後續碰撞仍可觸發較小的外觀回彈。
+- 勾選「顯示碰撞外框」可檢查遊戲中實際外沿與內部分塊。
+- 點「查看全部 15 種」進入 `colliders.html`，各造型均可獨立、重複試放。
 
 ## 技術
 
@@ -39,7 +41,8 @@ npm run dev
 | Phaser | **3.90.0** |
 | Matter.js | 使用 Phaser 3 隨附的自訂整合版本，單一物理世界 |
 | 畫面 | 520 × 660 邏輯解析度，自動縮放與窄螢幕排版 |
-| 素材 | 當前圓球與魔法陣由程式繪製，無外部圖片或字型依賴 |
+| 素材 | 15 張 96 × 96 WebP 保留原始位元組，魔法陣由程式繪製，無外部字型依賴 |
+| 碰撞外框 | 透明度 128 門檻、1 px 簡化；每種 34–56 節點、7–17 個凸形分塊 |
 
 Phaser 官方說明其內建自訂版 Matter.js；這裡直接啟用 `physics.default: 'matter'`，無須另起獨立 Matter 引擎。參考：[Matter Physics](https://docs.phaser.io/phaser/concepts/physics/matter)。
 
@@ -49,20 +52,23 @@ Phaser 官方說明其內建自訂版 Matter.js；這裡直接啟用 `physics.de
 labs/
 ├─ .github/workflows/deploy.yml   # GitHub Pages 建置與部署
 ├─ public/
-│  ├─ assets/serpentelas/         # 後續蛇貂圖片
+│  ├─ assets/serpentelas/         # 15 張原圖、外框資料與 SVG 總覽
 │  ├─ assets/audio/               # 後續音效
 │  ├─ favicon.svg
+│  ├─ colliders.html             # 逐張外框檢查與試放
 │  └─ .nojekyll
 ├─ src/
 │  ├─ game/                      # 場景、舞台及物理設定
-│  ├─ entities/TestOrb.ts         # 固定碰撞圓形 + 獨立柔軟外觀
+│  ├─ entities/                  # 凹形剛體、接觸處局部變形顯示
 │  ├─ systems/SpawnSystem.ts      # 手持、落下、重設與顯示同步
 │  ├─ systems/StickinessSystem.ts # 接觸計時、減速、停穩、凍結
-│  ├─ data/                      # 預留正式蛇貂定義
+│  ├─ systems/SerpentelaPicker.ts # 檔名權重 + 最近兩抽排除
+│  ├─ data/                      # 蛇貂定義與產生的外框資料
 │  ├─ ui/controls.ts             # 按鈕及狀態顯示
 │  ├─ main.ts
 │  └─ style.css
-├─ tests/stickiness.test.mjs
+├─ tests/                        # 幾何、實際物理與抽選測試
+├─ tools/                        # 可重現的透明度描邊與外框輸出
 ├─ docs/TL001.md
 ├─ index.html
 ├─ vite.config.ts
@@ -77,7 +83,22 @@ npm run build
 npm run preview
 ```
 
-`npm run build` 會先做 TypeScript 型別檢查，再輸出 `dist/`；正式建置預覽位於 `http://localhost:4173/`。`npm test` 使用 Phaser 隨附的 Matter 引擎驗證接觸、3 秒延遲、漸進減速、旋轉停止、空中不凍結、重設與固定後承受後續撞擊。
+`npm run build` 會先做 TypeScript 型別檢查，再輸出 `dist/`；正式建置預覽位於 `http://localhost:4173/`。`npm test` 使用 Phaser 隨附的 Matter 引擎，涵蓋 15 種外框的原檔雜湊、凹處保留、重心對齊、逐隻落地黏住、固定後承受新撞擊、複合剛體多接觸、轉動慣性與落地穩定性、局部彈簧回復，以及最近兩抽排除。
+
+## 外框檢查與重建
+
+啟動後開啟 `http://localhost:5173/colliders.html`。橘線為外框，綠線為引擎使用的凸形分塊；「試放這種造型」會把該造型固定為當前測試對象，供重複落下檢查。回到沒有 `shape` 參數的首頁即可恢復正常抽選。
+
+本次素材實際分組為權重 50 × 5、20 × 5、5 × 3、1 × 2，總權重 367；剪貼簿的額外附件是既有造型，未另計為第 16 種。
+
+外框已產生並納入版本管理，日常啟動或部署無須 Python。如需重建，使用具 Pillow、numpy 的 Python 執行：
+
+```sh
+python tools/trace-colliders.py <原始圖片資料夾>
+node tools/finalize-colliders.mjs
+```
+
+這兩個工具只讀取原圖透明度並複製原始 WebP 位元組，不會裁切、重畫或覆寫原圖。細節與驗證見 `docs/colliders.md`。
 
 Phaser 引擎壓縮後約 1.2 MB（gzip 約 319 KB），Vite 會提示大型區塊；目前已獨立分塊以便快取，此提示不影響建置。30 Hz 壓力測試會觸發 Matter 建議使用較小物理步長的訊息；場景預設採 Phaser 的 60 Hz 物理步長。
 

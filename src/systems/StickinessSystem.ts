@@ -9,6 +9,7 @@ export interface StickyTarget {
 export const STICKINESS = {
   delayMs: 3000,
   dampingTimeMs: 450,
+  dampingRampMs: 750,
   stopSpeed: 0.06,
   stopAngularSpeed: 0.003,
   stillDurationMs: 450,
@@ -16,10 +17,11 @@ export const STICKINESS = {
 
 interface StickyEntry {
   target: StickyTarget;
-  contacts: Set<number>;
+  contacts: Set<string>;
   firstContactAt?: number;
   stillSince?: number;
   frozen: boolean;
+  dampingMs: number;
 }
 
 /** Contact → 3-second grace → progressive damping → stable rest → static support. */
@@ -33,28 +35,32 @@ export class StickinessSystem {
   addSupport(id: number): void { this.supports.add(id); }
 
   track(target: StickyTarget): void {
-    this.entries.set(target.id, { target, contacts: new Set(), frozen: false });
+    this.entries.set(target.id, { target, contacts: new Set(), frozen: false, dampingMs: 0 });
   }
 
-  beginContact(a: number, b: number, now: number): void {
-    this.touch(a, b, now);
-    this.touch(b, a, now);
+  beginContact(a: number, b: number, now: number, contactId = `${Math.min(a, b)}:${Math.max(a, b)}`): void {
+    this.touch(a, b, now, contactId);
+    this.touch(b, a, now, contactId);
   }
 
-  endContact(a: number, b: number): void {
-    this.entries.get(a)?.contacts.delete(b);
-    this.entries.get(b)?.contacts.delete(a);
+  endContact(a: number, b: number, contactId = `${Math.min(a, b)}:${Math.max(a, b)}`): void {
+    this.entries.get(a)?.contacts.delete(contactId);
+    this.entries.get(b)?.contacts.delete(contactId);
   }
 
   update(now: number, delta: number): boolean {
     let changed = false;
-    const factor = Math.exp(-Math.min(delta, 50) / STICKINESS.dampingTimeMs);
     for (const entry of this.entries.values()) {
       if (entry.frozen || entry.firstContactAt === undefined) continue;
       if (entry.contacts.size === 0 || now - entry.firstContactAt < STICKINESS.delayMs) {
         entry.stillSince = undefined;
         continue;
       }
+      const elapsed = Math.min(delta, 50);
+      entry.dampingMs += elapsed;
+      // Gradually thicken the glue so gravity-induced rocking also comes to rest.
+      const strength = 1 + (entry.dampingMs / STICKINESS.dampingRampMs) ** 2;
+      const factor = Math.exp(-elapsed * strength / STICKINESS.dampingTimeMs);
       entry.target.damp(factor);
       const stopped = entry.target.speed <= STICKINESS.stopSpeed
         && entry.target.angularSpeed <= STICKINESS.stopAngularSpeed;
@@ -77,10 +83,10 @@ export class StickinessSystem {
     this.frozenTotal = 0;
   }
 
-  private touch(id: number, other: number, now: number): void {
+  private touch(id: number, other: number, now: number, contactId: string): void {
     const entry = this.entries.get(id);
     if (!entry || entry.frozen || (!this.supports.has(other) && !this.entries.has(other))) return;
-    entry.contacts.add(other);
+    entry.contacts.add(contactId);
     entry.firstContactAt ??= now;
   }
 }
