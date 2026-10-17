@@ -1,0 +1,7 @@
+name = "taillabs-leaderboard"
+main = "worker/index.ts"
+compatibility_date = "2026-10-17"
+workers_dev = true
+
+[vars]
+ALLOWED_ORIGINS = "https://gfdsa2006418980.github.io,http://localhost:5173,http://127.0.0.1:5173"

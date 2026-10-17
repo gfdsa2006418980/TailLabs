@@ -12,7 +12,20 @@
   <main class="lab">
     <div class="workspace">
       <section class="experiment" aria-label="TL001 遊戲實驗場">
-        <div class="stage-toolbar"><span id="mode-label"><span class="status-dot"></span> 500 隻挑戰</span><div class="stage-actions"><button id="music-toggle" type="button" aria-pressed="true">音樂開</button><button id="help-button" type="button">玩法</button><button id="leaderboard-button" type="button">排行榜</button><button id="reset-button" type="button" disabled>重新開始 <span aria-hidden="true">↻</span></button></div></div>
+        <div class="stage-toolbar">
+          <div class="stage-actions">
+            <button id="help-button" type="button">玩法</button>
+            <button id="leaderboard-button" type="button">排行榜</button>
+            <button id="reset-button" type="button" disabled>重新開始 <span aria-hidden="true">↻</span></button>
+            <div class="audio-mixer">
+              <button id="audio-settings-toggle" type="button" aria-expanded="false" aria-controls="audio-controls">音量</button>
+              <div id="audio-controls" class="audio-controls" role="group" aria-label="音量控制" hidden>
+                <div class="audio-channel"><label for="music-volume">音樂</label><input id="music-volume" type="range" min="0" max="100" step="1" value="100" aria-label="背景音樂音量" /><button id="music-toggle" type="button" aria-pressed="false">靜音</button></div>
+                <div class="audio-channel"><label for="effects-volume">音效</label><input id="effects-volume" type="range" min="0" max="200" step="1" value="200" aria-label="遊戲音效音量" /><button id="effects-toggle" type="button" aria-pressed="false">靜音</button></div>
+              </div>
+            </div>
+          </div>
+        </div>
         <div class="game-progress"><span>剩餘蛇貂 <strong>× <span id="remaining-count">500</span></strong></span><span id="game-status" role="status">準備開始實驗</span></div>
         <div id="game" role="group" aria-label="蛇貂堆疊挑戰；可使用下方按鈕或鍵盤操作"></div>
         <div class="game-metrics"><span>時間 <strong id="elapsed-time">00:00.00</strong></span><span>分數 <strong id="score-count">0</strong></span></div>
@@ -30,7 +43,7 @@
       <figure><img src="./assets/tutorial/stick.svg" width="260" height="180" alt="把蛇貂放到魔法陣上" /><figcaption><span>02</span><strong>放到魔法陣上</strong></figcaption></figure>
       <figure><img src="./assets/tutorial/tower.svg" width="260" height="180" alt="蛇貂掉到魔法陣外" /><figcaption><span>03</span><strong>掉到魔法陣外就大事不好了</strong></figcaption></figure>
     </div>
-    <div class="start-options"><label for="target-select">這次想挑戰</label><select id="target-select"><option value="500">500隻</option><option value="100">100隻</option><option value="50">50隻</option><option value="10">10隻</option></select></div>
+    <div class="start-options"><label for="target-select">這次想挑戰</label><select id="target-select"><option value="10">10隻</option><option value="50">50隻</option><option value="100">100隻</option><option value="500">500隻</option></select></div>
     <p class="dialog-footnote">手機可拖動後放手，也可以使用下方按鈕。</p>
     <button id="start-button" class="primary-action" type="button">把他們疊回去 <span>→</span></button>
   </div></dialog>
@@ -40,11 +53,11 @@
     <div class="result-total"><span>本次分數</span><strong id="result-score">0</strong></div>
     <dl class="result-breakdown"><div><dt>成功放穩</dt><dd id="result-count"></dd></div><div><dt>經過時間</dt><dd id="result-time"></dd></div><div><dt>放置分數</dt><dd id="result-base"></dd></div><div><dt>高度獎勵</dt><dd id="result-height"></dd></div><div><dt>完成時間獎勵</dt><dd id="result-speed"></dd></div></dl>
     <form id="name-form"><label for="player-name">你的名字</label><div class="name-row"><input id="player-name" name="playerName" maxlength="24" placeholder="匿名飼主" autocomplete="nickname" /><button type="submit">儲存名字</button></div><small>最多 12 個字</small></form>
-    <p id="save-status" role="status" class="dialog-footnote"></p><button id="again-button" class="primary-action" type="button">再試一次 <span>↻</span></button><div class="result-links"><button id="result-board-button" class="text-action" type="button">查看我的排行榜 ↗</button><button id="menu-button" class="text-action" type="button">換個挑戰 ↗</button></div>
+    <p id="save-status" role="status" class="dialog-footnote"></p><button id="again-button" class="primary-action" type="button"><span id="again-label">再試一次</span><span id="again-icon" aria-hidden="true">↻</span></button><div class="result-links"><button id="result-board-button" class="text-action" type="button">查看我的排行榜 ↗</button><button id="menu-button" class="text-action" type="button">挑戰更多隻 ↗</button></div>
   </div></dialog>
   <dialog id="leaderboard-dialog" aria-labelledby="leaderboard-title"><div class="dialog-card leaderboard-card">
-    <p class="eyebrow">MY LAB RECORDS / TOP 10</p><h2 id="leaderboard-title" tabindex="-1">這間實驗室的<br />最佳紀錄<span>。</span></h2><p class="dialog-description">排行榜保存在這個瀏覽器；各挑戰分開排名。</p>
-    <label for="board-target">查看挑戰</label><select id="board-target"><option value="500">500隻</option><option value="100">100隻</option><option value="50">50隻</option><option value="10">10隻</option></select>
+    <p class="eyebrow">GLOBAL ALCHEMIST RANKING / TOP 10</p><h2 id="leaderboard-title" tabindex="-1">這間實驗室的<br />最佳紀錄<span>。</span></h2><p id="leaderboard-description" class="dialog-description">排行榜連線後由所有玩家共用；各挑戰分開排名。</p>
+    <label for="board-target">查看挑戰</label><select id="board-target"><option value="10">10隻</option><option value="50">50隻</option><option value="100">100隻</option><option value="500">500隻</option></select>
     <ol id="leaderboard-list" class="leaderboard-list"></ol><p id="leaderboard-storage" class="dialog-footnote"></p><button id="board-close-button" class="primary-action" type="button">回到實驗 <span>→</span></button>
   </div></dialog>
   <script type="module" src="/src/main.ts"></script>

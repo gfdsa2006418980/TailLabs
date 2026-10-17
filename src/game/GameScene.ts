@@ -64,7 +64,7 @@ export class GameScene extends Phaser.Scene {
       start: (target) => this.startRound(target),
       restart: () => this.startRound(this.round.target),
       pause: (paused) => { this.paused = paused; this.touchId = undefined; this.refreshPaused(); },
-    }, !new URLSearchParams(location.search).has('shape'));
+    }, !new URLSearchParams(location.search).has('shape'), this.sounds);
     this.refreshPaused();
 
     const onCollisionStart = (event: Phaser.Physics.Matter.Events.CollisionStartEvent) => {
@@ -194,7 +194,11 @@ export class GameScene extends Phaser.Scene {
       const offset = this.towerCamera.update(top, delta, this.layout.chamberTop + this.layout.chamberHeight * 0.46);
       this.worldCamera.setScroll(this.layout.chamberLeft, this.layout.chamberTop + offset);
       this.spawner.setSpawnY(this.layout.spawnY + offset);
-      if (ended) { this.refreshPaused(); this.refreshReadout(); this.ui.finish(this.round.result()); }
+      if (ended) {
+        const result = this.round.result();
+        if (result.completed) this.sounds.playGameSuccess(); else this.sounds.playGameEnd();
+        this.refreshPaused(); this.refreshReadout(); this.ui.finish(result);
+      }
       const direction = Number(this.cursors?.right.isDown) - Number(this.cursors?.left.isDown);
       if (direction && !document.querySelector('dialog[open]')) this.spawner.moveTo(this.spawner.x + direction * Math.min(delta, 50) * 0.32);
       if (this.time.now - this.lastHudAt > 80) { this.refreshReadout(); this.refreshControls(); this.lastHudAt = this.time.now; }
