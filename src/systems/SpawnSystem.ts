@@ -5,6 +5,7 @@ import type { SerpentelaDefinition } from '../data/serpentelas';
 import { SerpentelaPicker } from './SerpentelaPicker';
 import { DrawQueue } from './DrawQueue';
 import { STAGE } from '../game/StageConfig';
+import { ROUND } from '../game/RoundConfig';
 
 export class SpawnSystem {
   private held?: Serpentela;
@@ -33,7 +34,7 @@ export class SpawnSystem {
   setSpawnY(y: number): void { this.spawnY = y; this.held?.moveTo(this.x, y); }
   moveTo(x: number): void {
     if (!this.held) return;
-    this.lastX = Phaser.Math.Clamp(x, 34 + this.held.leftExtent, 486 - this.held.rightExtent);
+    this.lastX = Phaser.Math.Clamp(x, ROUND.safeLeft + this.held.leftExtent, ROUND.safeRight - this.held.rightExtent);
     this.held.moveTo(this.lastX, this.spawnY);
   }
   drop(): Serpentela | undefined {

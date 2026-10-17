@@ -6,4 +6,6 @@ export const STAGE = {
   maxX: 459,
   platformY: 548,
   platformDepth: 64,
+  lightPillarWidth: 14,
+  lightPillarHeight: 3 * 54,
 } as const;

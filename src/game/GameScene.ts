@@ -29,7 +29,7 @@ export class GameScene extends Phaser.Scene {
   private nextImage!: Phaser.GameObjects.Image;
   private nextLabel!: Phaser.GameObjects.Text;
   private nextTexture = '';
-  private platformId = 0;
+  private readonly supportIds = new Set<number>();
   private lastHudAt = -Infinity;
   private touchId?: number;
 
@@ -63,8 +63,8 @@ export class GameScene extends Phaser.Scene {
       for (const pair of event.pairs) {
         const a = pair.bodyA.parent, b = pair.bodyB.parent;
         const pieceA = this.spawner.getOrb(a.id), pieceB = this.spawner.getOrb(b.id);
-        if (pieceA && (b.id === this.platformId || pieceB?.hasLanded)) pieceA.hasLanded = true;
-        if (pieceB && (a.id === this.platformId || pieceA?.hasLanded)) pieceB.hasLanded = true;
+        if (pieceA && (this.supportIds.has(b.id) || pieceB?.hasLanded)) pieceA.hasLanded = true;
+        if (pieceB && (this.supportIds.has(a.id) || pieceA?.hasLanded)) pieceB.hasLanded = true;
         this.stickiness.beginContact(a.id, b.id, this.round.elapsedMilliseconds, pair.id);
         const normal = pair.collision.normal;
         // Phaser's event typings omit the count used by its bundled Matter version.
@@ -218,11 +218,19 @@ export class GameScene extends Phaser.Scene {
   private createPlatform(parent: Phaser.GameObjects.Container): void {
     // An open platform: falling off the sides is now a real failure.
     const platform = this.matter.add.rectangle(260, STAGE.platformY + STAGE.platformDepth / 2, 280, STAGE.platformDepth, { isStatic: true, friction: 0.75, label: 'magic-circle-platform' });
-    this.platformId = platform.id; this.stickiness.addSupport(platform.id);
+    this.supportIds.clear(); this.supportIds.add(platform.id);
+    this.stickiness.addSupport(platform.id);
+    const pillarWidth = STAGE.lightPillarWidth;
+    const pillarHeight = STAGE.lightPillarHeight;
+    const top = STAGE.platformY - pillarHeight;
+    const bottom = STAGE.platformY;
     const pillars = this.add.graphics();
-    for (const x of [100, 420]) {
-      const top = STAGE.platformY - 2 - 3 * 54;
-      const bottom = STAGE.platformY - 2;
+    for (const x of [ROUND.safeLeft - pillarWidth / 2, ROUND.safeRight + pillarWidth / 2]) {
+      const wall = this.matter.add.rectangle(x, (top + bottom) / 2, pillarWidth, pillarHeight, {
+        isStatic: true, friction: 0.8, frictionStatic: 0.9, restitution: 0.05, label: 'magic-circle-light-pillar',
+      });
+      this.supportIds.add(wall.id);
+      this.stickiness.addSupport(wall.id);
       pillars.lineStyle(26, 0x93ae93, 0.09).lineBetween(x, top, x, bottom);
       pillars.lineStyle(12, 0xc2b47d, 0.17).lineBetween(x, top + 3, x, bottom);
       pillars.lineStyle(4, 0xd8e8d1, 0.34).lineBetween(x, top + 6, x, bottom);
