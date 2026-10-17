@@ -12,7 +12,7 @@ export class Serpentela implements StickyTarget {
   private readonly physics: Phaser.Physics.Matter.Image;
   private readonly visual: Phaser.GameObjects.Container;
   private readonly artwork: ElasticArtwork;
-  private frozen = false;
+  private frozenState = false;
   hasLanded = false;
 
   constructor(scene: Phaser.Scene, x: number, y: number, definition: SerpentelaDefinition, parent?: Phaser.GameObjects.Container, private readonly onStable?: () => void) {
@@ -40,7 +40,9 @@ export class Serpentela implements StickyTarget {
 
   get body(): MatterJS.BodyType { return this.physics.body as MatterJS.BodyType; }
   get id(): number { return this.body.id; }
-  get isFrozen(): boolean { return this.frozen; }
+  get isFrozen(): boolean { return this.frozenState; }
+  get frozen(): boolean { return this.frozenState; }
+  get bounds(): MatterJS.IBound { return this.body.bounds; }
   get x(): number { return this.physics.x; }
   get leftExtent(): number { return (this.definition.center.x - this.definition.bounds.minX) * SERPENTELA_SCALE; }
   get rightExtent(): number { return (this.definition.bounds.maxX - this.definition.center.x) * SERPENTELA_SCALE; }
@@ -60,8 +62,8 @@ export class Serpentela implements StickyTarget {
   }
 
   freeze(): void {
-    if (this.frozen) return;
-    this.frozen = true;
+    if (this.frozenState) return;
+    this.frozenState = true;
     this.physics.setVelocity(0, 0).setAngularVelocity(0).setStatic(true);
     const x = (this.definition.bounds.maxX - this.definition.center.x) * SERPENTELA_SCALE - 4;
     const y = (this.definition.bounds.minY - this.definition.center.y) * SERPENTELA_SCALE + 4;
@@ -107,12 +109,16 @@ export class Serpentela implements StickyTarget {
     const localY = (-dx * sin + dy * cos) / SERPENTELA_SCALE + this.definition.center.y;
     const nx = (normalX * cos + normalY * sin) * sign;
     const ny = (-normalX * sin + normalY * cos) * sign;
-    this.artwork.impact(localX, localY, nx, ny, strength * (this.frozen ? 0.65 : 1), this.scene.time.now);
+    this.artwork.impact(localX, localY, nx, ny, strength * (this.frozenState ? 0.65 : 1), this.scene.time.now);
   }
 
   sync(delta: number): void {
-    this.visual.setPosition(this.body.position.x, this.body.position.y).setRotation(this.body.angle);
-    this.artwork.update(delta);
+    const position = this.body.position;
+    const angle = this.body.angle;
+    if (this.visual.x !== position.x || this.visual.y !== position.y || this.visual.rotation !== angle) {
+      this.visual.setPosition(position.x, position.y).setRotation(angle);
+    }
+    if (this.artwork.isActive) this.artwork.update(delta);
   }
 
   drawOutline(graphics: Phaser.GameObjects.Graphics): void {

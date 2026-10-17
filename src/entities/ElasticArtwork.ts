@@ -26,6 +26,8 @@ export class ElasticArtwork {
     parent.add(this.image);
   }
 
+  get isActive(): boolean { return this.mesh.isActive; }
+
   impact(x: number, y: number, normalX: number, normalY: number, speed: number, now: number): void {
     this.mesh.impact(x, y, normalX, normalY, speed, now);
   }
@@ -73,13 +75,20 @@ export class ElasticArtwork {
     const offsetY = a.y + PADDING - m12 * a.restX - m22 * a.restY;
     // A tiny overlap avoids antialiased cracks between triangles.
     const cx = (a.x + b.x + c.x) / 3, cy = (a.y + b.y + c.y) / 3;
-    const expand = (p: { x: number; y: number }) => {
-      const length = Math.hypot(p.x - cx, p.y - cy) || 1;
-      return { x: p.x + (p.x - cx) * 0.25 / length + PADDING, y: p.y + (p.y - cy) * 0.25 / length + PADDING };
-    };
-    const pa = expand(a), pb = expand(b), pc = expand(c);
+    const ax = a.x - cx, ay = a.y - cy;
+    const bx = b.x - cx, by = b.y - cy;
+    const cxOffset = c.x - cx, cyOffset = c.y - cy;
+    const aLength = Math.hypot(ax, ay) || 1;
+    const bLength = Math.hypot(bx, by) || 1;
+    const cLength = Math.hypot(cxOffset, cyOffset) || 1;
+    const paX = a.x + ax * 0.25 / aLength + PADDING;
+    const paY = a.y + ay * 0.25 / aLength + PADDING;
+    const pbX = b.x + bx * 0.25 / bLength + PADDING;
+    const pbY = b.y + by * 0.25 / bLength + PADDING;
+    const pcX = c.x + cxOffset * 0.25 / cLength + PADDING;
+    const pcY = c.y + cyOffset * 0.25 / cLength + PADDING;
     ctx.save();
-    ctx.beginPath(); ctx.moveTo(pa.x, pa.y); ctx.lineTo(pb.x, pb.y); ctx.lineTo(pc.x, pc.y); ctx.closePath(); ctx.clip();
+    ctx.beginPath(); ctx.moveTo(paX, paY); ctx.lineTo(pbX, pbY); ctx.lineTo(pcX, pcY); ctx.closePath(); ctx.clip();
     ctx.setTransform(m11, m12, m21, m22, offsetX, offsetY);
     ctx.drawImage(this.source, 0, 0);
     ctx.restore();

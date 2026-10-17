@@ -41,7 +41,9 @@ export class RoundSession {
   update(delta: number, pieces: readonly PieceSnapshot[], platformY: number, bounds: RoundBounds = ROUND): boolean {
     if (this.state !== 'playing') return false;
     this.elapsedMilliseconds += Math.max(0, delta);
-    this.placedCount = pieces.filter((piece) => piece.frozen).length;
+    let placedCount = 0;
+    for (const piece of pieces) if (piece.frozen) placedCount++;
+    this.placedCount = placedCount;
     this.warning = false;
     for (const piece of pieces) {
       const out = piece.bounds.max.x < bounds.safeLeft || piece.bounds.min.x > bounds.safeRight || piece.bounds.min.y > bounds.fallLimit;

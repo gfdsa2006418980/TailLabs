@@ -27,7 +27,8 @@ export class LocalElasticMesh {
   readonly cells: number;
   private active = false;
   private lastImpactAt = -Infinity;
-  private secondPulse?: { x: number; y: number }[];
+  private readonly secondPulse: Float64Array;
+  private hasSecondPulse = false;
   private secondPulseRemainingMs = 0;
 
   constructor(width: number, height: number, cells = ELASTICITY.cells) {
@@ -40,6 +41,7 @@ export class LocalElasticMesh {
         this.nodes.push({ restX, restY, x: restX, y: restY, vx: 0, vy: 0 });
       }
     }
+    this.secondPulse = new Float64Array(this.nodes.length * 2);
   }
 
   get isActive(): boolean { return this.active; }
@@ -53,7 +55,8 @@ export class LocalElasticMesh {
     const tx = -ny;
     const ty = nx;
     const impulse = Math.min(speed * ELASTICITY.impulseMultiplier, ELASTICITY.maxImpulse);
-    this.secondPulse = this.nodes.map((node) => {
+    for (let index = 0; index < this.nodes.length; index++) {
+      const node = this.nodes[index];
       const dx = node.restX - x;
       const dy = node.restY - y;
       const distance2 = dx * dx + dy * dy;
@@ -63,8 +66,10 @@ export class LocalElasticMesh {
       const impulseY = (ny + ty * side * 0.35) * impulse * weight;
       node.vx += impulseX;
       node.vy += impulseY;
-      return { x: impulseX * ELASTICITY.secondPulseMultiplier, y: impulseY * ELASTICITY.secondPulseMultiplier };
-    });
+      this.secondPulse[index * 2] = impulseX * ELASTICITY.secondPulseMultiplier;
+      this.secondPulse[index * 2 + 1] = impulseY * ELASTICITY.secondPulseMultiplier;
+    }
+    this.hasSecondPulse = true;
     this.secondPulseRemainingMs = ELASTICITY.secondPulseDelayMs;
     this.lastImpactAt = now;
     this.active = true;
@@ -74,16 +79,14 @@ export class LocalElasticMesh {
   update(deltaMs: number): boolean {
     if (!this.active) return false;
     const frameMs = Math.min(deltaMs, 50);
-    if (this.secondPulse) {
+    if (this.hasSecondPulse) {
       this.secondPulseRemainingMs -= frameMs;
       if (this.secondPulseRemainingMs <= 0) {
-        this.nodes.forEach((node, index) => {
-          const pulse = this.secondPulse?.[index];
-          if (!pulse) return;
-          node.vx += pulse.x;
-          node.vy += pulse.y;
-        });
-        this.secondPulse = undefined;
+        for (let index = 0; index < this.nodes.length; index++) {
+          this.nodes[index].vx += this.secondPulse[index * 2];
+          this.nodes[index].vy += this.secondPulse[index * 2 + 1];
+        }
+        this.hasSecondPulse = false;
         this.secondPulseRemainingMs = 0;
       }
     }
@@ -105,7 +108,7 @@ export class LocalElasticMesh {
       }
       remaining -= dt;
     }
-    const resting = !this.secondPulse && this.nodes.every((node) => Math.hypot(node.x - node.restX, node.y - node.restY) < 0.015 && Math.hypot(node.vx, node.vy) < 0.08);
+    const resting = !this.hasSecondPulse && this.nodes.every((node) => Math.hypot(node.x - node.restX, node.y - node.restY) < 0.015 && Math.hypot(node.vx, node.vy) < 0.08);
     if (resting) {
       for (const node of this.nodes) {
         node.x = node.restX;
