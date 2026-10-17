@@ -1,6 +1,7 @@
 import { audioPreferences } from './AudioPreferences';
 
 type AudioContextWindow = Window & { webkitAudioContext?: typeof AudioContext };
+const EFFECTS_LOUDNESS_MULTIPLIER = 2;
 
 /** Small synthesized cues that need no downloaded sound assets. */
 export class GameSounds {
@@ -81,7 +82,7 @@ export class GameSounds {
   private updateOutputGain(): void {
     if (!this.context || !this.output) return;
     const { effectsMuted, effectsVolume } = audioPreferences.get();
-    const value = effectsMuted ? 0 : effectsVolume / 100;
+    const value = effectsMuted ? 0 : effectsVolume / 100 * EFFECTS_LOUDNESS_MULTIPLIER;
     this.output.gain.setTargetAtTime(value, this.context.currentTime, 0.025);
   }
 }
