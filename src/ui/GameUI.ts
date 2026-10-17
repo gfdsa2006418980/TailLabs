@@ -93,7 +93,6 @@ export class GameUI {
       this.entry = { ...result, id: recordId(globalThis.crypto?.randomUUID?.bind(globalThis.crypto)), playerName: playerName(element<HTMLInputElement>('player-name').value), createdAt: new Date().toISOString() };
       this.persistEntry();
     } else {
-      element('result-rank').textContent = '指定造型試放，不列入排行榜。';
       element('save-status').textContent = '';
     }
     if (result.completed) this.failureBackdrop.clear(); else this.failureBackdrop.show(result.target - result.placedCount);
@@ -101,8 +100,7 @@ export class GameUI {
   }
   private persistEntry(): void {
     if (!this.entry) return;
-    const rank = this.leaderboard.save(this.entry);
-    element('result-rank').textContent = rank ? `本機 ${this.entry.target} 隻挑戰 · 第 ${rank} 名` : '這次沒有進入前 10 名，再試一次吧。';
+    this.leaderboard.save(this.entry);
     element('save-status').textContent = this.leaderboard.persistent ? '本次成績已自動保存在這個瀏覽器。' : '目前瀏覽器無法永久儲存；成績暫存於本次開啟期間。';
   }
   private saveName(): void {
