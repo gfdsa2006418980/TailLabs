@@ -238,10 +238,10 @@ export class GameUI {
     const list = element('leaderboard-list'); list.replaceChildren();
     const target = Number(this.boardTarget.value);
     const rows = this.leaderboard.top(target);
-    this.renderBoardRows(rows);
     const storage = element('leaderboard-storage');
     storage.hidden = false;
     if (!this.sharedLeaderboard.enabled) {
+      this.renderBoardRows(rows);
       storage.textContent = t(this.leaderboard.persistent ? 'localRecords' : 'storageUnavailable');
       return;
     }
