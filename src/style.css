@@ -72,8 +72,14 @@ button { transition: transform .1s ease, background-color .15s ease; }
 .tutorial-card .tutorial-steps figcaption { display: flex; align-items: flex-start; gap: 9px; padding-top: 13px; }
 .tutorial-card .tutorial-steps figcaption > span { flex-shrink: 0; margin: 1px 0 0; color: #a8875e; font-size: 10px; line-height: 1.8; }
 .tutorial-card .tutorial-steps strong { font-size: 12px; font-weight: 500; line-height: 1.8; }
+.language-picker { display: flex; justify-content: flex-end; gap: 6px; margin: -8px 0 12px; }
+.language-picker button { min-width: 38px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; background: transparent; color: var(--muted); font-size: 10px; font-weight: 650; letter-spacing: .4px; }
+.language-picker button[aria-pressed="true"] { border-color: var(--ink); background: var(--ink); color: #faf9f2; }
+.tutorial-card > #tutorial-description { white-space: pre-line; }
 .tutorial-card .start-options { border-top-color: #e3e3d7; padding-top: 19px; }
-.tutorial-card .primary-action { border-radius: 12px; font-size: 13px; padding: 15px 18px; }
+.tutorial-card .start-options { font-size: 32px; font-weight: 600; }
+.tutorial-card .start-options select { font-size: 32px; font-weight: 600; padding: 8px 14px; }
+.tutorial-card .primary-action { border-radius: 12px; font-size: 18px; padding: 15px 18px; }
 .result-art { width: 60px; height: 60px; }
 #result-dialog.is-failed { background: rgba(250, 249, 242, .95); border-color: #eeeede; }
 #result-dialog.is-failed::backdrop { background-color: #d5ddcb; background-size: 100% 100%; background-position: center; background-repeat: no-repeat; backdrop-filter: none; }
@@ -81,6 +87,9 @@ button { transition: transform .1s ease, background-color .15s ease; }
 @media (max-width: 620px) {
   .tutorial-card { padding: 24px; }
   .tutorial-card h2 { font-size: 24px; }
+  .tutorial-card .start-options,
+  .tutorial-card .start-options select { font-size: 24px; }
+  .tutorial-card .primary-action { font-size: 17px; }
   .tutorial-card > .dialog-description { font-size: 11px; margin: 14px 0 22px; }
   .tutorial-card > .dialog-description br { display: none; }
   .tutorial-card .tutorial-steps { gap: 16px; margin-bottom: 22px; }
