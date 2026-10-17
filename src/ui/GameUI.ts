@@ -44,11 +44,11 @@ export class GameUI {
       element('start-button').textContent = this.started ? '繼續實驗 →' : '把他們疊回去 →';
       actions.pause(true); this.show(this.tutorial, 'tutorial-title');
     });
+    this.listen('reset-button', 'click', () => this.openNewChallenge());
     this.listen('again-button', 'click', () => { this.failureBackdrop.clear(); this.result.close(); this.entry = undefined; actions.restart(); actions.pause(false); });
     this.listen('menu-button', 'click', () => {
-      this.failureBackdrop.clear(); this.result.close(); this.started = false; this.entry = undefined; this.target.disabled = false;
-      element('start-button').textContent = '把他們疊回去 →';
-      actions.pause(true); this.show(this.tutorial, 'tutorial-title');
+      this.failureBackdrop.clear(); this.result.close(); this.entry = undefined;
+      this.openNewChallenge();
     });
     this.listen('leaderboard-button', 'click', () => this.showBoard(false));
     this.listen('result-board-button', 'click', () => { this.result.close(); this.showBoard(true); });
@@ -70,6 +70,13 @@ export class GameUI {
   }
   private renderTutorialCount(): void {
     element('tutorial-target-count').textContent = this.target.value;
+  }
+  private openNewChallenge(): void {
+    this.started = false;
+    this.target.disabled = false;
+    element('start-button').textContent = '把他們疊回去 →';
+    this.actions.pause(true);
+    this.show(this.tutorial, 'tutorial-title');
   }
   render(remaining: number, elapsed: number, score: number, message: string): void {
     element('remaining-count').textContent = String(remaining);
