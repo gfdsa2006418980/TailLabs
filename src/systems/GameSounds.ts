@@ -6,15 +6,15 @@ export class GameSounds {
   private lastSettleAt = -Infinity;
 
   playDrop(): void {
-    this.tone('triangle', 250, 115, 0.16, 0.055);
+    this.tone('triangle', 250, 115, 0.16, 0.06875);
   }
 
   playSettle(): void {
     const now = performance.now();
     if (now - this.lastSettleAt < 140) return;
     this.lastSettleAt = now;
-    this.tone('sine', 560, 820, 0.2, 0.038);
-    this.tone('sine', 820, 1050, 0.19, 0.024, 0.045);
+    this.tone('sine', 560, 820, 0.2, 0.0475);
+    this.tone('sine', 820, 1050, 0.19, 0.03, 0.045);
   }
 
   destroy(): void {
