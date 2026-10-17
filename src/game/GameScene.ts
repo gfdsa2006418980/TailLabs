@@ -298,7 +298,8 @@ export class GameScene extends Phaser.Scene {
       : this.round.state === 'completed' ? t('completedStatus')
         : this.round.state === 'failed' ? t('failedStatus')
           : this.round.warning ? t('warning') : !this.round.remaining ? t('waitingFinal') : t('placedStable', { count: this.round.placedCount });
-    this.ui.render(this.round.remaining, this.round.elapsedMilliseconds, this.round.score, message);
+    const statusSymbol = this.round.warning ? '!' : this.round.state === 'ready' ? '○' : !this.round.remaining ? '…' : '✓';
+    this.ui.render(this.round.remaining, this.round.elapsedMilliseconds, this.round.score, message, statusSymbol, this.round.placedCount, this.round.warning);
   }
   private createPlatform(parent: Phaser.GameObjects.Container): void {
     // An open platform: falling off the sides is now a real failure.

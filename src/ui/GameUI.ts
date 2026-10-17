@@ -151,10 +151,14 @@ export class GameUI {
     this.actions.pause(true);
     this.show(this.tutorial, 'tutorial-title');
   }
-  render(remaining: number, elapsed: number, score: number, message: string): void {
+  render(remaining: number, elapsed: number, score: number, message: string, statusSymbol: string, placed: number, warning: boolean): void {
     element('remaining-count').textContent = String(remaining);
+    element('remaining-readout').setAttribute('aria-label', t('remainingCountAria', { count: remaining }));
     element('elapsed-time').textContent = formatTime(elapsed);
     element('score-count').textContent = formatNumber(score);
+    element('status-symbol').textContent = statusSymbol;
+    element('placed-count').textContent = String(placed);
+    element('status-readout').classList.toggle('is-warning', warning);
     const status = element('game-status');
     if (status.textContent !== message) status.textContent = message;
   }

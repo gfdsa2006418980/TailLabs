@@ -14,11 +14,11 @@
       <section class="experiment" aria-label="TL001 遊戲實驗場" data-i18n-aria="gameArea">
         <div class="stage-toolbar">
           <div class="stage-actions">
-            <button id="help-button" type="button" data-i18n="helpButton">玩法</button>
-            <button id="leaderboard-button" type="button" data-i18n="leaderboardButton">排行榜</button>
-            <button id="reset-button" type="button" disabled><span data-i18n="resetButton">重新開始</span> <span aria-hidden="true">↻</span></button>
+            <button id="help-button" type="button" aria-label="玩法" data-i18n-aria="helpButton">?</button>
+            <button id="leaderboard-button" type="button" aria-label="排行榜" data-i18n-aria="leaderboardButton">≡</button>
+            <button id="reset-button" type="button" aria-label="重新開始" data-i18n-aria="resetButton" disabled>↻</button>
             <div class="audio-mixer">
-              <button id="audio-settings-toggle" type="button" aria-expanded="false" aria-controls="audio-controls" data-i18n="volume">音量</button>
+              <button id="audio-settings-toggle" type="button" aria-label="音量" data-i18n-aria="volume" aria-expanded="false" aria-controls="audio-controls">♫</button>
               <div id="audio-controls" class="audio-controls" role="group" aria-label="音量控制" data-i18n-aria="audioControls" hidden>
                 <div class="audio-channel"><label for="music-volume" data-i18n="music">音樂</label><input id="music-volume" type="range" min="0" max="100" step="1" value="100" aria-label="背景音樂音量" data-i18n-aria="musicVolume" /><button id="music-toggle" type="button" aria-pressed="false">靜音</button></div>
                 <div class="audio-channel"><label for="effects-volume" data-i18n="effects">音效</label><input id="effects-volume" type="range" min="0" max="200" step="1" value="200" aria-label="遊戲音效音量" data-i18n-aria="effectsVolume" /><button id="effects-toggle" type="button" aria-pressed="false">靜音</button></div>
@@ -26,9 +26,13 @@
             </div>
           </div>
         </div>
-        <div class="game-progress"><span><span data-i18n="remaining">剩餘蛇貂</span> <strong>× <span id="remaining-count">500</span></strong></span><span id="game-status" role="status" data-i18n="ready">準備開始實驗</span></div>
+        <div class="game-progress">
+          <span id="remaining-readout" class="remaining-readout" aria-label="剩餘蛇貂 500 隻"><span aria-hidden="true">×</span><strong id="remaining-count">500</strong></span>
+          <span id="status-readout" class="status-readout" aria-hidden="true"><span id="status-symbol">✓</span><strong id="placed-count">0</strong></span>
+          <span id="game-status" class="sr-only" role="status" data-i18n="ready">準備開始實驗</span>
+        </div>
         <div id="game" role="group" aria-label="蛇貂堆疊挑戰" data-i18n-aria="gameCanvas"></div>
-        <div class="game-metrics"><span><span data-i18n="time">時間</span> <strong id="elapsed-time">00:00.00</strong></span><span><span data-i18n="score">分數</span> <strong id="score-count">0</strong></span></div>
+        <div class="game-metrics"><span class="metric"><span class="metric-icon" aria-hidden="true">◷</span><span class="sr-only" data-i18n="time">時間</span><strong id="elapsed-time">00:00.00</strong></span><span class="metric"><span class="metric-icon" aria-hidden="true">✦</span><span class="sr-only" data-i18n="score">分數</span><strong id="score-count">0</strong></span></div>
         <div class="controls" aria-label="遊戲操作" data-i18n-aria="gameControls"><button id="move-left" class="move-button" type="button" aria-label="向左移動" data-i18n-aria="moveLeft" disabled>←</button><button id="drop-button" class="drop-button" type="button" disabled><span id="drop-label" data-i18n="drop">放下這一隻</span> <span aria-hidden="true">↓</span></button><button id="move-right" class="move-button" type="button" aria-label="向右移動" data-i18n-aria="moveRight" disabled>→</button></div>
         <p class="control-hint" data-i18n="controlHint">滑鼠移動、點擊落下 · 手機拖動、放手落下</p>
         <noscript><p data-i18n="noScript">這個遊戲需要開啟 JavaScript 才能執行。</p></noscript>

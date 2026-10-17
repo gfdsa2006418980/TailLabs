@@ -11,8 +11,8 @@ const messages: Record<Language, Catalog> = {
     musicVolume: 'Background music volume', effectsVolume: 'Game sound effects volume', mute: 'Mute', unmute: 'Unmute',
     musicMuteLabel: 'Mute background music', musicUnmuteLabel: 'Unmute background music', musicMutedTitle: 'Background music is muted', musicMuteTitle: 'Mute background music',
     effectsMuteLabel: 'Mute game sound effects', effectsUnmuteLabel: 'Unmute game sound effects', effectsMutedTitle: 'Game sound effects are muted', effectsMuteTitle: 'Mute game sound effects',
-    remaining: 'Serpentelas left', ready: 'Ready to begin', gameCanvas: 'Serpentela stacking challenge', time: 'Time', score: 'Score',
-    gameControls: 'Game controls', moveLeft: 'Move left', moveRight: 'Move right', drop: 'Drop this one',
+    remaining: 'Serpentelas left', remainingCountAria: '{{count}} Serpentelas left', ready: 'Ready to begin', gameCanvas: 'Serpentela stacking challenge', time: 'Time', score: 'Score',
+    gameControls: 'Game controls', moveLeft: 'Move left', moveRight: 'Move right', drop: 'Drop',
     controlHint: 'Move the mouse and click to drop · Drag and release on touch screens', noScript: 'This game needs JavaScript enabled.',
     languageSelector: 'Language', tutorialOops: 'Oh no!', tutorialTitle: 'A Serpentela has invaded your magic circle!', serpentelaName: 'Serpentela',
     tutorialDescription: 'Your lab is overflowing with {{count}} identical Serpentelas.\nStack them all back onto the magic circle to restore order.',
@@ -43,8 +43,8 @@ const messages: Record<Language, Catalog> = {
     musicVolume: '背景音樂音量', effectsVolume: '遊戲音效音量', mute: '靜音', unmute: '開啟',
     musicMuteLabel: '靜音背景音樂', musicUnmuteLabel: '開啟背景音樂', musicMutedTitle: '背景音樂已靜音', musicMuteTitle: '靜音背景音樂',
     effectsMuteLabel: '靜音遊戲音效', effectsUnmuteLabel: '開啟遊戲音效', effectsMutedTitle: '遊戲音效已靜音', effectsMuteTitle: '靜音遊戲音效',
-    remaining: '剩餘蛇貂', ready: '準備開始實驗', gameCanvas: '蛇貂堆疊挑戰', time: '時間', score: '分數',
-    gameControls: '遊戲操作', moveLeft: '向左移動', moveRight: '向右移動', drop: '放下這一隻',
+    remaining: '剩餘蛇貂', remainingCountAria: '剩餘 {{count}} 隻蛇貂', ready: '準備開始實驗', gameCanvas: '蛇貂堆疊挑戰', time: '時間', score: '分數',
+    gameControls: '遊戲操作', moveLeft: '向左移動', moveRight: '向右移動', drop: '放下',
     controlHint: '滑鼠移動、點擊落下 · 手機拖動、放手落下', noScript: '這個遊戲需要開啟 JavaScript 才能執行。',
     languageSelector: '語言', tutorialOops: '喔不！', tutorialTitle: '有隻蛇貂闖進你的魔法陣了！', serpentelaName: '蛇貂',
     tutorialDescription: '{{count}} 隻完全一樣的蛇貂塞滿了實驗室，\n復原方法只有一個：把牠們全部疊回魔法陣上。',
@@ -53,7 +53,7 @@ const messages: Record<Language, Catalog> = {
     targetCount: '{{count}} 隻',
     resultArt: '蛇貂', resultSuccess: '魔法成功了！', resultFailure: '魔法失敗了！', resultScore: '本次分數', placed: '成功放穩', elapsed: '經過時間', placementScore: '放置分數', heightBonus: '高度獎勵', speedBonus: '完成時間獎勵',
     playerName: '你的名字', anonymous: '匿名飼主', saveName: '儲存名字', maxName: '最多 12 個字', tryAgain: '再試一次', moreChallenges: '挑戰更多隻', viewLeaderboard: '查看排行榜',
-    successDescription: '你現在有一隻闖大禍的蛇貂了，恭喜你！', failureDescription: '你還有 {{count}} 隻一模一樣的蛇貂，繼續加油！',
+    successDescription: '你現在有一隻闖大禍的蛇貂了，恭喜你！', failureDescription: '你現在有{{count}}隻完全一樣的蛇貂了，恭喜你',
     placedCount: '{{placed}} / {{target}} 隻',
     leaderboardEyebrow: 'GLOBAL RANKING / TOP 100', leaderboardTitle: '最佳紀錄', viewChallenge: '查看挑戰', back: '返回',
     savedLocal: '本次成績已保存在這個瀏覽器。', saveTemporary: '目前無法永久儲存；成績暫存於本次開啟期間。',
@@ -75,7 +75,7 @@ const messages: Record<Language, Catalog> = {
     musicVolume: 'BGMの音量', effectsVolume: 'ゲーム効果音の音量', mute: 'ミュート', unmute: '音を出す',
     musicMuteLabel: 'BGMをミュート', musicUnmuteLabel: 'BGMのミュートを解除', musicMutedTitle: 'BGMはミュート中', musicMuteTitle: 'BGMをミュート',
     effectsMuteLabel: 'ゲーム効果音をミュート', effectsUnmuteLabel: 'ゲーム効果音のミュートを解除', effectsMutedTitle: 'ゲーム効果音はミュート中', effectsMuteTitle: 'ゲーム効果音をミュート',
-    remaining: '残りのテンレラ', ready: '実験を始めよう', gameCanvas: 'テンレラ積み上げチャレンジ', time: 'タイム', score: 'スコア',
+    remaining: '残りのテンレラ', remainingCountAria: '残り {{count}} 匹のテンレラ', ready: '実験を始めよう', gameCanvas: 'テンレラ積み上げチャレンジ', time: 'タイム', score: 'スコア',
     gameControls: 'ゲーム操作', moveLeft: '左へ移動', moveRight: '右へ移動', drop: '落とす',
     controlHint: 'マウスを動かしてクリックで落とす · タッチ操作はドラッグして離す', noScript: 'このゲームを遊ぶには JavaScript を有効にしてください。',
     languageSelector: '言語', tutorialOops: 'たいへん！', tutorialTitle: 'テンレラが魔法陣に入り込んだ！', serpentelaName: 'テンレラ',
@@ -106,17 +106,24 @@ const localeByLanguage: Record<Language, string> = { en: 'en-US', zh: 'zh-TW', j
 const documentLanguage: Record<Language, string> = { en: 'en', zh: 'zh-Hant', ja: 'ja' };
 const listeners = new Set<(language: Language) => void>();
 function isLanguage(value: string | null): value is Language { return value === 'en' || value === 'zh' || value === 'ja'; }
+function detectDeviceLanguage(): Language {
+  const preferred = typeof navigator === 'undefined' ? '' : navigator.languages?.[0] || navigator.language;
+  const locale = preferred.toLowerCase().replaceAll('_', '-');
+  if (/^ja(?:-|$)/.test(locale)) return 'ja';
+  if (/^zh-(?:hant|tw|hk|mo)(?:-|$)/.test(locale)) return 'zh';
+  return 'en';
+}
 function loadLanguage(): Language {
   try { const saved = localStorage.getItem(STORAGE_KEY); if (isLanguage(saved)) return saved; } catch { /* Storage may be unavailable. */ }
-  return 'zh';
+  return detectDeviceLanguage();
 }
 let language: Language = loadLanguage();
 
 export function getLanguage(): Language { return language; }
 export function setLanguage(next: Language): void {
+  try { localStorage.setItem(STORAGE_KEY, next); } catch { /* Language still changes for this session. */ }
   if (next === language) return;
   language = next;
-  try { localStorage.setItem(STORAGE_KEY, next); } catch { /* Language still changes for this session. */ }
   listeners.forEach((listener) => listener(language));
 }
 export function subscribeLanguage(listener: (language: Language) => void): () => void {
