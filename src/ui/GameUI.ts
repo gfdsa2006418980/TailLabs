@@ -1,6 +1,7 @@
 import type { RoundResult } from '../systems/RoundSession';
 import { LeaderboardSystem, playerName, recordId } from '../systems/LeaderboardSystem';
 import type { LeaderboardEntry } from '../systems/LeaderboardSystem';
+import { LoopingMusic } from '../systems/LoopingMusic';
 import { FailureBackdrop } from './FailureBackdrop';
 
 const element = <T extends HTMLElement>(id: string) => {
@@ -22,6 +23,7 @@ export class GameUI {
   private readonly boardTarget = element<HTMLSelectElement>('board-target');
   private readonly failureBackdrop = new FailureBackdrop(this.result);
   private readonly leaderboard: LeaderboardSystem;
+  private readonly music: LoopingMusic;
   private readonly cleanups: Array<() => void> = [];
   private entry?: LeaderboardEntry;
   private started = false;
@@ -30,8 +32,10 @@ export class GameUI {
     let storage: Storage | undefined;
     try { storage = localStorage; } catch { /* Browser privacy settings may block storage. */ }
     this.leaderboard = new LeaderboardSystem(storage);
+    this.music = new LoopingMusic(element<HTMLButtonElement>('music-toggle'));
     this.listen('start-button', 'click', () => {
       this.tutorial.close();
+      this.music.start();
       if (!this.started) { this.started = true; actions.start(Number(this.target.value)); }
       actions.pause(false);
     });
@@ -138,5 +142,5 @@ export class GameUI {
   private show(dialog: HTMLDialogElement, heading: string): void {
     dialog.showModal(); element(heading).focus({ preventScroll: true }); dialog.scrollTop = 0;
   }
-  destroy(): void { this.failureBackdrop.destroy(); this.cleanups.forEach((cleanup) => cleanup()); [this.tutorial, this.result, this.board].forEach((dialog) => dialog.close()); }
+  destroy(): void { this.failureBackdrop.destroy(); this.music.destroy(); this.cleanups.forEach((cleanup) => cleanup()); [this.tutorial, this.result, this.board].forEach((dialog) => dialog.close()); }
 }
