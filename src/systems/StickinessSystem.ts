@@ -33,6 +33,7 @@ export class StickinessSystem {
   get frozenCount(): number { return this.frozenTotal; }
 
   addSupport(id: number): void { this.supports.add(id); }
+  removeSupport(id: number): void { this.supports.delete(id); }
 
   track(target: StickyTarget): void {
     this.entries.set(target.id, { target, contacts: new Set(), frozen: false, dampingMs: 0 });

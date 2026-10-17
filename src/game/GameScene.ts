@@ -32,9 +32,12 @@ export class GameScene extends Phaser.Scene {
   private nextLabel!: Phaser.GameObjects.Text;
   private nextTexture = '';
   private readonly supportIds = new Set<number>();
+  private readonly pillarBodies: MatterJS.BodyType[] = [];
+  private pillarVisual?: Phaser.GameObjects.Graphics;
   private lastHudAt = -Infinity;
   private touchId?: number;
   private layout!: StageLayout;
+  private worldContainer!: Phaser.GameObjects.Container;
 
   constructor() { super('GameScene'); }
   preload(): void {
@@ -48,6 +51,7 @@ export class GameScene extends Phaser.Scene {
     const hud = this.add.container(0, 0);
     this.drawChamber(hud);
     const world = this.add.container(0, 0);
+    this.worldContainer = world;
     this.cameras.main.ignore(world);
     this.worldCamera = this.cameras.add(this.layout.chamberLeft, this.layout.chamberTop, this.layout.chamberWidth, this.layout.chamberHeight)
       .setScroll(this.layout.chamberLeft, this.layout.chamberTop);
@@ -172,6 +176,7 @@ export class GameScene extends Phaser.Scene {
   private startRound(target: number): void {
     this.round = new RoundSession([10, 50, 100, 500].includes(target) ? target : ROUND.target);
     this.spawner.reset(this.round.target); this.stickiness.clear();
+    this.updateLightPillars(this.round.target);
     this.towerCamera.reset(); this.worldCamera.setScroll(this.layout.chamberLeft, this.layout.chamberTop);
     this.lastDropAt = -Infinity; this.lastHudAt = -Infinity; this.touchId = undefined;
     this.round.start(); this.paused = false;
@@ -229,15 +234,36 @@ export class GameScene extends Phaser.Scene {
     const platform = this.matter.add.rectangle(centerX, this.layout.platformY + this.layout.platformDepth / 2, platformWidth, this.layout.platformDepth, { isStatic: true, friction: 0.75, label: 'magic-circle-platform' });
     this.supportIds.clear(); this.supportIds.add(platform.id);
     this.stickiness.addSupport(platform.id);
+    this.updateLightPillars(this.round.target, parent);
+    const circleHeight = Math.min(platformWidth * 0.43, Math.max(60, (this.layout.chamberBottom - this.layout.platformY - 12) * 2));
+    const circle = this.add.image(centerX, this.layout.platformY + 12, 'magic-circle')
+      .setDisplaySize(Math.min(platformWidth * 1.15, circleHeight * 3.7), circleHeight);
+    parent.add(circle);
+  }
+  private updateLightPillars(target: number, parent?: Phaser.GameObjects.Container): void {
+    for (const wall of this.pillarBodies) {
+      this.matter.world.remove(wall);
+      this.supportIds.delete(wall.id);
+      this.stickiness.removeSupport(wall.id);
+    }
+    this.pillarBodies.length = 0;
+    this.pillarVisual?.destroy();
+    this.pillarVisual = undefined;
+
+    const scale = target === 10 ? 0 : target === 50 ? 0.5 : target === 500 ? 2 : 1;
+    const pillarHeight = this.layout.lightPillarHeight * scale;
+    if (!pillarHeight) return;
+
     const pillarWidth = this.layout.lightPillarWidth;
-    const pillarHeight = this.layout.lightPillarHeight;
     const top = this.layout.platformY - pillarHeight;
     const bottom = this.layout.platformY;
     const pillars = this.add.graphics();
+    this.pillarVisual = pillars;
     for (const x of [this.layout.safeLeft - pillarWidth / 2, this.layout.safeRight + pillarWidth / 2]) {
       const wall = this.matter.add.rectangle(x, (top + bottom) / 2, pillarWidth, pillarHeight, {
         isStatic: true, friction: 0.8, frictionStatic: 0.9, restitution: 0.05, label: 'magic-circle-light-pillar',
       });
+      this.pillarBodies.push(wall);
       this.supportIds.add(wall.id);
       this.stickiness.addSupport(wall.id);
       pillars.lineStyle(pillarWidth * 1.85, 0x93ae93, 0.09).lineBetween(x, top, x, bottom);
@@ -246,11 +272,7 @@ export class GameScene extends Phaser.Scene {
       pillars.lineStyle(1, 0xfffced, 0.72).lineBetween(x, top + 10, x, bottom - 2);
       pillars.fillStyle(0xc1b789, 0.32).fillEllipse(x, bottom, pillarWidth * 1.85, 7);
     }
-    parent.add(pillars);
-    const circleHeight = Math.min(platformWidth * 0.43, Math.max(60, (this.layout.chamberBottom - this.layout.platformY - 12) * 2));
-    const circle = this.add.image(centerX, this.layout.platformY + 12, 'magic-circle')
-      .setDisplaySize(Math.min(platformWidth * 1.15, circleHeight * 3.7), circleHeight);
-    parent.add(circle);
+    (parent ?? this.worldContainer).add(pillars);
   }
   private drawChamber(parent: Phaser.GameObjects.Container): void {
     const art = this.add.graphics(); parent.add(art);
