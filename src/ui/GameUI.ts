@@ -262,6 +262,7 @@ export class GameUI {
     if (!rows.length) { const empty = document.createElement('li'); empty.className = 'empty-records'; empty.textContent = t('noRecords'); list.append(empty); }
     rows.forEach((row, index) => {
       const item = document.createElement('li');
+      item.style.animationDelay = `${Math.min(index * 8, 120)}ms`;
       const rank = document.createElement('span'); rank.className = 'record-rank'; rank.textContent = String(index + 1).padStart(2, '0');
       const detail = document.createElement('div');
       const name = document.createElement('strong'); name.textContent = row.playerName;
