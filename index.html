@@ -10,27 +10,17 @@
 </head>
 <body>
   <main class="lab">
-    <header class="masthead"><a class="wordmark" href="./" aria-label="TailLabs 首頁"><span class="brand-dot"></span>tail<span class="brand-light">labs</span><span class="brand-period">.</span></a><span class="edition">WEB EXPERIMENTS <span>/</span> 001</span></header>
     <div class="workspace">
-      <section class="intro" aria-labelledby="game-title">
-        <p class="eyebrow"><span class="status-dot"></span> 蛇貂回收中</p>
-        <h1 id="game-title">誰複製了<br /><span class="number">500</span> 隻蛇貂<span class="title-dot">？</span></h1>
-        <p class="description">有隻蛇貂走進你的魔法陣了！<br />把他們全部疊回魔法陣上方。</p>
-        <div class="experiment-note"><span class="note-index">01 /</span><div><h2>慢慢來，疊高一點。</h2><p>接觸後約 3 秒開始減速，停穩就會黏住。塔長高時，視線會跟著往上。</p></div></div>
-        <div class="side-actions"><button id="help-button" type="button">玩法圖解 ↗</button><button id="leaderboard-button" type="button">我的排行榜 ↗</button></div>
-      </section>
       <section class="experiment" aria-label="TL001 遊戲實驗場">
-        <div class="stage-toolbar"><span id="mode-label"><span class="status-dot"></span> 500 隻挑戰</span><button id="reset-button" type="button" disabled>重新開始 <span aria-hidden="true">↻</span></button></div>
+        <div class="stage-toolbar"><span id="mode-label"><span class="status-dot"></span> 500 隻挑戰</span><div class="stage-actions"><button id="help-button" type="button">玩法</button><button id="leaderboard-button" type="button">排行榜</button><button id="reset-button" type="button" disabled>重新開始 <span aria-hidden="true">↻</span></button></div></div>
         <div class="game-progress"><span>剩餘蛇貂 <strong>× <span id="remaining-count">500</span></strong></span><span id="game-status" role="status">準備開始實驗</span></div>
         <div id="game" role="group" aria-label="蛇貂堆疊挑戰；可使用下方按鈕或鍵盤操作"></div>
         <div class="game-metrics"><span>時間 <strong id="elapsed-time">00:00.00</strong></span><span>分數 <strong id="score-count">0</strong></span></div>
         <div class="controls" aria-label="遊戲操作"><button id="move-left" class="move-button" type="button" aria-label="向左移動" disabled>←</button><button id="drop-button" class="drop-button" type="button" disabled>放下這一隻 <span aria-hidden="true">↓</span></button><button id="move-right" class="move-button" type="button" aria-label="向右移動" disabled>→</button></div>
         <p class="control-hint">滑鼠移動、點擊落下 <span>·</span> 手機拖動、放手落下</p>
-        <details class="inspection"><summary>造型與外框檢查</summary><div class="shape-tools"><span id="current-shape">準備召喚…</span><label><input id="outline-toggle" type="checkbox" /> 顯示碰撞外框</label><a href="./colliders.html">查看全部 15 種 ↗</a></div></details>
         <noscript><p>這個遊戲需要開啟 JavaScript 才能執行。</p></noscript>
       </section>
     </div>
-    <footer class="footer"><span>SMALL EXPERIMENTS. CURIOUS TAILS.</span><span>TAIL LABS © 2026</span></footer>
   </main>
   <dialog id="tutorial-dialog" aria-labelledby="tutorial-title"><div class="dialog-card tutorial-card">
     <h2 id="tutorial-title" tabindex="-1" autofocus><span class="tutorial-oops">喔不！</span>有隻蛇貂走進你的魔法陣了！</h2>

@@ -2,8 +2,8 @@
 export class TowerCamera {
   offset = 0;
   private target = 0;
-  update(highestSupportedY: number | undefined, deltaMs: number): number {
-    if (highestSupportedY !== undefined) this.target = Math.min(this.target, highestSupportedY - 310);
+  update(highestSupportedY: number | undefined, deltaMs: number, restingScreenY = 310): number {
+    if (highestSupportedY !== undefined) this.target = Math.min(this.target, highestSupportedY - restingScreenY);
     const factor = 1 - Math.exp(-Math.min(deltaMs, 50) / 280);
     this.offset += (this.target - this.offset) * factor;
     if (Math.abs(this.target - this.offset) < 0.01) this.offset = this.target;

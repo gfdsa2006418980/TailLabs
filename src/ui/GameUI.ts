@@ -74,8 +74,10 @@ export class GameUI {
     this.boardTarget.value = String(target);
   }
   finish(result: RoundResult): void {
-    element('result-title').textContent = result.completed ? '魔法，終於解除了。' : '魔法失敗了！';
-    element('result-description').textContent = result.completed ? '每一隻都回來了。這次的實驗，算是成功了吧。' : `你現在有 ${result.target - result.placedCount} 隻各種造型的蛇貂了，恭喜你`;
+    element('result-title').textContent = result.completed ? '魔法成功了！' : '魔法失敗了！';
+    element('result-description').textContent = result.completed
+      ? '你現在有一隻闖大禍的蛇貂了，恭喜你！'
+      : `你現在有${result.target - result.placedCount}隻完全一樣的蛇貂了，恭喜你`;
     element('result-score').textContent = result.score.toLocaleString('zh-TW');
     element('result-count').textContent = `${result.placedCount} / ${result.target} 隻`;
     element('result-time').textContent = formatTime(result.elapsedMilliseconds);
