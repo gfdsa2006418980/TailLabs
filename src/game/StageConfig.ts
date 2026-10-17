@@ -1,6 +1,6 @@
 export const STAGE = {
   width: 520,
-  height: 660,
+  height: 920,
   spawnY: 148,
   minX: 61,
   maxX: 459,

@@ -261,8 +261,8 @@ export class GameScene extends Phaser.Scene {
     };
     const previewX = this.layout.width - 70;
     const previewY = this.layout.chamberTop + Math.max(78, this.layout.chamberHeight * 0.15);
-    art.fillStyle(0xf1f0e5, 0.7).fillRoundedRect(previewX - 48, previewY - 27, 92, 56, 12);
-    this.nextLabel = label(previewX - 38, previewY - 19, '下一隻', 9);
-    this.nextImage = this.add.image(previewX + 17, previewY + 1, 'serpentela-w50-01').setDisplaySize(38.25, 38.25); parent.add(this.nextImage);
+    art.fillStyle(0xf1f0e5, 0.7).fillRoundedRect(previewX - 62, previewY - 27, 120, 56, 12);
+    this.nextLabel = label(previewX - 53, previewY - 19, '下一隻', 14).setStyle({ fontStyle: 'bold' });
+    this.nextImage = this.add.image(previewX + 34, previewY + 1, 'serpentela-w50-01').setDisplaySize(38.25, 38.25); parent.add(this.nextImage);
   }
 }
