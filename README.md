@@ -120,7 +120,14 @@ GitHub Pages 部署工作流程已設定；合入 `main` 並完成 Pages 設定�
 2. 將變更推送到 `main`，或從 Actions 手動執行 **Deploy to GitHub Pages**。
 3. 工作流程會安裝鎖定套件、型別檢查、建置、執行黏性物理測試，然後發布 `dist/`。
 
-正式建置會先清空 `dist/`，再將 TL001 建置至 `dist/TL001/`；工作流程發布整個 `dist/`，只保留 [https://gfdsa2006418980.github.io/TailLabs/TL001/](https://gfdsa2006418980.github.io/TailLabs/TL001/) 作為遊戲入口。`base: './'` 讓建置資源使用相對網址；後續新增 public 圖片時，請透過 `import.meta.env.BASE_URL` 組合路徑，避免寫死 `/assets/...`。
+正式建置會先清空 `dist/`，將 TL001 建置至 `dist/TL001/`，再由 `tools/build-commission.mjs` 將遊戲委託頁輸出至 `dist/Commission/`。工作流程發布整個 `dist/`：
+
+- 遊戲入口：[蛇貂疊疊樂](https://gfdsa2006418980.github.io/TailLabs/TL001/)
+- 委託入口：[浣熊拉芙・遊戲委託](https://gfdsa2006418980.github.io/TailLabs/Commission/)
+
+委託頁的 HTML、樣式、互動位於 `commission/`，直接編輯後執行 `npm run build` 即可。內容依[遊戲委託文件](https://docs.google.com/document/d/1NwfgXDX-ODlL-yqW9u1Fa0S5FQNrrzrTELzfNiWD2zs/edit?tab=t.0) 於 2026-10-18 的版本整理；文件後續修改需同步更新網頁。頁面以靜態檔案運作，包含方案範例切換、可展開條款、取消費用試算，以及可複製的委託訊息；資料只在訪客的瀏覽器中處理。建置時會複製既有蛇貂素材，不修改遊戲原圖。
+
+`base: './'` 讓遊戲資源使用相對網址；後續新增 public 圖片時，請透過 `import.meta.env.BASE_URL` 組合路徑，避免寫死 `/assets/...`。
 
 參考：[Vite 靜態部署與 GitHub Pages](https://vite.dev/guide/static-deploy.html#github-pages)。
 
