@@ -87,18 +87,18 @@ body.dialog-open { overflow: hidden; }
 .ball-stage { height: 294px; position: relative; background: #fcf8f7; overflow: hidden; }
 .stage-grid { position: absolute; inset: 0; opacity: .6; background-image: radial-gradient(#c6b2b3 1px, transparent 1px); background-size: 22px 22px; mask-image: radial-gradient(ellipse, #000 0, transparent 75%); }
 .drop-guide { width: 1px; height: 100px; border-left: 2px dashed #c6a1a777; position: absolute; left: 50%; top: 0; }
-.hero-orb-field { position: absolute; z-index: 1; left: 50%; bottom: 28px; width: min(288px, 86%); aspect-ratio: 4 / 3; transform: translateX(-50%); }
+.hero-orb-field { position: absolute; z-index: 1; inset: 0; width: 100%; height: 100%; }
 .art-orb { position: relative; display: block; aspect-ratio: 1; overflow: hidden; isolation: isolate; border: 1px solid #fff9f8d9; border-radius: 50%; background: radial-gradient(circle at 30% 22%, #fff9 0, #efcfce9c 29%, #cd9b9d9c 65%, #80565c88 100%); box-shadow: 0 9px 18px #51323824, inset 0 2px 7px #fff9, inset 0 -9px 18px #6f414226; }
 .art-orb .orb-art { position: absolute; z-index: 1; left: 50%; top: 50%; width: 82%; height: 82%; max-width: none; object-fit: contain; transform: translate(-50%, -50%); filter: drop-shadow(0 3px 4px #33262938); }
 .orb-glass { position: absolute; z-index: 2; inset: 0; border-radius: inherit; pointer-events: none; background: linear-gradient(145deg, #fff4 0%, #fff1 34%, #70474a14 100%); box-shadow: inset 0 2px 8px #fff9, inset 0 -10px 17px #6f414222; }
 .orb-glass::before { content: ""; position: absolute; top: 12%; left: 16%; width: 31%; height: 13%; border-radius: 50%; transform: rotate(-28deg); background: linear-gradient(90deg, #fff8, #fff2); filter: blur(1px); }
-.hero-orb { position: absolute; width: 33.3333%; }
-.hero-orb-top { left: 36%; bottom: 60%; z-index: 6; width: 28%; }
-.hero-orb-mid-left { left: 16.6667%; bottom: 28%; z-index: 5; }
-.hero-orb-mid-right { left: 50%; bottom: 28%; z-index: 5; }
-.hero-orb-base-left { left: 0; bottom: 0; z-index: 4; }
-.hero-orb-base-middle { left: 33.3333%; bottom: 0; z-index: 4; }
-.hero-orb-base-right { left: 66.6667%; bottom: 0; z-index: 4; }
+.hero-orb { position: absolute; width: 104px; height: 104px; }
+.hero-orb-top { left: 67%; top: 5px; z-index: 1; width: 75px; height: 75px; transform: rotate(19deg); animation: bob 5s ease-in-out infinite; }
+.hero-orb-mid-left { left: 33%; bottom: 163px; z-index: 3; transform: rotate(-24deg); }
+.hero-orb-mid-right { left: 53%; bottom: 97px; z-index: 3; transform: rotate(22deg); }
+.hero-orb-base-left { left: 29%; bottom: 24px; z-index: 3; transform: rotate(-18deg); }
+.hero-orb-base-middle { left: 39%; bottom: 95px; z-index: 4; transform: rotate(-11deg); }
+.hero-orb-base-right { left: 45%; bottom: 22px; z-index: 2; transform: rotate(12deg); }
 .hero-orb-field .orb-art { transition: opacity .25s ease, transform .35s cubic-bezier(.2,.7,.3,1); }
 .hero-orb-field.is-changing .orb-art { opacity: 0; transform: translate(-50%, -43%) scale(.97); }
 .ball-platform { height: 12px; width: 310px; position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%); border-radius: 8px; background: #bd949a; box-shadow: 0 8px 0 #e9dbdd, 0 24px 20px #81575c26; }
@@ -174,14 +174,14 @@ body.dialog-open { overflow: hidden; }
 .example-orbit::before { content: ""; inset: 30px; border: 1px solid #e5cfd077; position: absolute; border-radius: 50%; }
 .showcase-art[data-mode="deluxe"] .example-orbit,
 .showcase-art[data-mode="deluxe"] .example-orbit::before { border-color: #d8b5b844; }
-.showcase-stack { position: absolute; width: 340px; height: 340px; left: calc(50% - 170px); bottom: 97px; }
-.stack-ball { position: absolute; z-index: 2; width: 118px; transition: transform .5s, opacity .35s; }
-.s1 { bottom: 0; left: 15px; }
-.s2 { bottom: 0; right: 15px; z-index: 2; }
-.s3 { bottom: 88px; left: 54px; z-index: 3; width: 118px; }
-.s4 { bottom: 88px; right: 54px; z-index: 3; width: 118px; }
-.s5 { bottom: 176px; left: calc(50% - 44px); z-index: 4; width: 88px; }
-.example-base { position: absolute; bottom: 85px; height: 12px; width: 270px; left: 25px; background: #bd949a; border-radius: 50%; box-shadow: 0 8px 24px #80595e20; }
+.showcase-stack { position: absolute; width: 320px; height: 330px; left: calc(50% - 160px); bottom: 97px; }
+.stack-ball { position: absolute; z-index: 2; width: 116px; height: 116px; transition: transform .5s, opacity .35s; }
+.s1 { bottom: 10px; left: 48px; transform: rotate(-12deg); }
+.s2 { bottom: 13px; right: 40px; transform: rotate(17deg); }
+.s3 { bottom: 95px; left: 100px; transform: rotate(-7deg); z-index: 3; }
+.s4 { bottom: 180px; left: 112px; transform: rotate(13deg); }
+.s5 { bottom: 265px; left: 119px; width: 85px; height: 85px; transform: rotate(-8deg); }
+.example-base { position: absolute; bottom: 2px; height: 12px; width: 270px; left: 25px; background: #bd949a; border-radius: 50%; box-shadow: 0 8px 24px #80595e20; }
 .showcase-art[data-mode="basic"] .s4 { opacity: 0; transform: translateY(25px) rotate(0); }
 .showcase-art[data-mode="basic"] .s5 { opacity: 0; transform: translateY(30px); }
 .showcase-art[data-mode="deluxe"] .s4 { transform: rotate(-20deg) translateX(-30px); }
@@ -376,6 +376,7 @@ dialog::backdrop { background: #33262955; backdrop-filter: blur(5px); }
   .hero-scene { height: 440px; margin-top: 32px; }
   .game-window { width: 500px; }
   .ball-stage { height: 270px; }
+  .hero-orb-mid-left { bottom: 151px; }
   .note-idea { left: 10px; top: 120px; padding: 12px; }
   .note-play { right: 10px; top: 290px; padding: 12px; }
   .floating-note strong { font-size: 11px; }
@@ -462,7 +463,13 @@ dialog::backdrop { background: #33262955; backdrop-filter: blur(5px); }
   .window-dots i { width: 5px; height: 5px; }
   .window-tag { font-size: 8px; }
   .ball-stage { height: 217px; }
-  .hero-orb-field { width: min(240px, 82%); }
+  .hero-orb { width: 77px; height: 77px; }
+  .hero-orb-base-left { left: 23%; bottom: 21px; }
+  .hero-orb-base-right { left: 44%; bottom: 19px; }
+  .hero-orb-base-middle { left: 34%; bottom: 73px; }
+  .hero-orb-mid-right { left: 53%; bottom: 75px; }
+  .hero-orb-mid-left { left: 27%; bottom: 123px; }
+  .hero-orb-top { width: 56px; height: 56px; left: 70%; }
   .ball-platform { width: 230px; height: 9px; bottom: 14px; }
   .window-bottom { height: 35px; padding: 0 10px; font-size: 8px; }
   .window-bottom button { font-size: 9px; padding: 4px 7px; }
@@ -503,7 +510,6 @@ dialog::backdrop { background: #33262955; backdrop-filter: blur(5px); }
   .showcase-art-top { top: 20px; font-size: 12px; }
   .example-orbit { width: 300px; height: 300px; top: 55px; left: calc(50% - 150px); }
   .showcase-stack { transform: scale(.84); transform-origin: center bottom; bottom: 83px; }
-  .example-base { bottom: 71px; }
   .example-chip { font-size: 11px; padding: 6px 11px; }
   .chip-a { top: 117px; left: 18px; }
   .chip-b { top: 210px; right: 18px; }
