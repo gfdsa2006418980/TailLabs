@@ -26,14 +26,15 @@ document.addEventListener('click', (event) => {
 window.matchMedia('(min-width: 821px)').addEventListener('change', closeMenu);
 
 const remixButton = document.querySelector('#remix');
-const heroArtwork = document.querySelector('#hero-artwork');
+const heroOrbField = document.querySelector('#hero-orb-field');
+const heroOrbImages = [...heroOrbField.querySelectorAll('.orb-art')];
 const artworkOptions = [
-  './assets/snakes/stack-play.png',
+  './assets/snakes/curled-sleep.png',
   './assets/snakes/tail-glide.png',
   './assets/snakes/sleeping-basket.png',
   './assets/snakes/jumping-laugh.png',
   './assets/snakes/strawberry-tail.png',
-  './assets/snakes/curled-sleep.png',
+  './assets/snakes/stack-play.png',
 ];
 let remixCount = 0;
 let artworkChanging = false;
@@ -41,15 +42,20 @@ remixButton.addEventListener('click', async () => {
   if (artworkChanging) return;
   artworkChanging = true;
   const nextIndex = (remixCount + 1) % artworkOptions.length;
-  const nextArtwork = new Image();
-  nextArtwork.src = artworkOptions[nextIndex];
   try {
-    await nextArtwork.decode();
-    heroArtwork.classList.add('is-changing');
+    const nextImages = heroOrbImages.map((_, index) => {
+      const image = new Image();
+      image.src = artworkOptions[(index + nextIndex) % artworkOptions.length];
+      return image.decode();
+    });
+    await Promise.all(nextImages);
+    heroOrbField.classList.add('is-changing');
     window.setTimeout(() => {
-      heroArtwork.src = artworkOptions[nextIndex];
+      heroOrbImages.forEach((image, index) => {
+        image.src = artworkOptions[(index + nextIndex) % artworkOptions.length];
+      });
       remixCount = nextIndex;
-      requestAnimationFrame(() => heroArtwork.classList.remove('is-changing'));
+      requestAnimationFrame(() => heroOrbField.classList.remove('is-changing'));
       artworkChanging = false;
     }, 180);
   } catch {
