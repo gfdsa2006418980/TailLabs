@@ -11,6 +11,7 @@ import { bindControls } from '../ui/controls';
 import { subscribeLanguage, t } from '../ui/i18n';
 import { createStageLayout, type StageLayout } from './StageConfig';
 import { ROUND } from './RoundConfig';
+import { CONTACT_TUNING_THRESHOLDS, CONTACT_TUNING_TIERS } from './PhysicsTuning';
 
 const INK = 0x345442;
 const FONT = '"Segoe UI", "Microsoft JhengHei", sans-serif';
@@ -46,6 +47,7 @@ export class GameScene extends Phaser.Scene {
   private worldContainer!: Phaser.GameObjects.Container;
   private prewarmIndex = 0;
   private prewarmTexture?: Phaser.GameObjects.Image;
+  private contactTuningTier = -1;
 
   constructor() { super('GameScene'); }
   preload(): void {
@@ -93,14 +95,26 @@ export class GameScene extends Phaser.Scene {
         const normal = pair.collision.normal;
         // Phaser's event typings omit the count used by its bundled Matter version.
         const contactCount = (pair as typeof pair & { contactCount: number }).contactCount;
-        const supports = pair.collision.supports.slice(0, contactCount).filter((point) => point != null);
-        const x = supports.length ? supports.reduce((sum, point) => sum + point.x, 0) / supports.length : (a.position.x + b.position.x) / 2;
-        const y = supports.length ? supports.reduce((sum, point) => sum + point.y, 0) / supports.length : (a.position.y + b.position.y) / 2;
+        const supports = pair.collision.supports;
+        let supportX = 0, supportY = 0, supportTotal = 0;
+        const supportLimit = Number.isFinite(contactCount) ? Math.min(supports.length, Math.max(0, contactCount)) : supports.length;
+        for (let index = 0; index < supportLimit; index++) {
+          const point = supports[index];
+          if (!point) continue;
+          supportX += point.x; supportY += point.y; supportTotal++;
+        }
+        const x = supportTotal ? supportX / supportTotal : (a.position.x + b.position.x) / 2;
+        const y = supportTotal ? supportY / supportTotal : (a.position.y + b.position.y) / 2;
         const vx = a.velocity.x - a.angularVelocity * (y - a.position.y) - b.velocity.x + b.angularVelocity * (y - b.position.y);
         const vy = a.velocity.y + a.angularVelocity * (x - a.position.x) - b.velocity.y - b.angularVelocity * (x - b.position.x);
         const strength = Math.abs(vx * normal.x + vy * normal.y);
-        for (const body of [a, b]) if (this.spawner.getOrb(body.id) && strength > (impacts.get(body.id)?.strength ?? -Infinity)) {
-          impacts.set(body.id, { x, y, nx: normal.x, ny: normal.y, strength });
+        const impactA = impacts.get(a.id);
+        if (pieceA && strength > (impactA?.strength ?? -Infinity)) {
+          impacts.set(a.id, { x, y, nx: normal.x, ny: normal.y, strength });
+        }
+        const impactB = impacts.get(b.id);
+        if (pieceB && strength > (impactB?.strength ?? -Infinity)) {
+          impacts.set(b.id, { x, y, nx: normal.x, ny: normal.y, strength });
         }
       }
       impacts.forEach((impact, id) => this.spawner.getOrb(id)?.impact(impact.x, impact.y, impact.nx, impact.ny, impact.strength));
@@ -191,6 +205,7 @@ export class GameScene extends Phaser.Scene {
   }
   private startRound(target: number): void {
     this.round = new RoundSession([10, 50, 100, 500].includes(target) ? target : ROUND.target);
+    this.updateContactTuning(0);
     this.spawner.reset(this.round.target); this.stickiness.clear();
     this.updateLightPillars(this.round.target);
     this.towerCamera.reset(); this.worldCamera.setScroll(this.layout.chamberLeft, this.layout.chamberTop);
@@ -206,9 +221,8 @@ export class GameScene extends Phaser.Scene {
       this.stickiness.update(this.round.elapsedMilliseconds + delta, delta);
       const pieces = this.spawner.pieces;
       const ended = this.round.update(delta, pieces, this.layout.platformY, this.layout);
-      let top: number | undefined;
-      for (const piece of pieces) if (piece.hasLanded && piece.body.bounds.max.x >= this.layout.safeLeft && piece.body.bounds.min.x <= this.layout.safeRight) top = Math.min(top ?? Infinity, piece.body.bounds.min.y);
-      const offset = this.towerCamera.update(top, delta, this.layout.chamberTop + this.layout.chamberHeight * 0.46);
+      this.updateContactTuning(pieces.length);
+      const offset = this.towerCamera.update(this.round.towerTop, delta, this.layout.chamberTop + this.layout.chamberHeight * 0.46);
       const cameraY = this.layout.chamberTop + offset;
       if (this.worldCamera.scrollX !== this.layout.chamberLeft || this.worldCamera.scrollY !== cameraY) this.worldCamera.setScroll(this.layout.chamberLeft, cameraY);
       this.spawner.setSpawnY(this.layout.spawnY + offset);
@@ -221,13 +235,25 @@ export class GameScene extends Phaser.Scene {
       if (direction && !document.querySelector('dialog[open]')) this.spawner.moveTo(this.spawner.x + direction * Math.min(delta, 50) * 0.32);
       if (this.time.now - this.lastHudAt > 80) { this.refreshReadout(); this.refreshControls(); this.lastHudAt = this.time.now; }
     }
-    this.spawner.sync(this.isPlaying ? delta : 0);
+    if (this.isPlaying) this.spawner.sync(delta);
     if (this.showOutlines) {
       this.outlines.clear(); this.spawner.drawOutlines(this.outlines); this.outlinesWereVisible = true;
     } else if (this.outlinesWereVisible) {
       this.outlines.clear(); this.outlinesWereVisible = false;
     }
     this.refreshGuide();
+  }
+  private updateContactTuning(pieceCount: number): void {
+    let tier = 0;
+    for (let index = 1; index < CONTACT_TUNING_THRESHOLDS.length; index++) {
+      if (pieceCount >= CONTACT_TUNING_THRESHOLDS[index]) tier = index;
+    }
+    if (tier === this.contactTuningTier) return;
+    const tuning = CONTACT_TUNING_TIERS[tier];
+    this.matter.world.engine.positionIterations = tuning.positionIterations;
+    this.matter.world.engine.velocityIterations = tuning.velocityIterations;
+    this.matter.world.engine.constraintIterations = tuning.constraintIterations;
+    this.contactTuningTier = tier;
   }
   private prewarmNextSerpentela(): void {
     const definition = SERPENTELAS[this.prewarmIndex];

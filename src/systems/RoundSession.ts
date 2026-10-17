@@ -4,6 +4,7 @@ export type RoundState = 'ready' | 'playing' | 'failed' | 'completed';
 export interface PieceSnapshot {
   id: number;
   frozen: boolean;
+  hasLanded: boolean;
   bounds: { min: { x: number; y: number }; max: { x: number; y: number } };
 }
 export interface RoundBounds { safeLeft: number; safeRight: number; fallLimit: number; }
@@ -27,6 +28,7 @@ export class RoundSession {
   placedCount = 0;
   maxHeight = 0;
   warning = false;
+  towerTop?: number;
   private outsideSince = new Map<number, number>();
   readonly target: number;
   constructor(target: number = ROUND.target) { this.target = target; }
@@ -42,19 +44,26 @@ export class RoundSession {
     if (this.state !== 'playing') return false;
     this.elapsedMilliseconds += Math.max(0, delta);
     let placedCount = 0;
-    for (const piece of pieces) if (piece.frozen) placedCount++;
-    this.placedCount = placedCount;
+    let towerTop: number | undefined;
+    let failed = false;
     this.warning = false;
     for (const piece of pieces) {
       const out = piece.bounds.max.x < bounds.safeLeft || piece.bounds.min.x > bounds.safeRight || piece.bounds.min.y > bounds.fallLimit;
+      if (piece.frozen) placedCount++;
+      if (piece.hasLanded && piece.bounds.max.x >= bounds.safeLeft && piece.bounds.min.x <= bounds.safeRight) {
+        towerTop = Math.min(towerTop ?? Infinity, piece.bounds.min.y);
+      }
       if (out) {
         this.warning = true;
         const since = this.outsideSince.get(piece.id) ?? this.elapsedMilliseconds;
         this.outsideSince.set(piece.id, since);
-        if (this.elapsedMilliseconds - since >= ROUND.failGraceMs) { this.state = 'failed'; return true; }
+        if (this.elapsedMilliseconds - since >= ROUND.failGraceMs) failed = true;
       } else this.outsideSince.delete(piece.id);
       if (piece.frozen && !out) this.maxHeight = Math.max(this.maxHeight, platformY - piece.bounds.min.y);
     }
+    this.placedCount = placedCount;
+    this.towerTop = towerTop;
+    if (failed) { this.state = 'failed'; return true; }
     if (this.remaining === 0 && this.placedCount === this.target && !this.warning) {
       this.state = 'completed'; return true;
     }

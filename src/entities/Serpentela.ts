@@ -100,6 +100,9 @@ export class Serpentela implements StickyTarget {
   }
 
   impact(worldX: number, worldY: number, normalX: number, normalY: number, strength: number): void {
+    // Settled pieces are static supports; deforming every support on impact
+    // creates unnecessary mesh updates as the tower grows.
+    if (this.frozenState) return;
     const dx = worldX - this.body.position.x;
     const dy = worldY - this.body.position.y;
     // Direct the contact impulse inward for either side of a collision pair.
@@ -109,10 +112,11 @@ export class Serpentela implements StickyTarget {
     const localY = (-dx * sin + dy * cos) / SERPENTELA_SCALE + this.definition.center.y;
     const nx = (normalX * cos + normalY * sin) * sign;
     const ny = (-normalX * sin + normalY * cos) * sign;
-    this.artwork.impact(localX, localY, nx, ny, strength * (this.frozenState ? 0.65 : 1), this.scene.time.now);
+    this.artwork.impact(localX, localY, nx, ny, strength, this.scene.time.now);
   }
 
   sync(delta: number): void {
+    if (this.frozenState && !this.artwork.isActive) return;
     const position = this.body.position;
     const angle = this.body.angle;
     if (this.visual.x !== position.x || this.visual.y !== position.y || this.visual.rotation !== angle) {
