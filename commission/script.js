@@ -1,15 +1,16 @@
+const { t } = window.commissionI18n;
 const menuButton = document.querySelector('.menu-toggle');
 const navigation = document.querySelector('#navigation');
 function closeMenu() {
   navigation.classList.remove('open');
   menuButton.setAttribute('aria-expanded', 'false');
-  menuButton.setAttribute('aria-label', '開啟導覽選單');
+  menuButton.setAttribute('aria-label', t('開啟導覽選單'));
 }
 menuButton.addEventListener('click', () => {
   const open = menuButton.getAttribute('aria-expanded') !== 'true';
   navigation.classList.toggle('open', open);
   menuButton.setAttribute('aria-expanded', String(open));
-  menuButton.setAttribute('aria-label', open ? '關閉導覽選單' : '開啟導覽選單');
+  menuButton.setAttribute('aria-label', t(open ? '關閉導覽選單' : '開啟導覽選單'));
 });
 navigation.addEventListener('click', (event) => {
   if (event.target.closest('a')) closeMenu();
@@ -93,8 +94,8 @@ function selectExample(mode, moveFocus = false) {
     if (selected && moveFocus) tab.focus();
   });
   art.dataset.mode = mode;
-  document.querySelector('#example-status').textContent = examples[mode].label;
-  art.querySelectorAll('.example-chip').forEach((chip, index) => { chip.textContent = examples[mode].chips[index]; });
+  document.querySelector('#example-status').textContent = t(examples[mode].label);
+  art.querySelectorAll('.example-chip').forEach((chip, index) => { chip.textContent = t(examples[mode].chips[index]); });
   exampleContact.dataset.plan = examples[mode].plan;
 }
 tabs.forEach((tab, index) => {
@@ -117,15 +118,15 @@ document.querySelectorAll('[data-example]').forEach((link) => {
 
 const quoteInput = document.querySelector('#quote-input');
 const progressInput = document.querySelector('#progress-input');
-const amountFormatter = new Intl.NumberFormat('zh-TW', { maximumFractionDigits: 2 });
 function updateCancellation() {
+  const amountFormatter = new Intl.NumberFormat(window.commissionI18n.locale, { maximumFractionDigits: 2 });
   const progress = Number(progressInput.value);
   const quote = Number(quoteInput.value);
   const rate = 30 + 0.4 * progress;
   const validQuote = quoteInput.value.trim() !== '' && Number.isFinite(quote) && quote >= 1 && quote <= 10000000;
   document.querySelector('#progress-output').textContent = `${progress}%`;
-  document.querySelector('#fee-rate').textContent = `（報價的 ${Number(rate.toFixed(1))}%）`;
-  document.querySelector('#fee-amount').textContent = validQuote ? `NT$${amountFormatter.format(quote * rate / 100)}` : '請輸入有效報價';
+  document.querySelector('#fee-rate').textContent = t('（報價的 {rate}%）', { rate: Number(rate.toFixed(1)) });
+  document.querySelector('#fee-amount').textContent = validQuote ? `NT$${amountFormatter.format(quote * rate / 100)}` : t('請輸入有效報價');
 }
 quoteInput.addEventListener('input', updateCancellation);
 progressInput.addEventListener('input', updateCancellation);
@@ -135,13 +136,27 @@ const briefDialog = document.querySelector('#brief-dialog');
 const briefPlan = document.querySelector('#brief-plan');
 const briefMessage = document.querySelector('#brief-message');
 const copyStatus = document.querySelector('#copy-status');
-briefMessage.value = `Hi，浣熊拉芙，我想聊聊遊戲委託！\n\n委託方案：${briefPlan.value}\n遊戲想法／參考作品：\n預算範圍：\n期望完成時間：\n目前準備好的美術素材：\n其他想討論的內容：`;
+let briefUserEdited = false;
+function createBrief() {
+  return [
+    t('Hi，浣熊拉芙，我想聊聊遊戲委託！'),
+    '',
+    t('委託方案：') + t(briefPlan.value),
+    t('遊戲想法／參考作品：'),
+    t('預算範圍：'),
+    t('期望完成時間：'),
+    t('目前準備好的美術素材：'),
+    t('其他想討論的內容：'),
+  ].join('\n');
+}
+briefMessage.value = createBrief();
 function setBriefPlan(plan) {
   if (![...briefPlan.options].some((option) => option.value === plan)) return;
   briefPlan.value = plan;
-  const line = `委託方案：${plan}`;
-  briefMessage.value = /^委託方案：.*$/m.test(briefMessage.value)
-    ? briefMessage.value.replace(/^委託方案：.*$/m, line)
+  const line = t('委託方案：') + t(plan);
+  const planLine = /^(?:委託方案：|Commission plan:|ご希望のプラン：).*$/m;
+  briefMessage.value = planLine.test(briefMessage.value)
+    ? briefMessage.value.replace(planLine, () => line)
     : `${line}\n${briefMessage.value}`;
 }
 function openBrief(plan) {
@@ -160,7 +175,7 @@ document.querySelectorAll('[data-plan]').forEach((link) => {
   });
 });
 briefPlan.addEventListener('change', () => { setBriefPlan(briefPlan.value); copyStatus.textContent = ''; });
-briefMessage.addEventListener('input', () => { copyStatus.textContent = ''; });
+briefMessage.addEventListener('input', () => { briefUserEdited = true; copyStatus.textContent = ''; });
 document.querySelector('.dialog-close').addEventListener('click', () => briefDialog.close());
 briefDialog.addEventListener('click', (event) => {
   if (event.target === briefDialog) {
@@ -172,15 +187,24 @@ briefDialog.addEventListener('close', () => document.body.classList.remove('dial
 document.querySelector('#copy-brief').addEventListener('click', async () => {
   try {
     await navigator.clipboard.writeText(briefMessage.value);
-    copyStatus.textContent = '複製好了，到 Discord 貼上就可以。';
+    copyStatus.textContent = t('複製好了，到 Discord 貼上就可以。');
   } catch {
     briefMessage.focus();
     briefMessage.select();
     try {
       const copied = document.execCommand('copy');
-      copyStatus.textContent = copied ? '複製好了，到 Discord 貼上就可以。' : '已選取訊息，請手動複製後貼到 Discord。';
+      copyStatus.textContent = t(copied ? '複製好了，到 Discord 貼上就可以。' : '已選取訊息，請手動複製後貼到 Discord。');
     } catch {
-      copyStatus.textContent = '已選取訊息，請手動複製後貼到 Discord。';
+      copyStatus.textContent = t('已選取訊息，請手動複製後貼到 Discord。');
     }
   }
 });
+
+window.addEventListener('commission-languagechange', () => {
+  selectExample(art.dataset.mode);
+  updateCancellation();
+  menuButton.setAttribute('aria-label', t(menuButton.getAttribute('aria-expanded') === 'true' ? '關閉導覽選單' : '開啟導覽選單'));
+  if (!briefUserEdited) briefMessage.value = createBrief();
+  copyStatus.textContent = '';
+});
+selectExample(art.dataset.mode);
