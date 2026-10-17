@@ -281,3 +281,61 @@ button:not(:disabled):active, .controls button:not(:disabled):active { transform
 @media (prefers-reduced-motion: reduce) {
   .leaderboard-list li { animation: none; }
 }
+
+/* Keep the leaderboard return action reachable while its records are scrolled. */
+#leaderboard-dialog .leaderboard-card > #board-close-button {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  flex-shrink: 0;
+  box-shadow: 0 -8px 16px #faf9f2;
+}
+
+/* Center the audio labels and mute text in stable, touch-friendly rows. */
+.audio-channel {
+  grid-template-columns: 2.5rem minmax(0, 1fr) 3.25rem;
+  align-items: center;
+  min-height: 34px;
+}
+.audio-channel label {
+  display: flex;
+  align-items: center;
+  min-height: 30px;
+  line-height: 1.1;
+}
+.audio-controls .audio-channel button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 3.25rem;
+  min-height: 2rem;
+  padding: 0 .4rem;
+  line-height: 1;
+  text-align: center;
+}
+
+/* Anchor the instruction above the controls at every supported viewport size. */
+:root {
+  --controls-bottom: calc(env(safe-area-inset-bottom, 0px) + 30px);
+  --controls-height: 46px;
+}
+.controls { bottom: var(--controls-bottom); }
+.controls button { height: var(--controls-height); }
+.control-hint {
+  display: block;
+  top: auto;
+  bottom: calc(var(--controls-bottom) + var(--controls-height) + 33px);
+}
+@media (max-width: 680px) {
+  :root {
+    --controls-bottom: calc(env(safe-area-inset-bottom, 0px) + 28px);
+    --controls-height: 44px;
+  }
+}
+@media (max-height: 420px) {
+  :root {
+    --controls-bottom: calc(env(safe-area-inset-bottom, 0px) + 12px);
+    --controls-height: 38px;
+  }
+  .control-hint { display: block; }
+}
