@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
-import { preloadSerpentelas } from '../data/serpentelas';
+import { preloadSerpentelas, SERPENTELAS } from '../data/serpentelas';
+import { Serpentela } from '../entities/Serpentela';
 import { SpawnSystem } from '../systems/SpawnSystem';
 import { StickinessSystem } from '../systems/StickinessSystem';
 import { RoundSession } from '../systems/RoundSession';
@@ -43,6 +44,8 @@ export class GameScene extends Phaser.Scene {
   private touchId?: number;
   private layout!: StageLayout;
   private worldContainer!: Phaser.GameObjects.Container;
+  private prewarmIndex = 0;
+  private prewarmTexture?: Phaser.GameObjects.Image;
 
   constructor() { super('GameScene'); }
   preload(): void {
@@ -70,6 +73,7 @@ export class GameScene extends Phaser.Scene {
       restart: () => this.startRound(this.round.target),
       pause: (paused) => { this.paused = paused; this.touchId = undefined; this.refreshPaused(); },
     }, !new URLSearchParams(location.search).has('shape'), this.sounds);
+    this.setPrewarming(true);
     this.refreshPaused();
     this.updatePreview();
     const unsubscribeLanguage = subscribeLanguage(() => {
@@ -197,6 +201,7 @@ export class GameScene extends Phaser.Scene {
   }
   update(_time: number, delta: number): void {
     if (!this.spawner) return;
+    this.prewarmNextSerpentela();
     if (this.isPlaying) {
       this.stickiness.update(this.round.elapsedMilliseconds + delta, delta);
       const pieces = this.spawner.pieces;
@@ -223,6 +228,38 @@ export class GameScene extends Phaser.Scene {
       this.outlines.clear(); this.outlinesWereVisible = false;
     }
     this.refreshGuide();
+  }
+  private prewarmNextSerpentela(): void {
+    const definition = SERPENTELAS[this.prewarmIndex];
+    if (!definition) return;
+    if (!this.prewarmTexture) {
+      // Keep each texture in the rendered scene for one frame so the renderer
+      // uploads it before the player can encounter it during a round.
+      this.prewarmTexture = this.add.image(this.layout.width / 2, this.layout.platformY - 100, definition.texture)
+        .setDisplaySize(36, 36).setAlpha(0.01).setDepth(1);
+      this.worldContainer.add(this.prewarmTexture);
+      return;
+    }
+
+    this.prewarmTexture.destroy();
+    this.prewarmTexture = undefined;
+    // Build and discard one body per frame to warm Matter's polygon
+    // decomposition path without stalling the first active drop.
+    new Serpentela(this, this.layout.width / 2, this.layout.platformY, definition, this.worldContainer).destroy();
+    this.prewarmIndex += 1;
+    if (this.prewarmIndex >= SERPENTELAS.length) this.setPrewarming(false);
+  }
+  private setPrewarming(prewarming: boolean): void {
+    const button = document.querySelector<HTMLButtonElement>('#start-button');
+    if (!button) return;
+    button.disabled = prewarming;
+    if (prewarming) {
+      button.setAttribute('aria-busy', 'true');
+      button.title = '蛇貂預載中';
+    } else {
+      button.removeAttribute('aria-busy');
+      button.removeAttribute('title');
+    }
   }
   private refreshGuide(): void {
     const visible = this.round.state === 'playing' && this.round.remaining > 0;
