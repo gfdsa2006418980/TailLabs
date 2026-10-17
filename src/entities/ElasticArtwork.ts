@@ -31,6 +31,7 @@ export class ElasticArtwork {
   }
 
   update(delta: number): void {
+    if (delta <= 0) return;
     if (!this.mesh.update(delta)) return;
     if (!this.mesh.isActive) { this.restoreOriginal(); return; }
     if (!this.texture) {

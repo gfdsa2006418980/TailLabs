@@ -24,9 +24,7 @@ export function bindControls(controls: GameControls): () => void {
   });
 }
 
-export function updateReadout(count: number, message: string): void {
-  const counter = document.querySelector('#drop-count');
+export function showStartupError(message: string): void {
   const status = document.querySelector('#game-status');
-  if (counter) counter.textContent = String(count);
   if (status) status.textContent = message;
 }

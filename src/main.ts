@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { GAME_CONFIG } from './game/GameConfig';
-import { updateReadout } from './ui/controls';
+import { showStartupError } from './ui/controls';
 import './style.css';
 
 let game: Phaser.Game;
@@ -13,7 +13,7 @@ try {
     canvas.addEventListener('pointerdown', () => canvas.focus());
   });
 } catch (error) {
-  updateReadout(0, '啟動失敗，請重新整理');
+  showStartupError('啟動失敗，請重新整理');
   console.error('Unable to start TL001:', error);
 }
 

@@ -13,8 +13,9 @@ export class Serpentela implements StickyTarget {
   private readonly visual: Phaser.GameObjects.Container;
   private readonly artwork: ElasticArtwork;
   private frozen = false;
+  hasLanded = false;
 
-  constructor(scene: Phaser.Scene, x: number, y: number, definition: SerpentelaDefinition) {
+  constructor(scene: Phaser.Scene, x: number, y: number, definition: SerpentelaDefinition, parent?: Phaser.GameObjects.Container) {
     this.scene = scene;
     this.definition = definition;
     const vertices = definition.outline.map((p) => ({ x: p.x * SERPENTELA_SCALE, y: p.y * SERPENTELA_SCALE }));
@@ -33,11 +34,13 @@ export class Serpentela implements StickyTarget {
       .setCollidesWith(0)
       .setVisible(false);
     this.visual = scene.add.container(x, y).setDepth(2);
+    parent?.add(this.visual);
     this.artwork = new ElasticArtwork(scene, definition, body.id, this.visual);
   }
 
   get body(): MatterJS.BodyType { return this.physics.body as MatterJS.BodyType; }
   get id(): number { return this.body.id; }
+  get isFrozen(): boolean { return this.frozen; }
   get x(): number { return this.physics.x; }
   get leftExtent(): number { return (this.definition.center.x - this.definition.bounds.minX) * SERPENTELA_SCALE; }
   get rightExtent(): number { return (this.definition.bounds.maxX - this.definition.center.x) * SERPENTELA_SCALE; }
