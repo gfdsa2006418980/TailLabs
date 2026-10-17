@@ -263,10 +263,14 @@ export class GameScene extends Phaser.Scene {
     const label = (x: number, y: number, text: string, size = 11, color = '#7c8b7e') => {
       const object = this.add.text(x, y, text, { fontFamily: FONT, fontSize: size, color }); parent.add(object); return object;
     };
-    const previewX = this.layout.width - 70;
-    const previewY = this.layout.chamberTop + Math.max(78, this.layout.chamberHeight * 0.15);
-    art.fillStyle(0xf1f0e5, 0.7).fillRoundedRect(previewX - 62, previewY - 27, 120, 56, 12);
-    this.nextLabel = label(previewX - 53, previewY - 19, '下一隻', 14).setStyle({ fontStyle: 'bold' });
-    this.nextImage = this.add.image(previewX + 34, previewY + 1, 'serpentela-w50-01').setDisplaySize(38.25, 38.25); parent.add(this.nextImage);
+    const previewWidth = 96;
+    const previewHeight = 88;
+    const previewRight = this.layout.chamberRight - 16;
+    const previewLeft = previewRight - previewWidth;
+    const previewTop = this.layout.chamberTop + 16;
+    const previewCenter = previewLeft + previewWidth / 2;
+    art.fillStyle(0xf1f0e5, 0.7).fillRoundedRect(previewLeft, previewTop, previewWidth, previewHeight, 12);
+    this.nextLabel = label(previewCenter, previewTop + 9, '下一隻', 14).setOrigin(0.5, 0).setStyle({ fontStyle: 'bold', align: 'center' });
+    this.nextImage = this.add.image(previewCenter, previewTop + 58, 'serpentela-w50-01').setDisplaySize(38.25, 38.25); parent.add(this.nextImage);
   }
 }
