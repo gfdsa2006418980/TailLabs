@@ -4,6 +4,7 @@ import { SpawnSystem } from '../systems/SpawnSystem';
 import { StickinessSystem } from '../systems/StickinessSystem';
 import { RoundSession } from '../systems/RoundSession';
 import { TowerCamera } from '../systems/TowerCamera';
+import { GameSounds } from '../systems/GameSounds';
 import { GameUI } from '../ui/GameUI';
 import { bindControls } from '../ui/controls';
 import { createStageLayout, type StageLayout } from './StageConfig';
@@ -26,6 +27,7 @@ export class GameScene extends Phaser.Scene {
   private hidden = false;
   private worldCamera!: Phaser.Cameras.Scene2D.Camera;
   private readonly towerCamera = new TowerCamera();
+  private readonly sounds = new GameSounds();
   private nextImage!: Phaser.GameObjects.Image;
   private nextLabel!: Phaser.GameObjects.Text;
   private nextTexture = '';
@@ -51,7 +53,7 @@ export class GameScene extends Phaser.Scene {
       .setScroll(this.layout.chamberLeft, this.layout.chamberTop);
     this.worldCamera.ignore(hud);
     this.createPlatform(world);
-    this.spawner = new SpawnSystem(this, world, this.round.target, this.layout);
+    this.spawner = new SpawnSystem(this, world, this.round.target, this.layout, () => this.sounds.playSettle());
     this.guide = this.add.graphics(); world.add(this.guide);
     this.outlines = this.add.graphics(); world.add(this.outlines);
     this.ui = new GameUI({
@@ -146,6 +148,7 @@ export class GameScene extends Phaser.Scene {
       this.input.keyboard?.off('keydown-LEFT', onKeyboardMove); this.input.keyboard?.off('keydown-RIGHT', onKeyboardMove);
       this.matter.world.off('collisionstart', onCollisionStart); this.matter.world.off('collisionend', onCollisionEnd);
       toggle?.removeEventListener('change', onToggle); document.removeEventListener('visibilitychange', onVisibility);
+      this.sounds.destroy();
     });
   }
 
@@ -203,6 +206,7 @@ export class GameScene extends Phaser.Scene {
   private drop(): void {
     if (!this.isPlaying || !this.round.remaining || this.time.now - this.lastDropAt < ROUND.dropCooldownMs) return;
     const piece = this.spawner.drop(); if (!piece) return;
+    this.sounds.playDrop();
     this.round.recordDrop(); this.stickiness.track(piece); this.lastDropAt = this.time.now;
     this.updatePreview(); this.refreshControls(); this.refreshReadout();
   }
@@ -261,8 +265,8 @@ export class GameScene extends Phaser.Scene {
     };
     const previewX = this.layout.width - 70;
     const previewY = this.layout.chamberTop + Math.max(78, this.layout.chamberHeight * 0.15);
-    art.fillStyle(0xf1f0e5, 0.7).fillRoundedRect(previewX - 48, previewY - 27, 92, 56, 12);
-    this.nextLabel = label(previewX - 38, previewY - 19, '下一隻', 9);
-    this.nextImage = this.add.image(previewX + 17, previewY + 1, 'serpentela-w50-01').setDisplaySize(38.25, 38.25); parent.add(this.nextImage);
+    art.fillStyle(0xf1f0e5, 0.7).fillRoundedRect(previewX - 62, previewY - 27, 120, 56, 12);
+    this.nextLabel = label(previewX - 53, previewY - 19, '下一隻', 14).setStyle({ fontStyle: 'bold' });
+    this.nextImage = this.add.image(previewX + 34, previewY + 1, 'serpentela-w50-01').setDisplaySize(38.25, 38.25); parent.add(this.nextImage);
   }
 }
