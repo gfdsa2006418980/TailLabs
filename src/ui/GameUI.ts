@@ -53,6 +53,7 @@ export class GameUI {
     this.listen('leaderboard-button', 'click', () => this.showBoard(false));
     this.listen('result-board-button', 'click', () => { this.result.close(); this.showBoard(true); });
     this.listen('board-close-button', 'click', () => this.closeBoard());
+    this.listen('target-select', 'change', () => this.renderTutorialCount());
     this.listen('board-target', 'change', () => this.renderBoard());
     this.listen('name-form', 'submit', (event) => { event.preventDefault(); this.saveName(); });
     for (const dialog of [this.tutorial, this.result, this.board]) {
@@ -64,7 +65,11 @@ export class GameUI {
       dialog.addEventListener('cancel', cancel);
       this.cleanups.push(() => dialog.removeEventListener('cancel', cancel));
     }
+    this.renderTutorialCount();
     this.show(this.tutorial, 'tutorial-title');
+  }
+  private renderTutorialCount(): void {
+    element('tutorial-target-count').textContent = this.target.value;
   }
   render(remaining: number, elapsed: number, score: number, message: string): void {
     element('remaining-count').textContent = String(remaining);

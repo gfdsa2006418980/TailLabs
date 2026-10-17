@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <meta name="theme-color" content="#f4f2e9" />
-  <meta name="description" content="喔不！有隻蛇貂走進你的魔法陣了！把 500 隻蛇貂全部疊回魔法陣上方。" />
+  <meta name="description" content="喔不！有隻蛇貂闖進你的魔法陣了！快把蛇貂疊回魔法陣上。" />
   <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
   <title>labs · TL001 誰複製了500隻蛇貂</title>
 </head>
@@ -23,14 +23,14 @@
     </div>
   </main>
   <dialog id="tutorial-dialog" aria-labelledby="tutorial-title"><div class="dialog-card tutorial-card">
-    <h2 id="tutorial-title" tabindex="-1" autofocus><span class="tutorial-oops">喔不！</span>有隻蛇貂走進你的魔法陣了！</h2>
-    <p class="dialog-description">500 隻幾乎一樣的蛇貂擠滿了實驗室，<br />復原的方法只有一個：<strong>把他們全部疊回魔法陣上方。</strong></p>
+    <h2 id="tutorial-title" tabindex="-1" autofocus><span class="tutorial-oops">喔不！</span>有隻蛇貂闖進你的魔法陣了！</h2>
+    <p class="dialog-description"><span id="tutorial-target-count">500</span>隻完全一樣的蛇貂塞滿了實驗室，<br />復原方法只有一個：<strong>把他們全部疊回魔法陣上</strong></p>
     <div class="tutorial-steps">
       <figure><img src="./assets/tutorial/move.svg" width="260" height="180" alt="左右移動，點擊放下" /><figcaption><span>01</span><strong>左右移動，點擊放下</strong></figcaption></figure>
       <figure><img src="./assets/tutorial/stick.svg" width="260" height="180" alt="把蛇貂放到魔法陣上" /><figcaption><span>02</span><strong>放到魔法陣上</strong></figcaption></figure>
       <figure><img src="./assets/tutorial/tower.svg" width="260" height="180" alt="蛇貂掉到魔法陣外" /><figcaption><span>03</span><strong>掉到魔法陣外就大事不好了</strong></figcaption></figure>
     </div>
-    <div class="start-options"><label for="target-select">這次想挑戰</label><select id="target-select"><option value="500">500 隻 · 完整挑戰</option><option value="100">100 隻 · 練習</option><option value="50">50 隻 · 練習</option><option value="10">10 隻 · 小試身手</option></select></div>
+    <div class="start-options"><label for="target-select">這次想挑戰</label><select id="target-select"><option value="500">500隻</option><option value="100">100隻</option><option value="50">50隻</option><option value="10">10隻</option></select></div>
     <p class="dialog-footnote">手機可拖動後放手，也可以使用下方按鈕。</p>
     <button id="start-button" class="primary-action" type="button">把他們疊回去 <span>→</span></button>
   </div></dialog>
@@ -44,7 +44,7 @@
   </div></dialog>
   <dialog id="leaderboard-dialog" aria-labelledby="leaderboard-title"><div class="dialog-card leaderboard-card">
     <p class="eyebrow">MY LAB RECORDS / TOP 10</p><h2 id="leaderboard-title" tabindex="-1">這間實驗室的<br />最好紀錄<span>。</span></h2><p class="dialog-description">排行榜保存在這個瀏覽器；各挑戰分開排名。</p>
-    <label for="board-target">查看挑戰</label><select id="board-target"><option value="500">500 隻 · 完整挑戰</option><option value="100">100 隻 · 練習</option><option value="50">50 隻 · 練習</option><option value="10">10 隻 · 小試身手</option></select>
+    <label for="board-target">查看挑戰</label><select id="board-target"><option value="500">500隻</option><option value="100">100隻</option><option value="50">50隻</option><option value="10">10隻</option></select>
     <ol id="leaderboard-list" class="leaderboard-list"></ol><p id="leaderboard-storage" class="dialog-footnote"></p><button id="board-close-button" class="primary-action" type="button">回到實驗 <span>→</span></button>
   </div></dialog>
   <script type="module" src="/src/main.ts"></script>
