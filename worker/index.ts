@@ -40,7 +40,8 @@ const POINTS_PER_PIECE = 100;
 const POINTS_PER_HEIGHT = 2;
 const SPEED_TARGET_MS = 600_000;
 const SPEED_POINTS_PER_SECOND = 10;
-const TOP_TEN_ORDER = `completed DESC,
+const MAX_LEADERBOARD_ENTRIES = 100;
+const RANK_ORDER = `completed DESC,
   CASE WHEN completed = 1 THEN score END DESC,
   CASE WHEN completed = 1 THEN elapsed_ms END ASC,
   CASE WHEN completed = 0 THEN placed_count END DESC,
@@ -97,7 +98,7 @@ async function leaderboard(db: Env['DB'], target: number): Promise<ScoreRow[]> {
       elapsed_ms AS elapsedMilliseconds, max_height AS maxHeight,
       base_score AS baseScore, height_bonus AS heightBonus,
       speed_bonus AS speedBonus, score, completed, created_at AS createdAt
-    FROM leaderboard_scores WHERE target = ? ORDER BY ${TOP_TEN_ORDER} LIMIT 10`).bind(target).all<ScoreRow>();
+    FROM leaderboard_scores WHERE target = ? ORDER BY ${RANK_ORDER} LIMIT ${MAX_LEADERBOARD_ENTRIES}`).bind(target).all<ScoreRow>();
   return result.results;
 }
 
@@ -142,7 +143,7 @@ async function submitScore(request: Request, env: Env): Promise<Response> {
   }
 
   await env.DB.prepare(`DELETE FROM leaderboard_scores WHERE target = ? AND id NOT IN
-    (SELECT id FROM leaderboard_scores WHERE target = ? ORDER BY ${TOP_TEN_ORDER} LIMIT 10)`)
+    (SELECT id FROM leaderboard_scores WHERE target = ? ORDER BY ${RANK_ORDER} LIMIT ${MAX_LEADERBOARD_ENTRIES})`)
     .bind(body.target, body.target).run();
   const rows = await leaderboard(env.DB, body.target);
   const rank = rows.findIndex((row) => row.id === body.id);

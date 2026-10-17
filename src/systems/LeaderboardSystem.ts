@@ -4,6 +4,8 @@ export interface LeaderboardEntry extends RoundResult { id: string; playerName: 
 interface StorageLike { getItem(key: string): string | null; setItem(key: string, value: string): void; }
 const KEY = 'taillabs.tl001.leaderboard.v1';
 const TARGETS = [10, 50, 100, 500];
+const MAX_LEADERBOARD_ENTRIES = 100;
+const MAX_STORED_ENTRIES = TARGETS.length * MAX_LEADERBOARD_ENTRIES;
 // LAN previews over HTTP may not expose crypto.randomUUID; this is a local record id.
 export function recordId(uuid?: () => string): string { return uuid?.() ?? `local-${Date.now()}-${Math.random().toString(36).slice(2)}`; }
 export function playerName(value: string, anonymousName = '匿名飼主'): string { return Array.from(value.trim()).slice(0, 12).join('') || anonymousName; }
@@ -39,12 +41,12 @@ export class LeaderboardSystem {
       const parsed: unknown = JSON.parse(this.storage.getItem(KEY) ?? '[]');
       if (Array.isArray(parsed)) {
         const unique = new Map<string, LeaderboardEntry>();
-        for (const row of parsed.slice(0, 200).filter(valid)) unique.set(row.id, { ...row, playerName: playerName(row.playerName) });
+        for (const row of parsed.slice(0, MAX_STORED_ENTRIES).filter(valid)) unique.set(row.id, { ...row, playerName: playerName(row.playerName) });
         this.entries = [...unique.values()];
       }
     } catch { this.persistent = false; }
   }
-  private sorted(target: number): LeaderboardEntry[] { return this.entries.filter((e) => e.target === target).sort(compareEntries).slice(0, 10); }
+  private sorted(target: number): LeaderboardEntry[] { return this.entries.filter((e) => e.target === target).sort(compareEntries).slice(0, MAX_LEADERBOARD_ENTRIES); }
   top(target: number): LeaderboardEntry[] { this.refresh(); return this.sorted(target); }
   save(entry: LeaderboardEntry): number | undefined {
     if (!valid(entry)) return;

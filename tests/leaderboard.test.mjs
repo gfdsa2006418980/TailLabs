@@ -14,14 +14,14 @@ test('failure ranking prioritizes placed count, score and then survival time', (
   assert.ok(compareEntries(entry('a', 100), entry('b', 99, { score: 999999 })) < 0);
   assert.ok(compareEntries(entry('a', 100, { elapsedMilliseconds: 20000 }), entry('b', 100)) < 0);
 });
-test('top ten persist across reloads and name updates do not duplicate a result', () => {
+test('top one hundred persist across reloads and name updates do not duplicate a result', () => {
   const saved = storage(); const board = new LeaderboardSystem(saved);
-  for (let n = 0; n < 15; n++) board.save(entry(`round-${n}`, n));
-  assert.equal(board.top(500).length, 10);
+  for (let n = 0; n < 105; n++) board.save(entry(`round-${n}`, n));
+  assert.equal(board.top(500).length, 100);
   const best = { ...board.top(500)[0], playerName: '新的名字' };
   board.save(best); board.save(best);
   const reload = new LeaderboardSystem(saved);
-  assert.equal(reload.top(500).length, 10); assert.equal(reload.top(500)[0].playerName, '新的名字');
+  assert.equal(reload.top(500).length, 100); assert.equal(reload.top(500)[0].playerName, '新的名字');
   assert.equal(reload.top(500).filter((e) => e.id === best.id).length, 1);
 });
 test('practice scores are kept separate from the 500-piece challenge', () => {
