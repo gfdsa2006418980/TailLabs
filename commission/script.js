@@ -24,7 +24,7 @@ document.addEventListener('keydown', (event) => {
 document.addEventListener('click', (event) => {
   if (!event.target.closest('.nav-wrap')) closeMenu();
 });
-window.matchMedia('(min-width: 821px)').addEventListener('change', closeMenu);
+window.matchMedia('(min-width: 961px)').addEventListener('change', closeMenu);
 
 const remixButton = document.querySelector('#remix');
 const heroOrbField = document.querySelector('#hero-orb-field');
