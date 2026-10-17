@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { GAME_CONFIG } from './game/GameConfig';
 import { showStartupError } from './ui/controls';
+import { t } from './ui/i18n';
 import './style.css';
 
 let game: Phaser.Game;
@@ -8,12 +9,12 @@ try {
   game = new Phaser.Game(GAME_CONFIG);
   game.events.once(Phaser.Core.Events.READY, () => {
     const canvas = game.canvas;
-    canvas.setAttribute('aria-label', '蛇貂落下實驗場');
+    canvas.setAttribute('aria-label', t('gameCanvas'));
     canvas.setAttribute('tabindex', '0');
     canvas.addEventListener('pointerdown', () => canvas.focus());
   });
 } catch (error) {
-  showStartupError('啟動失敗，請重新整理');
+  showStartupError(t('startupError'));
   console.error('Unable to start TL001:', error);
 }
 

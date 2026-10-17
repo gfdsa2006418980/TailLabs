@@ -6,6 +6,7 @@ import { LoopingMusic } from '../systems/LoopingMusic';
 import { audioPreferences } from '../systems/AudioPreferences';
 import { GameSounds } from '../systems/GameSounds';
 import { FailureBackdrop } from './FailureBackdrop';
+import { applyTranslations, formatNumber, formatPlacedCount, setLanguage, subscribeLanguage, t, type Language } from './i18n';
 
 const element = <T extends HTMLElement>(id: string) => {
   const result = document.getElementById(id);
@@ -35,11 +36,31 @@ export class GameUI {
   private returnToResult = false;
   private resultCompleted = false;
   private boardRequest = 0;
+  private lastResult?: RoundResult;
+  private saveStatus?: { key: string; values?: Record<string, string | number> };
   constructor(private readonly actions: UIActions, private readonly ranked: boolean, sounds: GameSounds) {
     this.sounds = sounds;
     let storage: Storage | undefined;
     try { storage = localStorage; } catch { /* Browser privacy settings may block storage. */ }
     this.leaderboard = new LeaderboardSystem(storage);
+    applyTranslations();
+    this.cleanups.push(subscribeLanguage(() => {
+      applyTranslations();
+      this.renderTutorialCount();
+      this.renderStartLabel();
+      this.renderAudioControls();
+      if (this.lastResult) this.renderResultDetails(this.lastResult);
+      this.renderSaveStatus();
+      if (this.board.open) this.renderBoard();
+    }));
+    document.querySelectorAll<HTMLButtonElement>('[data-language]').forEach((button) => {
+      const onSelect = () => {
+        const next = button.dataset.language;
+        if (next === 'en' || next === 'zh' || next === 'ja') setLanguage(next as Language);
+      };
+      button.addEventListener('click', onSelect);
+      this.cleanups.push(() => button.removeEventListener('click', onSelect));
+    });
     this.music = new LoopingMusic();
     this.cleanups.push(audioPreferences.subscribe(() => this.renderAudioControls()));
     this.listen('audio-settings-toggle', 'click', () => {
@@ -62,7 +83,7 @@ export class GameUI {
     });
     this.listen('help-button', 'click', () => {
       this.target.disabled = this.started;
-      element('start-button').textContent = this.started ? '繼續實驗 →' : '把他們疊回去 →';
+      this.renderStartLabel();
       actions.pause(true); this.show(this.tutorial, 'tutorial-title');
     });
     this.listen('reset-button', 'click', () => this.openNewChallenge());
@@ -107,30 +128,33 @@ export class GameUI {
     musicVolume.value = String(state.musicVolume);
     effectsVolume.value = String(state.effectsVolume);
     const musicToggle = element<HTMLButtonElement>('music-toggle');
-    musicToggle.textContent = state.musicMuted ? '開啟' : '靜音';
+    musicToggle.textContent = t(state.musicMuted ? 'unmute' : 'mute');
     musicToggle.setAttribute('aria-pressed', String(state.musicMuted));
-    musicToggle.setAttribute('aria-label', state.musicMuted ? '開啟背景音樂' : '靜音背景音樂');
-    musicToggle.title = state.musicMuted ? '背景音樂已靜音' : '靜音背景音樂';
+    musicToggle.setAttribute('aria-label', t(state.musicMuted ? 'musicUnmuteLabel' : 'musicMuteLabel'));
+    musicToggle.title = t(state.musicMuted ? 'musicMutedTitle' : 'musicMuteTitle');
     const effectsToggle = element<HTMLButtonElement>('effects-toggle');
-    effectsToggle.textContent = state.effectsMuted ? '開啟' : '靜音';
+    effectsToggle.textContent = t(state.effectsMuted ? 'unmute' : 'mute');
     effectsToggle.setAttribute('aria-pressed', String(state.effectsMuted));
-    effectsToggle.setAttribute('aria-label', state.effectsMuted ? '開啟遊戲音效' : '靜音遊戲音效');
-    effectsToggle.title = state.effectsMuted ? '遊戲音效已靜音' : '靜音遊戲音效';
+    effectsToggle.setAttribute('aria-label', t(state.effectsMuted ? 'effectsUnmuteLabel' : 'effectsMuteLabel'));
+    effectsToggle.title = t(state.effectsMuted ? 'effectsMutedTitle' : 'effectsMuteTitle');
   }
   private renderTutorialCount(): void {
-    element('tutorial-target-count').textContent = this.target.value;
+    element('tutorial-description').textContent = t('tutorialDescription', { count: Number(this.target.value) });
+  }
+  private renderStartLabel(): void {
+    element('start-label').textContent = t(this.started ? 'resume' : 'start');
   }
   private openNewChallenge(): void {
     this.started = false;
     this.target.disabled = false;
-    element('start-button').textContent = '把他們疊回去 →';
+    this.renderStartLabel();
     this.actions.pause(true);
     this.show(this.tutorial, 'tutorial-title');
   }
   render(remaining: number, elapsed: number, score: number, message: string): void {
     element('remaining-count').textContent = String(remaining);
     element('elapsed-time').textContent = formatTime(elapsed);
-    element('score-count').textContent = score.toLocaleString('zh-TW');
+    element('score-count').textContent = formatNumber(score);
     const status = element('game-status');
     if (status.textContent !== message) status.textContent = message;
   }
@@ -138,51 +162,63 @@ export class GameUI {
     this.boardTarget.value = String(target);
   }
   finish(result: RoundResult): void {
+    this.lastResult = result;
     this.resultCompleted = result.completed;
-    element('result-title').textContent = result.completed ? '魔法成功了！' : '魔法失敗了！';
-    element('again-label').textContent = result.completed ? '挑戰更多隻' : '再試一次';
-    element('again-icon').textContent = result.completed ? '→' : '↻';
-    element<HTMLButtonElement>('menu-button').hidden = result.completed;
-    element('result-description').textContent = result.completed
-      ? '你現在有一隻闖大禍的蛇貂了，恭喜你！'
-      : `你現在有${result.target - result.placedCount}隻完全一樣的蛇貂了，恭喜你`;
-    element('result-score').textContent = result.score.toLocaleString('zh-TW');
-    element('result-count').textContent = `${result.placedCount} / ${result.target} 隻`;
-    element('result-time').textContent = formatTime(result.elapsedMilliseconds);
-    element('result-base').textContent = `+${result.baseScore.toLocaleString('zh-TW')}`;
-    element('result-height').textContent = `+${result.heightBonus.toLocaleString('zh-TW')}`;
-    element('result-speed').textContent = `+${result.speedBonus.toLocaleString('zh-TW')}`;
+    this.renderResultDetails(result);
     element<HTMLFormElement>('name-form').hidden = !this.ranked;
     if (this.ranked) {
-      this.entry = { ...result, id: recordId(globalThis.crypto?.randomUUID?.bind(globalThis.crypto)), playerName: playerName(element<HTMLInputElement>('player-name').value), createdAt: new Date().toISOString() };
+      this.entry = { ...result, id: recordId(globalThis.crypto?.randomUUID?.bind(globalThis.crypto)), playerName: playerName(element<HTMLInputElement>('player-name').value, t('anonymous')), createdAt: new Date().toISOString() };
       this.persistEntry();
     } else {
-      element('save-status').textContent = '';
+      this.saveStatus = undefined;
+      this.renderSaveStatus();
     }
     if (result.completed) this.failureBackdrop.clear(); else this.failureBackdrop.show(result.target - result.placedCount);
     this.show(this.result, 'result-title');
   }
+  private renderResultDetails(result: RoundResult): void {
+    element('result-title').textContent = t(result.completed ? 'resultSuccess' : 'resultFailure');
+    element('again-label').textContent = t(result.completed ? 'moreChallenges' : 'tryAgain');
+    element('again-icon').textContent = result.completed ? '→' : '↻';
+    element<HTMLButtonElement>('menu-button').hidden = result.completed;
+    element('result-description').textContent = result.completed
+      ? t('successDescription')
+      : t('failureDescription', { count: result.target - result.placedCount });
+    element('result-score').textContent = formatNumber(result.score);
+    element('result-count').textContent = formatPlacedCount(result.placedCount, result.target);
+    element('result-time').textContent = formatTime(result.elapsedMilliseconds);
+    element('result-base').textContent = `+${formatNumber(result.baseScore)}`;
+    element('result-height').textContent = `+${formatNumber(result.heightBonus)}`;
+    element('result-speed').textContent = `+${formatNumber(result.speedBonus)}`;
+  }
+  private renderSaveStatus(): void {
+    const status = element('save-status');
+    status.textContent = this.saveStatus ? t(this.saveStatus.key, this.saveStatus.values) : '';
+  }
+  private setSaveStatus(key?: string, values?: Record<string, string | number>): void {
+    this.saveStatus = key ? { key, values } : undefined;
+    this.renderSaveStatus();
+  }
   private persistEntry(): void {
     if (!this.entry) return;
     this.leaderboard.save(this.entry);
-    const status = element('save-status');
     if (!this.sharedLeaderboard.enabled) {
-      status.textContent = this.leaderboard.persistent ? '本次成績已保存在這個瀏覽器。' : '目前無法永久儲存；成績暫存於本次開啟期間。';
+      this.setSaveStatus(this.leaderboard.persistent ? 'savedLocal' : 'saveTemporary');
       return;
     }
-    status.textContent = '成績已保存在本機，正在同步全體排行榜…';
+    this.setSaveStatus('syncing');
     const entry = { ...this.entry };
     void this.sharedLeaderboard.save(entry).then((rank) => {
       if (this.entry?.id !== entry.id) return;
-      status.textContent = rank ? `已同步全體排行榜，目前第 ${rank} 名。` : '已同步；本次成績未進入目前前 10 名。';
+      this.setSaveStatus(rank ? 'syncedRank' : 'syncedOutsideTop', rank ? { rank } : undefined);
     }).catch(() => {
       if (this.entry?.id !== entry.id) return;
-      status.textContent = '共用排行榜暫時無法連線；本次成績仍保存在這個瀏覽器。';
+      this.setSaveStatus('syncFailed');
     });
   }
   private saveName(): void {
     if (!this.entry) return;
-    this.entry.playerName = playerName(element<HTMLInputElement>('player-name').value);
+    this.entry.playerName = playerName(element<HTMLInputElement>('player-name').value, t('anonymous'));
     element<HTMLInputElement>('player-name').value = this.entry.playerName;
     this.persistEntry();
   }
@@ -202,11 +238,11 @@ export class GameUI {
     const storage = element('leaderboard-storage');
     storage.hidden = false;
     if (!this.sharedLeaderboard.enabled) {
-      storage.textContent = this.leaderboard.persistent ? '僅此瀏覽器的個人紀錄。完成者優先，各挑戰保留前 10 名。' : '瀏覽器儲存不可用，重新開啟後不會保留這次的紀錄。';
+      storage.textContent = t(this.leaderboard.persistent ? 'localRecords' : 'storageUnavailable');
       return;
     }
     const request = ++this.boardRequest;
-    storage.textContent = '正在讀取全體玩家排行榜…';
+    storage.textContent = t('loadingLeaderboard');
     void this.sharedLeaderboard.top(target).then((sharedRows) => {
       if (request !== this.boardRequest || this.boardTarget.value !== String(target)) return;
       this.renderBoardRows(sharedRows);
@@ -214,20 +250,20 @@ export class GameUI {
       storage.hidden = true;
     }).catch(() => {
       if (request !== this.boardRequest || this.boardTarget.value !== String(target)) return;
-      storage.textContent = '共用排行榜暫時無法連線，現在顯示這個瀏覽器的個人紀錄。';
+      storage.textContent = t('leaderboardUnavailable');
     });
   }
   private renderBoardRows(rows: LeaderboardEntry[]): void {
     const list = element('leaderboard-list'); list.replaceChildren();
-    if (!rows.length) { const empty = document.createElement('li'); empty.className = 'empty-records'; empty.textContent = '還沒有紀錄。第一位煉金術士會是你嗎？'; list.append(empty); }
+    if (!rows.length) { const empty = document.createElement('li'); empty.className = 'empty-records'; empty.textContent = t('noRecords'); list.append(empty); }
     rows.forEach((row, index) => {
       const item = document.createElement('li');
       const rank = document.createElement('span'); rank.className = 'record-rank'; rank.textContent = String(index + 1).padStart(2, '0');
       const detail = document.createElement('div');
       const name = document.createElement('strong'); name.textContent = row.playerName;
-      const info = document.createElement('small'); info.textContent = `${row.completed ? '魔法解除' : `${row.placedCount} / ${row.target} 隻`} · ${formatTime(row.elapsedMilliseconds)}`;
+      const info = document.createElement('small'); info.textContent = `${row.completed ? t('completedRecord') : t('progressRecord', { placed: row.placedCount, target: row.target })} · ${formatTime(row.elapsedMilliseconds)}`;
       detail.append(name, info);
-      const score = document.createElement('b'); score.textContent = row.score.toLocaleString('zh-TW');
+      const score = document.createElement('b'); score.textContent = formatNumber(row.score);
       item.append(rank, detail, score); list.append(item);
     });
   }

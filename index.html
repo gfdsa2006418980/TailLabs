@@ -4,61 +4,62 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <meta name="theme-color" content="#f4f2e9" />
-  <meta name="description" content="喔不！有隻蛇貂闖進你的魔法陣了！快把蛇貂疊回魔法陣上。" />
+  <meta name="description" content="有隻蛇貂闖進你的魔法陣了！把蛇貂全部疊回魔法陣上。" />
   <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
-  <title>誰複製了500隻蛇貂?</title>
+  <title data-i18n="documentTitle">誰複製了 500 隻蛇貂？</title>
 </head>
 <body>
   <main class="lab">
     <div class="workspace">
-      <section class="experiment" aria-label="TL001 遊戲實驗場">
+      <section class="experiment" aria-label="TL001 遊戲實驗場" data-i18n-aria="gameArea">
         <div class="stage-toolbar">
           <div class="stage-actions">
-            <button id="help-button" type="button">玩法</button>
-            <button id="leaderboard-button" type="button">排行榜</button>
-            <button id="reset-button" type="button" disabled>重新開始 <span aria-hidden="true">↻</span></button>
+            <button id="help-button" type="button" data-i18n="helpButton">玩法</button>
+            <button id="leaderboard-button" type="button" data-i18n="leaderboardButton">排行榜</button>
+            <button id="reset-button" type="button" disabled><span data-i18n="resetButton">重新開始</span> <span aria-hidden="true">↻</span></button>
             <div class="audio-mixer">
-              <button id="audio-settings-toggle" type="button" aria-expanded="false" aria-controls="audio-controls">音量</button>
-              <div id="audio-controls" class="audio-controls" role="group" aria-label="音量控制" hidden>
-                <div class="audio-channel"><label for="music-volume">音樂</label><input id="music-volume" type="range" min="0" max="100" step="1" value="100" aria-label="背景音樂音量" /><button id="music-toggle" type="button" aria-pressed="false">靜音</button></div>
-                <div class="audio-channel"><label for="effects-volume">音效</label><input id="effects-volume" type="range" min="0" max="200" step="1" value="200" aria-label="遊戲音效音量" /><button id="effects-toggle" type="button" aria-pressed="false">靜音</button></div>
+              <button id="audio-settings-toggle" type="button" aria-expanded="false" aria-controls="audio-controls" data-i18n="volume">音量</button>
+              <div id="audio-controls" class="audio-controls" role="group" aria-label="音量控制" data-i18n-aria="audioControls" hidden>
+                <div class="audio-channel"><label for="music-volume" data-i18n="music">音樂</label><input id="music-volume" type="range" min="0" max="100" step="1" value="100" aria-label="背景音樂音量" data-i18n-aria="musicVolume" /><button id="music-toggle" type="button" aria-pressed="false">靜音</button></div>
+                <div class="audio-channel"><label for="effects-volume" data-i18n="effects">音效</label><input id="effects-volume" type="range" min="0" max="200" step="1" value="200" aria-label="遊戲音效音量" data-i18n-aria="effectsVolume" /><button id="effects-toggle" type="button" aria-pressed="false">靜音</button></div>
               </div>
             </div>
           </div>
         </div>
-        <div class="game-progress"><span>剩餘蛇貂 <strong>× <span id="remaining-count">500</span></strong></span><span id="game-status" role="status">準備開始實驗</span></div>
-        <div id="game" role="group" aria-label="蛇貂堆疊挑戰；可使用下方按鈕或鍵盤操作"></div>
-        <div class="game-metrics"><span>時間 <strong id="elapsed-time">00:00.00</strong></span><span>分數 <strong id="score-count">0</strong></span></div>
-        <div class="controls" aria-label="遊戲操作"><button id="move-left" class="move-button" type="button" aria-label="向左移動" disabled>←</button><button id="drop-button" class="drop-button" type="button" disabled>放下這一隻 <span aria-hidden="true">↓</span></button><button id="move-right" class="move-button" type="button" aria-label="向右移動" disabled>→</button></div>
-        <p class="control-hint">滑鼠移動、點擊落下 <span>·</span> 手機拖動、放手落下</p>
-        <noscript><p>這個遊戲需要開啟 JavaScript 才能執行。</p></noscript>
+        <div class="game-progress"><span><span data-i18n="remaining">剩餘蛇貂</span> <strong>× <span id="remaining-count">500</span></strong></span><span id="game-status" role="status" data-i18n="ready">準備開始實驗</span></div>
+        <div id="game" role="group" aria-label="蛇貂堆疊挑戰" data-i18n-aria="gameCanvas"></div>
+        <div class="game-metrics"><span><span data-i18n="time">時間</span> <strong id="elapsed-time">00:00.00</strong></span><span><span data-i18n="score">分數</span> <strong id="score-count">0</strong></span></div>
+        <div class="controls" aria-label="遊戲操作" data-i18n-aria="gameControls"><button id="move-left" class="move-button" type="button" aria-label="向左移動" data-i18n-aria="moveLeft" disabled>←</button><button id="drop-button" class="drop-button" type="button" disabled><span id="drop-label" data-i18n="drop">放下這一隻</span> <span aria-hidden="true">↓</span></button><button id="move-right" class="move-button" type="button" aria-label="向右移動" data-i18n-aria="moveRight" disabled>→</button></div>
+        <p class="control-hint" data-i18n="controlHint">滑鼠移動、點擊落下 · 手機拖動、放手落下</p>
+        <noscript><p data-i18n="noScript">這個遊戲需要開啟 JavaScript 才能執行。</p></noscript>
       </section>
     </div>
   </main>
   <dialog id="tutorial-dialog" aria-labelledby="tutorial-title"><div class="dialog-card tutorial-card">
-    <h2 id="tutorial-title" tabindex="-1" autofocus><span class="tutorial-oops">喔不！</span>有隻蛇貂闖進你的魔法陣了！</h2>
-    <p class="dialog-description"><span id="tutorial-target-count">500</span>隻完全一樣的蛇貂塞滿了實驗室，<br />復原方法只有一個：<strong>把他們全部疊回魔法陣上</strong></p>
+    <div class="language-picker" role="group" aria-label="語言" data-i18n-aria="languageSelector"><button type="button" data-language="en" aria-label="English" aria-pressed="false">EN</button><button type="button" data-language="zh" aria-label="繁體中文" aria-pressed="true">ZH</button><button type="button" data-language="ja" aria-label="日本語" aria-pressed="false">JA</button></div>
+    <h2 id="tutorial-title" tabindex="-1" autofocus><span class="tutorial-oops" data-i18n="tutorialOops">喔不！</span><span data-i18n="tutorialTitle">有隻蛇貂闖進你的魔法陣了！</span></h2>
+    <p id="tutorial-description" class="dialog-description">10 隻完全一樣的蛇貂塞滿了實驗室，<br />復原方法只有一個：把牠們全部疊回魔法陣上。</p>
     <div class="tutorial-steps">
-      <figure><img src="./assets/tutorial/move.svg" width="260" height="180" alt="左右移動，點擊放下" /><figcaption><span>01</span><strong>左右移動，點擊放下</strong></figcaption></figure>
-      <figure><img src="./assets/tutorial/stick.svg" width="260" height="180" alt="把蛇貂放到魔法陣上" /><figcaption><span>02</span><strong>放到魔法陣上</strong></figcaption></figure>
-      <figure><img src="./assets/tutorial/tower.svg" width="260" height="180" alt="蛇貂掉到魔法陣外" /><figcaption><span>03</span><strong>掉到魔法陣外就大事不好了</strong></figcaption></figure>
+      <figure><img src="./assets/tutorial/move.svg" width="260" height="180" alt="左右移動，點擊放下" data-i18n-alt="tutorialMove" /><figcaption><span>01</span><strong data-i18n="tutorialMove">左右移動，點擊放下</strong></figcaption></figure>
+      <figure><img src="./assets/tutorial/stick.svg" width="260" height="180" alt="把蛇貂放到魔法陣上" data-i18n-alt="tutorialStack" /><figcaption><span>02</span><strong data-i18n="tutorialStack">放到魔法陣上</strong></figcaption></figure>
+      <figure><img src="./assets/tutorial/tower.svg" width="260" height="180" alt="蛇貂掉到魔法陣外" data-i18n-alt="tutorialFall" /><figcaption><span>03</span><strong data-i18n="tutorialFall">掉到魔法陣外就大事不好了</strong></figcaption></figure>
     </div>
-    <div class="start-options"><label for="target-select">這次想挑戰</label><select id="target-select"><option value="10">10隻</option><option value="50">50隻</option><option value="100">100隻</option><option value="500">500隻</option></select></div>
-    <p class="dialog-footnote">手機可拖動後放手，也可以使用下方按鈕。</p>
-    <button id="start-button" class="primary-action" type="button">把他們疊回去 <span>→</span></button>
+    <div class="start-options"><label for="target-select" data-i18n="challenge">這次想挑戰</label><select id="target-select"><option value="10" data-count-option="10">10 隻</option><option value="50" data-count-option="50">50 隻</option><option value="100" data-count-option="100">100 隻</option><option value="500" data-count-option="500">500 隻</option></select></div>
+    <p class="dialog-footnote" data-i18n="mobileHint">手機可拖動後放手，也可以使用下方按鈕。</p>
+    <button id="start-button" class="primary-action" type="button"><span id="start-label" data-i18n="start">把牠們疊回去</span><span aria-hidden="true">→</span></button>
   </div></dialog>
   <dialog id="result-dialog" aria-labelledby="result-title"><div class="dialog-card result-card">
-    <img class="result-art" src="./assets/serpentelas/serpentela-w1-01.webp" width="96" height="96" alt="蛇貂" />
+    <img class="result-art" src="./assets/serpentelas/serpentela-w1-01.webp" width="96" height="96" alt="蛇貂" data-i18n-alt="resultArt" />
     <h2 id="result-title" tabindex="-1">魔法失敗了！</h2><p id="result-description" class="dialog-description"></p>
-    <div class="result-total"><span>本次分數</span><strong id="result-score">0</strong></div>
-    <dl class="result-breakdown"><div><dt>成功放穩</dt><dd id="result-count"></dd></div><div><dt>經過時間</dt><dd id="result-time"></dd></div><div><dt>放置分數</dt><dd id="result-base"></dd></div><div><dt>高度獎勵</dt><dd id="result-height"></dd></div><div><dt>完成時間獎勵</dt><dd id="result-speed"></dd></div></dl>
-    <form id="name-form"><label for="player-name">你的名字</label><div class="name-row"><input id="player-name" name="playerName" maxlength="24" placeholder="匿名飼主" autocomplete="nickname" /><button type="submit">儲存名字</button></div><small>最多 12 個字</small></form>
-    <p id="save-status" role="status" class="dialog-footnote"></p><button id="again-button" class="primary-action" type="button"><span id="again-label">再試一次</span><span id="again-icon" aria-hidden="true">↻</span></button><div class="result-links"><button id="result-board-button" class="text-action" type="button">查看排行榜 ↗</button><button id="menu-button" class="text-action" type="button">挑戰更多隻 ↗</button></div>
+    <div class="result-total"><span data-i18n="resultScore">本次分數</span><strong id="result-score">0</strong></div>
+    <dl class="result-breakdown"><div><dt data-i18n="placed">成功放穩</dt><dd id="result-count"></dd></div><div><dt data-i18n="elapsed">經過時間</dt><dd id="result-time"></dd></div><div><dt data-i18n="placementScore">放置分數</dt><dd id="result-base"></dd></div><div><dt data-i18n="heightBonus">高度獎勵</dt><dd id="result-height"></dd></div><div><dt data-i18n="speedBonus">完成時間獎勵</dt><dd id="result-speed"></dd></div></dl>
+    <form id="name-form"><label for="player-name" data-i18n="playerName">你的名字</label><div class="name-row"><input id="player-name" name="playerName" maxlength="24" placeholder="匿名飼主" data-i18n-placeholder="anonymous" autocomplete="nickname" /><button type="submit" data-i18n="saveName">儲存名字</button></div><small data-i18n="maxName">最多 12 個字</small></form>
+    <p id="save-status" role="status" class="dialog-footnote"></p><button id="again-button" class="primary-action" type="button"><span id="again-label">再試一次</span><span id="again-icon" aria-hidden="true">↻</span></button><div class="result-links"><button id="result-board-button" class="text-action" type="button"><span data-i18n="viewLeaderboard">查看排行榜</span> ↗</button><button id="menu-button" class="text-action" type="button"><span data-i18n="moreChallenges">挑戰更多隻</span> ↗</button></div>
   </div></dialog>
   <dialog id="leaderboard-dialog" aria-labelledby="leaderboard-title"><div class="dialog-card leaderboard-card">
-    <p class="eyebrow">GLOBAL RANKING / TOP 10</p><h2 id="leaderboard-title" tabindex="-1">最佳紀錄</h2>
-    <label for="board-target">查看挑戰</label><select id="board-target"><option value="10">10隻</option><option value="50">50隻</option><option value="100">100隻</option><option value="500">500隻</option></select>
-    <ol id="leaderboard-list" class="leaderboard-list"></ol><p id="leaderboard-storage" class="dialog-footnote"></p><button id="board-close-button" class="primary-action" type="button">返回 <span>→</span></button>
+    <p class="eyebrow" data-i18n="leaderboardEyebrow">GLOBAL RANKING / TOP 10</p><h2 id="leaderboard-title" tabindex="-1" data-i18n="leaderboardTitle">最佳紀錄</h2>
+    <label for="board-target" data-i18n="viewChallenge">查看挑戰</label><select id="board-target"><option value="10" data-count-option="10">10 隻</option><option value="50" data-count-option="50">50 隻</option><option value="100" data-count-option="100">100 隻</option><option value="500" data-count-option="500">500 隻</option></select>
+    <ol id="leaderboard-list" class="leaderboard-list"></ol><p id="leaderboard-storage" class="dialog-footnote"></p><button id="board-close-button" class="primary-action" type="button"><span data-i18n="back">返回</span><span aria-hidden="true">→</span></button>
   </div></dialog>
   <script type="module" src="/src/main.ts"></script>
 </body>

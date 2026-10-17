@@ -7,6 +7,7 @@ import { TowerCamera } from '../systems/TowerCamera';
 import { GameSounds } from '../systems/GameSounds';
 import { GameUI } from '../ui/GameUI';
 import { bindControls } from '../ui/controls';
+import { subscribeLanguage, t } from '../ui/i18n';
 import { createStageLayout, type StageLayout } from './StageConfig';
 import { ROUND } from './RoundConfig';
 
@@ -70,6 +71,12 @@ export class GameScene extends Phaser.Scene {
       pause: (paused) => { this.paused = paused; this.touchId = undefined; this.refreshPaused(); },
     }, !new URLSearchParams(location.search).has('shape'), this.sounds);
     this.refreshPaused();
+    this.updatePreview();
+    const unsubscribeLanguage = subscribeLanguage(() => {
+      this.updatePreview();
+      this.refreshControls();
+      this.refreshReadout();
+    });
 
     const onCollisionStart = (event: Phaser.Physics.Matter.Events.CollisionStartEvent) => {
       const impacts = new Map<number, { x: number; y: number; nx: number; ny: number; strength: number }>();
@@ -149,7 +156,7 @@ export class GameScene extends Phaser.Scene {
     document.addEventListener('visibilitychange', onVisibility);
     this.refreshControls();
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
-      this.ui.destroy(); unbind();
+      this.ui.destroy(); unbind(); unsubscribeLanguage();
       this.input.off('pointermove', onMove); this.input.off('pointerdown', onDown);
       this.input.off('pointerup', onUp); this.input.off('pointerupoutside', cancelTouch);
       this.input.keyboard?.off('keydown-SPACE', onKeyboardDrop); this.input.keyboard?.off('keydown-DOWN', onKeyboardDrop);
@@ -171,8 +178,9 @@ export class GameScene extends Phaser.Scene {
     if (drop && this.spawner) {
       const waiting = this.isPlaying && this.round.remaining > 0 && (!this.spawner.canRelease || this.time.now - this.lastDropAt < ROUND.dropCooldownMs);
       drop.disabled ||= waiting;
-      const label = !this.round.remaining ? '等待最後一隻停穩…' : waiting ? '稍等牠落下…' : '放下這一隻 ↓';
-      if (drop.textContent !== label) drop.textContent = label;
+      const label = !this.round.remaining ? t('dropWaitingFinal') : waiting ? t('dropWaiting') : t('drop');
+      const text = document.getElementById('drop-label');
+      if (text && text.textContent !== label) text.textContent = label;
     }
     const reset = document.getElementById('reset-button') as HTMLButtonElement | null;
     if (reset) reset.disabled = this.round.state !== 'playing' || this.paused;
@@ -241,12 +249,18 @@ export class GameScene extends Phaser.Scene {
     const next = this.spawner.next;
     this.nextImage.setVisible(!!next);
     if (next && next.texture !== this.nextTexture) { this.nextImage.setTexture(next.texture); this.nextTexture = next.texture; }
-    this.nextLabel.setText(next ? '下一隻' : '最後一隻');
-    if (!this.round.remaining) this.nextLabel.setText('全部放下');
-    this.game.canvas.setAttribute('aria-label', `蛇貂落下實驗場。目前：${this.spawner.current?.name ?? '已全部放下'}；下一隻：${next?.name ?? '無'}`);
+    this.nextLabel.setText(next ? t('next') : t('last'));
+    if (!this.round.remaining) this.nextLabel.setText(t('allPlaced'));
+    this.game.canvas.setAttribute('aria-label', t('gameAreaAria', {
+      current: this.spawner.current ? t('serpentelaName') : t('allDropped'),
+      next: next ? t('serpentelaName') : t('noNext'),
+    }));
   }
   private refreshReadout(): void {
-    const message = this.round.warning ? '小心，蛇貂快掉出去了' : !this.round.remaining ? '等最後的蛇貂停穩…' : `已放穩 ${this.round.placedCount} 隻`;
+    const message = this.round.state === 'ready' ? t('ready')
+      : this.round.state === 'completed' ? t('completedStatus')
+        : this.round.state === 'failed' ? t('failedStatus')
+          : this.round.warning ? t('warning') : !this.round.remaining ? t('waitingFinal') : t('placedStable', { count: this.round.placedCount });
     this.ui.render(this.round.remaining, this.round.elapsedMilliseconds, this.round.score, message);
   }
   private createPlatform(parent: Phaser.GameObjects.Container): void {
@@ -314,7 +328,7 @@ export class GameScene extends Phaser.Scene {
     const previewTop = this.layout.chamberTop + 16;
     const previewCenter = previewLeft + previewWidth / 2;
     art.fillStyle(0xf1f0e5, 0.7).fillRoundedRect(previewLeft, previewTop, previewWidth, previewHeight, 12);
-    this.nextLabel = label(previewCenter, previewTop + 9, '下一隻', 14).setOrigin(0.5, 0).setStyle({ fontStyle: 'bold', align: 'center' });
+    this.nextLabel = label(previewCenter, previewTop + 9, t('next'), 14).setOrigin(0.5, 0).setStyle({ fontStyle: 'bold', align: 'center' });
     this.nextImage = this.add.image(previewCenter, previewTop + 58, 'serpentela-w50-01').setDisplaySize(38.25, 38.25); parent.add(this.nextImage);
   }
 }
