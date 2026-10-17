@@ -1,6 +1,7 @@
 import type { RoundResult } from '../systems/RoundSession';
 import { LeaderboardSystem, playerName, recordId } from '../systems/LeaderboardSystem';
 import type { LeaderboardEntry } from '../systems/LeaderboardSystem';
+import { FailureBackdrop } from './FailureBackdrop';
 
 const element = <T extends HTMLElement>(id: string) => {
   const result = document.getElementById(id);
@@ -19,6 +20,7 @@ export class GameUI {
   private readonly board = element<HTMLDialogElement>('leaderboard-dialog');
   private readonly target = element<HTMLSelectElement>('target-select');
   private readonly boardTarget = element<HTMLSelectElement>('board-target');
+  private readonly failureBackdrop = new FailureBackdrop(this.result);
   private readonly leaderboard: LeaderboardSystem;
   private readonly cleanups: Array<() => void> = [];
   private entry?: LeaderboardEntry;
@@ -35,13 +37,13 @@ export class GameUI {
     });
     this.listen('help-button', 'click', () => {
       this.target.disabled = this.started;
-      element('start-button').textContent = this.started ? '繼續實驗 →' : '把牠們疊回去 →';
+      element('start-button').textContent = this.started ? '繼續實驗 →' : '把他們疊回去 →';
       actions.pause(true); this.show(this.tutorial, 'tutorial-title');
     });
-    this.listen('again-button', 'click', () => { this.result.close(); this.entry = undefined; actions.restart(); actions.pause(false); });
+    this.listen('again-button', 'click', () => { this.failureBackdrop.clear(); this.result.close(); this.entry = undefined; actions.restart(); actions.pause(false); });
     this.listen('menu-button', 'click', () => {
-      this.result.close(); this.started = false; this.entry = undefined; this.target.disabled = false;
-      element('start-button').textContent = '把牠們疊回去 →';
+      this.failureBackdrop.clear(); this.result.close(); this.started = false; this.entry = undefined; this.target.disabled = false;
+      element('start-button').textContent = '把他們疊回去 →';
       actions.pause(true); this.show(this.tutorial, 'tutorial-title');
     });
     this.listen('leaderboard-button', 'click', () => this.showBoard(false));
@@ -72,8 +74,8 @@ export class GameUI {
     this.boardTarget.value = String(target);
   }
   finish(result: RoundResult): void {
-    element('result-title').textContent = result.completed ? '魔法，終於解除了。' : '魔法陣失守了。';
-    element('result-description').textContent = result.completed ? '每一隻都回來了。這次的實驗，算是成功了吧。' : '有一隻離開了魔法陣。整理一下，再來一次。';
+    element('result-title').textContent = result.completed ? '魔法，終於解除了。' : '魔法失敗了！';
+    element('result-description').textContent = result.completed ? '每一隻都回來了。這次的實驗，算是成功了吧。' : `你現在有 ${result.target - result.placedCount} 隻各種造型的蛇貂了，恭喜你`;
     element('result-score').textContent = result.score.toLocaleString('zh-TW');
     element('result-count').textContent = `${result.placedCount} / ${result.target} 隻`;
     element('result-time').textContent = formatTime(result.elapsedMilliseconds);
@@ -88,6 +90,7 @@ export class GameUI {
       element('result-rank').textContent = '指定造型試放，不列入排行榜。';
       element('save-status').textContent = '';
     }
+    if (result.completed) this.failureBackdrop.clear(); else this.failureBackdrop.show(result.target - result.placedCount);
     this.show(this.result, 'result-title');
   }
   private persistEntry(): void {
@@ -133,5 +136,5 @@ export class GameUI {
   private show(dialog: HTMLDialogElement, heading: string): void {
     dialog.showModal(); element(heading).focus({ preventScroll: true }); dialog.scrollTop = 0;
   }
-  destroy(): void { this.cleanups.forEach((cleanup) => cleanup()); [this.tutorial, this.result, this.board].forEach((dialog) => dialog.close()); }
+  destroy(): void { this.failureBackdrop.destroy(); this.cleanups.forEach((cleanup) => cleanup()); [this.tutorial, this.result, this.board].forEach((dialog) => dialog.close()); }
 }

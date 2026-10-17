@@ -34,7 +34,10 @@ export class GameScene extends Phaser.Scene {
   private touchId?: number;
 
   constructor() { super('GameScene'); }
-  preload(): void { preloadSerpentelas(this); }
+  preload(): void {
+    preloadSerpentelas(this);
+    this.load.svg('magic-circle', `${import.meta.env.BASE_URL}assets/magic-circle.svg`);
+  }
 
   create(): void {
     this.stickiness = new StickinessSystem();
@@ -216,32 +219,30 @@ export class GameScene extends Phaser.Scene {
     // An open platform: falling off the sides is now a real failure.
     const platform = this.matter.add.rectangle(260, STAGE.platformY + STAGE.platformDepth / 2, 280, STAGE.platformDepth, { isStatic: true, friction: 0.75, label: 'magic-circle-platform' });
     this.platformId = platform.id; this.stickiness.addSupport(platform.id);
-    const art = this.add.graphics(); parent.add(art);
-    art.fillStyle(INK, 0.035).fillEllipse(260, STAGE.platformY + 10, 350, 100);
-    art.lineStyle(1.5, INK, 0.4).strokeEllipse(260, STAGE.platformY + 10, 326, 78).strokeEllipse(260, STAGE.platformY + 10, 298, 59);
-    for (let index = 0; index < 12; index++) {
-      const angle = index * Math.PI / 6;
-      art.fillStyle(INK, 0.6).fillCircle(260 + Math.cos(angle) * 155, STAGE.platformY + 10 + Math.sin(angle) * 34, 2);
+    const pillars = this.add.graphics();
+    for (const x of [100, 420]) {
+      const top = STAGE.platformY - 2 - 3 * 54;
+      const bottom = STAGE.platformY - 2;
+      pillars.lineStyle(26, 0x93ae93, 0.09).lineBetween(x, top, x, bottom);
+      pillars.lineStyle(12, 0xc2b47d, 0.17).lineBetween(x, top + 3, x, bottom);
+      pillars.lineStyle(4, 0xd8e8d1, 0.34).lineBetween(x, top + 6, x, bottom);
+      pillars.lineStyle(1, 0xfffced, 0.72).lineBetween(x, top + 10, x, bottom - 2);
+      pillars.fillStyle(0xc1b789, 0.32).fillEllipse(x, bottom, 26, 7);
     }
-    art.fillStyle(INK).fillRoundedRect(120, STAGE.platformY, 280, 16, 5);
-    art.fillStyle(0x76917a).fillRoundedRect(128, STAGE.platformY + 3, 264, 3, 1);
-    const label = this.add.text(222, 594, '魔 法 陣', { fontFamily: FONT, fontSize: 12, color: '#345442' }); parent.add(label);
+    parent.add(pillars);
+    const circle = this.add.image(260, STAGE.platformY + 12, 'magic-circle').setDisplaySize(360, 120);
+    parent.add(circle);
   }
   private drawChamber(parent: Phaser.GameObjects.Container): void {
     const art = this.add.graphics(); parent.add(art);
-    art.lineStyle(1, INK, 0.07);
-    for (let x = 30; x <= 490; x += 23) art.lineBetween(x, 90, x, 626);
-    for (let y = 90; y <= 626; y += 23) art.lineBetween(30, y, 490, y);
-    art.lineStyle(1, INK, 0.22).strokeRoundedRect(30, 90, 460, 536, 10);
+    art.fillStyle(INK, 0.07);
+    for (let x = 46; x < 490; x += 32) for (let y = 106; y < 626; y += 32) art.fillCircle(x, y, 0.6);
+    art.lineStyle(1, INK, 0.11).strokeRoundedRect(30, 90, 460, 536, 14);
     const label = (x: number, y: number, text: string, size = 11, color = '#7c8b7e') => {
       const object = this.add.text(x, y, text, { fontFamily: FONT, fontSize: size, color }); parent.add(object); return object;
     };
-    label(30, 23, '01 / DROP CHAMBER', 12, '#345442');
-    label(30, 44, '把每一隻，都疊回來。');
-    art.lineStyle(1, INK, 0.2).strokeRoundedRect(386, 8, 104, 73, 6);
-    label(395, 17, 'NEXT', 9);
-    this.nextLabel = label(395, 60, '下一隻', 9);
-    this.nextImage = this.add.image(454, 43, 'serpentela-w50-01').setDisplaySize(51, 51); parent.add(this.nextImage);
-    label(30, 641, 'TL001 / ONE SMALL DROP AT A TIME', 9);
+    art.fillStyle(0xf1f0e5, 0.7).fillRoundedRect(402, 15, 88, 61, 12);
+    this.nextLabel = label(412, 26, '下一隻', 9);
+    this.nextImage = this.add.image(462, 47, 'serpentela-w50-01').setDisplaySize(38.25, 38.25); parent.add(this.nextImage);
   }
 }

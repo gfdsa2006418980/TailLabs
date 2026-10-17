@@ -17,7 +17,7 @@ import { CONTACT_TUNING, SERPENTELA_PHYSICS } from '../src/game/PhysicsTuning.ts
 Common.setDecomp(decomp);
 const { definitions, displayScale: scale } = JSON.parse(await readFile(new URL('../src/data/serpentelas.generated.json', import.meta.url)));
 
-test('ten actual concave bodies stack, lift the camera, and settle into one completed result', () => {
+test('ten smaller concave bodies stack and settle without premature camera scrolling', () => {
   const engine = Engine.create({ ...CONTACT_TUNING, enableSleeping: true }); engine.gravity.y = 1.2;
   const platform = Bodies.rectangle(260, 580, 280, 64, { isStatic: true, friction: .75 });
   Composite.add(engine.world, platform);
@@ -52,7 +52,7 @@ test('ten actual concave bodies stack, lift the camera, and settle into one comp
     camera.update(landed.length ? Math.min(...landed.map((body) => body.bounds.min.y)) : undefined, 1000 / 60);
   }
   assert.equal(round.state, 'completed'); assert.equal(round.remaining, 0); assert.equal(round.placedCount, 10);
-  assert.equal(settlements, 1); assert.ok(camera.offset < -100); assert.equal(glue.frozenCount, 10);
+  assert.equal(settlements, 1); assert.equal(camera.offset, 0); assert.equal(glue.frozenCount, 10);
   assert.ok(round.result().speedBonus > 0);
   assert.ok(pieces.every((body) => body.isStatic && body.position.x > 100 && body.position.x < 420));
   Composite.clear(engine.world, false); Engine.clear(engine);

@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <meta name="theme-color" content="#f4f2e9" />
-  <meta name="description" content="煉金術失敗了！把 500 隻蛇貂疊回魔法陣，一隻都不能掉出去。" />
+  <meta name="description" content="喔不！有隻蛇貂走進你的魔法陣了！把 500 隻蛇貂全部疊回魔法陣上方。" />
   <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
   <title>labs · TL001 誰複製了500隻蛇貂</title>
 </head>
@@ -13,12 +13,11 @@
     <header class="masthead"><a class="wordmark" href="./" aria-label="TailLabs 首頁"><span class="brand-dot"></span>tail<span class="brand-light">labs</span><span class="brand-period">.</span></a><span class="edition">WEB EXPERIMENTS <span>/</span> 001</span></header>
     <div class="workspace">
       <section class="intro" aria-labelledby="game-title">
-        <p class="eyebrow"><span class="status-dot"></span> TL001 · 煉金術後遺症</p>
+        <p class="eyebrow"><span class="status-dot"></span> 蛇貂回收中</p>
         <h1 id="game-title">誰複製了<br /><span class="number">500</span> 隻蛇貂<span class="title-dot">？</span></h1>
-        <p class="description">魔法失控了。<br />把牠們全部疊回去，一隻都別掉。</p>
+        <p class="description">有隻蛇貂走進你的魔法陣了！<br />把他們全部疊回魔法陣上方。</p>
         <div class="experiment-note"><span class="note-index">01 /</span><div><h2>慢慢來，疊高一點。</h2><p>接觸後約 3 秒開始減速，停穩就會黏住。塔長高時，視線會跟著往上。</p></div></div>
         <div class="side-actions"><button id="help-button" type="button">玩法圖解 ↗</button><button id="leaderboard-button" type="button">我的排行榜 ↗</button></div>
-        <p class="prototype-note">PROTOTYPE 0.3 <span>·</span> 一場完整的小災難</p>
       </section>
       <section class="experiment" aria-label="TL001 遊戲實驗場">
         <div class="stage-toolbar"><span id="mode-label"><span class="status-dot"></span> 500 隻挑戰</span><button id="reset-button" type="button" disabled>重新開始 <span aria-hidden="true">↻</span></button></div>
@@ -34,20 +33,20 @@
     <footer class="footer"><span>SMALL EXPERIMENTS. CURIOUS TAILS.</span><span>TAIL LABS © 2026</span></footer>
   </main>
   <dialog id="tutorial-dialog" aria-labelledby="tutorial-title"><div class="dialog-card tutorial-card">
-    <p class="eyebrow">EXPERIMENT 001 / 事故現場</p><h2 id="tutorial-title" tabindex="-1" autofocus>你的煉金術，<br />好像失敗了<span>。</span></h2>
-    <p class="dialog-description">500 隻幾乎一樣的蛇貂擠滿了實驗室。<br />解除魔法的方法只有一個：把牠們全部疊回魔法陣。</p>
+    <h2 id="tutorial-title" tabindex="-1" autofocus><span class="tutorial-oops">喔不！</span>有隻蛇貂走進你的魔法陣了！</h2>
+    <p class="dialog-description">500 隻幾乎一樣的蛇貂擠滿了實驗室，<br />復原的方法只有一個：<strong>把他們全部疊回魔法陣上方。</strong></p>
     <div class="tutorial-steps">
-      <figure><img src="./assets/tutorial/move.svg" width="260" height="160" alt="左右移動手中的蛇貂，右上角可預先查看下一隻" /><figcaption><span>01</span><strong>先看，再放。</strong><p>左右定位，看右上角的下一隻。<br />鍵盤 ← → 移動，空白鍵放下。</p></figcaption></figure>
-      <figure><img src="./assets/tutorial/stick.svg" width="260" height="160" alt="蛇貂落在其他蛇貂上，接觸約三秒後減速並黏住" /><figcaption><span>02</span><strong>給牠一點時間。</strong><p>碰撞會輕輕回彈；接觸約 3 秒後<br />開始減速，停穩才會黏住。</p></figcaption></figure>
-      <figure><img src="./assets/tutorial/tower.svg" width="260" height="160" alt="塔變高時畫面往上追蹤，任何蛇貂掉出魔法陣都會失敗" /><figcaption><span>03</span><strong>一隻都不能掉。</strong><p>塔越高，畫面跟著抬升。<br />全部放穩，才能解除魔法。</p></figcaption></figure>
+      <figure><img src="./assets/tutorial/move.svg" width="260" height="180" alt="左右移動，點擊放下" /><figcaption><span>01</span><strong>左右移動，點擊放下</strong></figcaption></figure>
+      <figure><img src="./assets/tutorial/stick.svg" width="260" height="180" alt="把蛇貂放到魔法陣上" /><figcaption><span>02</span><strong>放到魔法陣上</strong></figcaption></figure>
+      <figure><img src="./assets/tutorial/tower.svg" width="260" height="180" alt="蛇貂掉到魔法陣外" /><figcaption><span>03</span><strong>掉到魔法陣外就大事不好了</strong></figcaption></figure>
     </div>
     <div class="start-options"><label for="target-select">這次想挑戰</label><select id="target-select"><option value="500">500 隻 · 完整挑戰</option><option value="100">100 隻 · 練習</option><option value="50">50 隻 · 練習</option><option value="10">10 隻 · 小試身手</option></select></div>
-    <p class="dialog-footnote">手機：在場內左右拖動，放手即可落下；也可以使用下方按鈕。</p>
-    <button id="start-button" class="primary-action" type="button">把牠們疊回去 <span>→</span></button>
+    <p class="dialog-footnote">手機可拖動後放手，也可以使用下方按鈕。</p>
+    <button id="start-button" class="primary-action" type="button">把他們疊回去 <span>→</span></button>
   </div></dialog>
   <dialog id="result-dialog" aria-labelledby="result-title"><div class="dialog-card result-card">
-    <p class="eyebrow" id="result-eyebrow">EXPERIMENT / 結算</p><img class="result-art" src="./assets/serpentelas/serpentela-w1-01.webp" width="96" height="96" alt="蛇貂" />
-    <h2 id="result-title" tabindex="-1">魔法陣失守了。</h2><p id="result-description" class="dialog-description"></p>
+    <img class="result-art" src="./assets/serpentelas/serpentela-w1-01.webp" width="96" height="96" alt="蛇貂" />
+    <h2 id="result-title" tabindex="-1">魔法失敗了！</h2><p id="result-description" class="dialog-description"></p>
     <div class="result-total"><span>本次分數</span><strong id="result-score">0</strong></div>
     <dl class="result-breakdown"><div><dt>成功放穩</dt><dd id="result-count"></dd></div><div><dt>經過時間</dt><dd id="result-time"></dd></div><div><dt>放置分數</dt><dd id="result-base"></dd></div><div><dt>高度獎勵</dt><dd id="result-height"></dd></div><div><dt>完成時間獎勵</dt><dd id="result-speed"></dd></div></dl>
     <p id="result-rank" class="rank-message"></p><form id="name-form"><label for="player-name">留下煉金術士的名字</label><div class="name-row"><input id="player-name" name="playerName" maxlength="24" placeholder="匿名煉金術士" autocomplete="nickname" /><button type="submit">儲存名字</button></div><small>最多 12 個字，空白會使用匿名名稱。</small></form>

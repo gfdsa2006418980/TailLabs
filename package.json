@@ -1,7 +1,7 @@
 {
   "name": "labs",
   "private": true,
-  "version": "0.3.0",
+  "version": "0.3.2",
   "description": "TailLabs TL001 — 誰複製了500隻蛇貂 Web game prototype",
   "type": "module",
   "engines": { "node": ">=22.12.0" },

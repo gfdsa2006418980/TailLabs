@@ -28,7 +28,7 @@ for (const definition of definitions) {
   const decomposedArea = (body.parts.length > 1 ? body.parts.slice(1) : body.parts).reduce((total, part) => total + part.area, 0);
   if (Math.abs(decomposedArea - definition.area) > 0.01) throw new Error(`Lost polygon area: ${definition.name}`);
 }
-const manifest = { version: 1, alphaThreshold: 128, displayScale: 0.75, definitions };
+const manifest = { version: 1, alphaThreshold: 128, displayScale: 0.5625, definitions };
 const json = JSON.stringify(manifest, null, 2) + '\n';
 await writeFile(path.join(root, 'public/assets/serpentelas/colliders.json'), json);
 await writeFile(path.join(root, 'src/data/serpentelas.generated.json'), json);

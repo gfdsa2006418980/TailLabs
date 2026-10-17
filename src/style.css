@@ -51,3 +51,31 @@ dialog { color: var(--ink); border: 1px solid #d4daca; border-radius: 18px; padd
 .dialog-card h2:focus { outline: none; }.result-links { display: flex; justify-content: space-between; gap: 12px; margin-top: 14px; }.result-links .text-action { font-size: 11px; }
 .game-progress { scroll-margin-top: 16px; }
 @media (min-width: 701px) { .experiment { max-width: min(100%, calc((100dvh - 180px) * .787879)); justify-self: center; } }
+/* A quieter opening, with one instruction per illustration. */
+#tutorial-dialog { max-width: min(780px, calc(100vw - 32px)); border-radius: 24px; }
+.tutorial-card { padding: 32px; }
+.tutorial-card h2 { font-size: 28px; line-height: 1.55; letter-spacing: -.6px; }
+.tutorial-card h2 .tutorial-oops { display: block; margin-bottom: 8px; color: #b18154; font-size: 15px; font-weight: 500; letter-spacing: 1px; }
+.tutorial-card > .dialog-description { font-size: 12px; line-height: 1.95; margin: 16px 0 24px; }
+.tutorial-card .dialog-description strong { font-weight: 500; color: #526c58; }
+.tutorial-card .tutorial-steps { gap: 14px; margin: 0 0 26px; }
+.tutorial-card .tutorial-steps img { background: #f2f1e7; border: 0; border-radius: 14px; }
+.tutorial-card .tutorial-steps figcaption { display: flex; align-items: flex-start; gap: 9px; padding-top: 13px; }
+.tutorial-card .tutorial-steps figcaption > span { flex-shrink: 0; margin: 1px 0 0; color: #a8875e; font-size: 10px; line-height: 1.8; }
+.tutorial-card .tutorial-steps strong { font-size: 12px; font-weight: 500; line-height: 1.8; }
+.tutorial-card .start-options { border-top-color: #e3e3d7; padding-top: 19px; }
+.tutorial-card .primary-action { border-radius: 12px; font-size: 13px; padding: 15px 18px; }
+.result-art { width: 60px; height: 60px; }
+#result-dialog.is-failed { background: rgba(250, 249, 242, .95); border-color: #eeeede; }
+#result-dialog.is-failed::backdrop { background-color: #d5ddcb; background-size: 100% 100%; background-position: center; background-repeat: no-repeat; backdrop-filter: none; }
+#result-dialog.is-failed #result-description { max-width: 340px; line-height: 1.9; color: #52674e; }
+@media (max-width: 620px) {
+  .tutorial-card { padding: 24px; }
+  .tutorial-card h2 { font-size: 24px; }
+  .tutorial-card > .dialog-description { font-size: 11px; margin: 14px 0 22px; }
+  .tutorial-card > .dialog-description br { display: none; }
+  .tutorial-card .tutorial-steps { gap: 16px; margin-bottom: 22px; }
+  .tutorial-card .tutorial-steps figure { grid-template-columns: 92px 1fr; gap: 14px; }
+  .tutorial-card .tutorial-steps figcaption { padding: 0; gap: 8px; }
+  .tutorial-card .tutorial-steps strong { font-size: 12px; }
+}

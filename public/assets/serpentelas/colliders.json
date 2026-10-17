@@ -1,7 +1,7 @@
 {
   "version": 1,
   "alphaThreshold": 128,
-  "displayScale": 0.75,
+  "displayScale": 0.5625,
   "definitions": [
     {
       "id": "serpentela-w50-01",
