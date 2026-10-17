@@ -114,14 +114,13 @@ Phaser 引擎壓縮後約 1.2 MB（gzip 約 319 KB），Vite 會提示大型區�
 
 ## GitHub Pages
 
-已提供部署設定，尚未連接 GitHub 遠端或實際發布。
+GitHub Pages 部署工作流程已設定；合入 `main` 並完成 Pages 設定後，TL001 會發布到下方網址。
 
-1. 將這個資料夾的 Git repository 推送到 GitHub，預設分支使用 `main`。
-2. 在 GitHub repository 的 **Settings → Pages → Build and deployment → Source** 選擇 **GitHub Actions**。
-3. 推送到 `main`，或從 Actions 手動執行 **Deploy to GitHub Pages**。
-4. 工作流程會安裝鎖定套件、型別檢查、建置、執行黏性物理測試，然後發布 `dist/`。
+1. 在 GitHub repository 的 **Settings → Pages → Build and deployment → Source** 選擇 **GitHub Actions**。
+2. 將變更推送到 `main`，或從 Actions 手動執行 **Deploy to GitHub Pages**。
+3. 工作流程會安裝鎖定套件、型別檢查、建置、執行黏性物理測試，然後發布 `dist/`。
 
-`base: './'` 讓建置的資源使用相對網址，可支援 `https://<帳號>.github.io/labs/` 與網域根目錄。後續新增 public 圖片時，請透過 `import.meta.env.BASE_URL` 組合路徑，避免寫死 `/assets/...`。
+Vite 將 TL001 建置至 `dist/TL001/`，工作流程發布整個 `dist/`，因此遊戲入口位於 [https://gfdsa2006418980.github.io/TailLabs/TL001](https://gfdsa2006418980.github.io/TailLabs/TL001)。`base: './'` 讓建置資源使用相對網址；後續新增 public 圖片時，請透過 `import.meta.env.BASE_URL` 組合路徑，避免寫死 `/assets/...`。
 
 參考：[Vite 靜態部署與 GitHub Pages](https://vite.dev/guide/static-deploy.html#github-pages)。
 

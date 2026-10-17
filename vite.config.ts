@@ -1,9 +1,10 @@
 import { defineConfig } from 'vite';
 
 export default defineConfig({
-  // Relative URLs support both root and repository GitHub Pages sites.
+  // Relative asset URLs keep this experiment portable from its TL001 subdirectory.
   base: './',
   build: {
+    outDir: 'dist/TL001',
     rollupOptions: {
       output: {
         manualChunks(id) {
