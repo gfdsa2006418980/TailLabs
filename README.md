@@ -120,7 +120,7 @@ GitHub Pages 部署工作流程已設定；合入 `main` 並完成 Pages 設定�
 2. 將變更推送到 `main`，或從 Actions 手動執行 **Deploy to GitHub Pages**。
 3. 工作流程會安裝鎖定套件、型別檢查、建置、執行黏性物理測試，然後發布 `dist/`。
 
-Vite 將 TL001 建置至 `dist/TL001/`，工作流程發布整個 `dist/`，因此遊戲入口位於 [https://gfdsa2006418980.github.io/TailLabs/TL001](https://gfdsa2006418980.github.io/TailLabs/TL001)。`base: './'` 讓建置資源使用相對網址；後續新增 public 圖片時，請透過 `import.meta.env.BASE_URL` 組合路徑，避免寫死 `/assets/...`。
+正式建置會先清空 `dist/`，再將 TL001 建置至 `dist/TL001/`；工作流程發布整個 `dist/`，只保留 [https://gfdsa2006418980.github.io/TailLabs/TL001/](https://gfdsa2006418980.github.io/TailLabs/TL001/) 作為遊戲入口。`base: './'` 讓建置資源使用相對網址；後續新增 public 圖片時，請透過 `import.meta.env.BASE_URL` 組合路徑，避免寫死 `/assets/...`。
 
 參考：[Vite 靜態部署與 GitHub Pages](https://vite.dev/guide/static-deploy.html#github-pages)。
 
