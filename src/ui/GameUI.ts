@@ -1,6 +1,7 @@
 import type { RoundResult } from '../systems/RoundSession';
 import { LeaderboardSystem, playerName, recordId } from '../systems/LeaderboardSystem';
 import type { LeaderboardEntry } from '../systems/LeaderboardSystem';
+import { LoopingMusic } from '../systems/LoopingMusic';
 import { FailureBackdrop } from './FailureBackdrop';
 
 const element = <T extends HTMLElement>(id: string) => {
@@ -22,6 +23,7 @@ export class GameUI {
   private readonly boardTarget = element<HTMLSelectElement>('board-target');
   private readonly failureBackdrop = new FailureBackdrop(this.result);
   private readonly leaderboard: LeaderboardSystem;
+  private readonly music: LoopingMusic;
   private readonly cleanups: Array<() => void> = [];
   private entry?: LeaderboardEntry;
   private started = false;
@@ -30,8 +32,10 @@ export class GameUI {
     let storage: Storage | undefined;
     try { storage = localStorage; } catch { /* Browser privacy settings may block storage. */ }
     this.leaderboard = new LeaderboardSystem(storage);
+    this.music = new LoopingMusic(element<HTMLButtonElement>('music-toggle'));
     this.listen('start-button', 'click', () => {
       this.tutorial.close();
+      this.music.start();
       if (!this.started) { this.started = true; actions.start(Number(this.target.value)); }
       actions.pause(false);
     });
@@ -49,6 +53,7 @@ export class GameUI {
     this.listen('leaderboard-button', 'click', () => this.showBoard(false));
     this.listen('result-board-button', 'click', () => { this.result.close(); this.showBoard(true); });
     this.listen('board-close-button', 'click', () => this.closeBoard());
+    this.listen('target-select', 'change', () => this.renderTutorialCount());
     this.listen('board-target', 'change', () => this.renderBoard());
     this.listen('name-form', 'submit', (event) => { event.preventDefault(); this.saveName(); });
     for (const dialog of [this.tutorial, this.result, this.board]) {
@@ -60,7 +65,11 @@ export class GameUI {
       dialog.addEventListener('cancel', cancel);
       this.cleanups.push(() => dialog.removeEventListener('cancel', cancel));
     }
+    this.renderTutorialCount();
     this.show(this.tutorial, 'tutorial-title');
+  }
+  private renderTutorialCount(): void {
+    element('tutorial-target-count').textContent = this.target.value;
   }
   render(remaining: number, elapsed: number, score: number, message: string): void {
     element('remaining-count').textContent = String(remaining);
@@ -74,8 +83,10 @@ export class GameUI {
     this.boardTarget.value = String(target);
   }
   finish(result: RoundResult): void {
-    element('result-title').textContent = result.completed ? '魔法，終於解除了。' : '魔法失敗了！';
-    element('result-description').textContent = result.completed ? '每一隻都回來了。這次的實驗，算是成功了吧。' : `你現在有 ${result.target - result.placedCount} 隻各種造型的蛇貂了，恭喜你`;
+    element('result-title').textContent = result.completed ? '魔法成功了！' : '魔法失敗了！';
+    element('result-description').textContent = result.completed
+      ? '你現在有一隻闖大禍的蛇貂了，恭喜你！'
+      : `你現在有${result.target - result.placedCount}隻完全一樣的蛇貂了，恭喜你`;
     element('result-score').textContent = result.score.toLocaleString('zh-TW');
     element('result-count').textContent = `${result.placedCount} / ${result.target} 隻`;
     element('result-time').textContent = formatTime(result.elapsedMilliseconds);
@@ -87,7 +98,6 @@ export class GameUI {
       this.entry = { ...result, id: recordId(globalThis.crypto?.randomUUID?.bind(globalThis.crypto)), playerName: playerName(element<HTMLInputElement>('player-name').value), createdAt: new Date().toISOString() };
       this.persistEntry();
     } else {
-      element('result-rank').textContent = '指定造型試放，不列入排行榜。';
       element('save-status').textContent = '';
     }
     if (result.completed) this.failureBackdrop.clear(); else this.failureBackdrop.show(result.target - result.placedCount);
@@ -95,8 +105,7 @@ export class GameUI {
   }
   private persistEntry(): void {
     if (!this.entry) return;
-    const rank = this.leaderboard.save(this.entry);
-    element('result-rank').textContent = rank ? `本機 ${this.entry.target} 隻挑戰 · 第 ${rank} 名` : '這次沒有進入前 10 名，再試一次吧。';
+    this.leaderboard.save(this.entry);
     element('save-status').textContent = this.leaderboard.persistent ? '本次成績已自動保存在這個瀏覽器。' : '目前瀏覽器無法永久儲存；成績暫存於本次開啟期間。';
   }
   private saveName(): void {
@@ -136,5 +145,5 @@ export class GameUI {
   private show(dialog: HTMLDialogElement, heading: string): void {
     dialog.showModal(); element(heading).focus({ preventScroll: true }); dialog.scrollTop = 0;
   }
-  destroy(): void { this.failureBackdrop.destroy(); this.cleanups.forEach((cleanup) => cleanup()); [this.tutorial, this.result, this.board].forEach((dialog) => dialog.close()); }
+  destroy(): void { this.failureBackdrop.destroy(); this.music.destroy(); this.cleanups.forEach((cleanup) => cleanup()); [this.tutorial, this.result, this.board].forEach((dialog) => dialog.close()); }
 }

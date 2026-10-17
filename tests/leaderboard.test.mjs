@@ -50,7 +50,7 @@ test('corrupt data, invalid scores and unavailable storage do not interrupt game
   assert.equal(unavailable.persistent, false); assert.equal(unavailable.top(500).length, 1);
 });
 test('names are trimmed, Unicode-safe, limited to twelve characters and have an anonymous fallback', () => {
-  assert.equal(playerName('   '), '匿名煉金術士'); assert.equal(playerName('  小蛇貂  '), '小蛇貂');
+  assert.equal(playerName('   '), '匿名飼主'); assert.equal(playerName('  小蛇貂  '), '小蛇貂');
   assert.equal(Array.from(playerName('🐾'.repeat(20))).length, 12);
 });
 test('HTTP phone previews can save a local result without crypto.randomUUID', () => {

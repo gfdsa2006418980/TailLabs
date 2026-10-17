@@ -6,7 +6,7 @@ import { RoundSession } from '../systems/RoundSession';
 import { TowerCamera } from '../systems/TowerCamera';
 import { GameUI } from '../ui/GameUI';
 import { bindControls } from '../ui/controls';
-import { STAGE } from './StageConfig';
+import { createStageLayout, type StageLayout } from './StageConfig';
 import { ROUND } from './RoundConfig';
 
 const INK = 0x345442;
@@ -32,6 +32,7 @@ export class GameScene extends Phaser.Scene {
   private readonly supportIds = new Set<number>();
   private lastHudAt = -Infinity;
   private touchId?: number;
+  private layout!: StageLayout;
 
   constructor() { super('GameScene'); }
   preload(): void {
@@ -40,15 +41,17 @@ export class GameScene extends Phaser.Scene {
   }
 
   create(): void {
+    this.layout = createStageLayout(this.scale.gameSize.width, this.scale.gameSize.height);
     this.stickiness = new StickinessSystem();
     const hud = this.add.container(0, 0);
     this.drawChamber(hud);
     const world = this.add.container(0, 0);
     this.cameras.main.ignore(world);
-    this.worldCamera = this.cameras.add(30, 90, 460, 536).setScroll(30, 90);
+    this.worldCamera = this.cameras.add(this.layout.chamberLeft, this.layout.chamberTop, this.layout.chamberWidth, this.layout.chamberHeight)
+      .setScroll(this.layout.chamberLeft, this.layout.chamberTop);
     this.worldCamera.ignore(hud);
     this.createPlatform(world);
-    this.spawner = new SpawnSystem(this, world, this.round.target);
+    this.spawner = new SpawnSystem(this, world, this.round.target, this.layout);
     this.guide = this.add.graphics(); world.add(this.guide);
     this.outlines = this.add.graphics(); world.add(this.outlines);
     this.ui = new GameUI({
@@ -93,7 +96,8 @@ export class GameScene extends Phaser.Scene {
     this.cursors = this.input.keyboard?.createCursorKeys();
     // Native dialog inputs and selects must retain their arrow/space behavior.
     this.input.keyboard?.removeCapture(['UP', 'DOWN', 'LEFT', 'RIGHT', 'SPACE', 'SHIFT']);
-    const inChamber = (pointer: Phaser.Input.Pointer) => pointer.x >= 30 && pointer.x <= 490 && pointer.y >= 90 && pointer.y <= 626;
+    const inChamber = (pointer: Phaser.Input.Pointer) => pointer.x >= this.layout.chamberLeft && pointer.x <= this.layout.chamberRight
+      && pointer.y >= this.layout.chamberTop && pointer.y <= this.layout.chamberBottom;
     const onMove = (pointer: Phaser.Input.Pointer) => {
       if (!this.isPlaying || !inChamber(pointer) || (pointer.wasTouch && pointer.id !== this.touchId)) return;
       this.spawner.moveTo(this.worldCamera.getWorldPoint(pointer.x, pointer.y).x);
@@ -165,24 +169,23 @@ export class GameScene extends Phaser.Scene {
   private startRound(target: number): void {
     this.round = new RoundSession([10, 50, 100, 500].includes(target) ? target : ROUND.target);
     this.spawner.reset(this.round.target); this.stickiness.clear();
-    this.towerCamera.reset(); this.worldCamera.setScroll(30, 90);
+    this.towerCamera.reset(); this.worldCamera.setScroll(this.layout.chamberLeft, this.layout.chamberTop);
     this.lastDropAt = -Infinity; this.lastHudAt = -Infinity; this.touchId = undefined;
     this.round.start(); this.paused = false;
     this.ui.setMode(this.round.target); this.refreshPaused(); this.updatePreview();
     this.refreshReadout();
-    document.querySelector('.game-progress')?.scrollIntoView({ block: 'start', behavior: 'instant' });
   }
   update(_time: number, delta: number): void {
     if (!this.spawner) return;
     if (this.isPlaying) {
       this.stickiness.update(this.round.elapsedMilliseconds + delta, delta);
       const pieces = this.spawner.pieces;
-      const ended = this.round.update(delta, pieces.map((piece) => ({ id: piece.id, frozen: piece.isFrozen, bounds: piece.body.bounds })), STAGE.platformY);
+      const ended = this.round.update(delta, pieces.map((piece) => ({ id: piece.id, frozen: piece.isFrozen, bounds: piece.body.bounds })), this.layout.platformY, this.layout);
       let top: number | undefined;
-      for (const piece of pieces) if (piece.hasLanded && piece.body.bounds.max.x >= ROUND.safeLeft && piece.body.bounds.min.x <= ROUND.safeRight) top = Math.min(top ?? Infinity, piece.body.bounds.min.y);
-      const offset = this.towerCamera.update(top, delta);
-      this.worldCamera.setScroll(30, 90 + offset);
-      this.spawner.setSpawnY(STAGE.spawnY + offset);
+      for (const piece of pieces) if (piece.hasLanded && piece.body.bounds.max.x >= this.layout.safeLeft && piece.body.bounds.min.x <= this.layout.safeRight) top = Math.min(top ?? Infinity, piece.body.bounds.min.y);
+      const offset = this.towerCamera.update(top, delta, this.layout.chamberTop + this.layout.chamberHeight * 0.46);
+      this.worldCamera.setScroll(this.layout.chamberLeft, this.layout.chamberTop + offset);
+      this.spawner.setSpawnY(this.layout.spawnY + offset);
       if (ended) { this.refreshPaused(); this.refreshReadout(); this.ui.finish(this.round.result()); }
       const direction = Number(this.cursors?.right.isDown) - Number(this.cursors?.left.isDown);
       if (direction && !document.querySelector('dialog[open]')) this.spawner.moveTo(this.spawner.x + direction * Math.min(delta, 50) * 0.32);
@@ -194,7 +197,7 @@ export class GameScene extends Phaser.Scene {
     if (this.round.state === 'playing' && this.round.remaining) {
       this.guide.lineStyle(1, INK, 0.15);
       const offset = this.towerCamera.offset;
-      for (let y = STAGE.spawnY + offset + 36; y < 620 + offset; y += 14) this.guide.lineBetween(this.spawner.x, y, this.spawner.x, y + 5);
+      for (let y = this.layout.spawnY + offset + 36; y < this.layout.chamberBottom + offset; y += 14) this.guide.lineBetween(this.spawner.x, y, this.spawner.x, y + 5);
     }
   }
   private drop(): void {
@@ -217,40 +220,49 @@ export class GameScene extends Phaser.Scene {
   }
   private createPlatform(parent: Phaser.GameObjects.Container): void {
     // An open platform: falling off the sides is now a real failure.
-    const platform = this.matter.add.rectangle(260, STAGE.platformY + STAGE.platformDepth / 2, 280, STAGE.platformDepth, { isStatic: true, friction: 0.75, label: 'magic-circle-platform' });
+    const centerX = this.layout.width / 2;
+    const platformWidth = this.layout.safeRight - this.layout.safeLeft;
+    const platform = this.matter.add.rectangle(centerX, this.layout.platformY + this.layout.platformDepth / 2, platformWidth, this.layout.platformDepth, { isStatic: true, friction: 0.75, label: 'magic-circle-platform' });
     this.supportIds.clear(); this.supportIds.add(platform.id);
     this.stickiness.addSupport(platform.id);
-    const pillarWidth = STAGE.lightPillarWidth;
-    const pillarHeight = STAGE.lightPillarHeight;
-    const top = STAGE.platformY - pillarHeight;
-    const bottom = STAGE.platformY;
+    const pillarWidth = this.layout.lightPillarWidth;
+    const pillarHeight = this.layout.lightPillarHeight;
+    const top = this.layout.platformY - pillarHeight;
+    const bottom = this.layout.platformY;
     const pillars = this.add.graphics();
-    for (const x of [ROUND.safeLeft - pillarWidth / 2, ROUND.safeRight + pillarWidth / 2]) {
+    for (const x of [this.layout.safeLeft - pillarWidth / 2, this.layout.safeRight + pillarWidth / 2]) {
       const wall = this.matter.add.rectangle(x, (top + bottom) / 2, pillarWidth, pillarHeight, {
         isStatic: true, friction: 0.8, frictionStatic: 0.9, restitution: 0.05, label: 'magic-circle-light-pillar',
       });
       this.supportIds.add(wall.id);
       this.stickiness.addSupport(wall.id);
-      pillars.lineStyle(26, 0x93ae93, 0.09).lineBetween(x, top, x, bottom);
-      pillars.lineStyle(12, 0xc2b47d, 0.17).lineBetween(x, top + 3, x, bottom);
-      pillars.lineStyle(4, 0xd8e8d1, 0.34).lineBetween(x, top + 6, x, bottom);
+      pillars.lineStyle(pillarWidth * 1.85, 0x93ae93, 0.09).lineBetween(x, top, x, bottom);
+      pillars.lineStyle(pillarWidth * 0.85, 0xc2b47d, 0.17).lineBetween(x, top + 3, x, bottom);
+      pillars.lineStyle(pillarWidth * 0.3, 0xd8e8d1, 0.34).lineBetween(x, top + 6, x, bottom);
       pillars.lineStyle(1, 0xfffced, 0.72).lineBetween(x, top + 10, x, bottom - 2);
-      pillars.fillStyle(0xc1b789, 0.32).fillEllipse(x, bottom, 26, 7);
+      pillars.fillStyle(0xc1b789, 0.32).fillEllipse(x, bottom, pillarWidth * 1.85, 7);
     }
     parent.add(pillars);
-    const circle = this.add.image(260, STAGE.platformY + 12, 'magic-circle').setDisplaySize(360, 120);
+    const circleHeight = Math.min(platformWidth * 0.43, Math.max(60, (this.layout.chamberBottom - this.layout.platformY - 12) * 2));
+    const circle = this.add.image(centerX, this.layout.platformY + 12, 'magic-circle')
+      .setDisplaySize(Math.min(platformWidth * 1.15, circleHeight * 3.7), circleHeight);
     parent.add(circle);
   }
   private drawChamber(parent: Phaser.GameObjects.Container): void {
     const art = this.add.graphics(); parent.add(art);
     art.fillStyle(INK, 0.07);
-    for (let x = 46; x < 490; x += 32) for (let y = 106; y < 626; y += 32) art.fillCircle(x, y, 0.6);
-    art.lineStyle(1, INK, 0.11).strokeRoundedRect(30, 90, 460, 536, 14);
+    const dotStep = Math.max(22, Math.min(34, this.layout.width / 20));
+    for (let x = this.layout.chamberLeft + dotStep / 2; x < this.layout.chamberRight; x += dotStep) {
+      for (let y = this.layout.chamberTop + dotStep / 2; y < this.layout.chamberBottom; y += dotStep) art.fillCircle(x, y, 0.6);
+    }
+    art.lineStyle(1, INK, 0.11).strokeRoundedRect(this.layout.chamberLeft, this.layout.chamberTop, this.layout.chamberWidth, this.layout.chamberHeight, 14);
     const label = (x: number, y: number, text: string, size = 11, color = '#7c8b7e') => {
       const object = this.add.text(x, y, text, { fontFamily: FONT, fontSize: size, color }); parent.add(object); return object;
     };
-    art.fillStyle(0xf1f0e5, 0.7).fillRoundedRect(402, 15, 88, 61, 12);
-    this.nextLabel = label(412, 26, '下一隻', 9);
-    this.nextImage = this.add.image(462, 47, 'serpentela-w50-01').setDisplaySize(38.25, 38.25); parent.add(this.nextImage);
+    const previewX = this.layout.width - 70;
+    const previewY = this.layout.chamberTop + Math.max(78, this.layout.chamberHeight * 0.15);
+    art.fillStyle(0xf1f0e5, 0.7).fillRoundedRect(previewX - 48, previewY - 27, 92, 56, 12);
+    this.nextLabel = label(previewX - 38, previewY - 19, '下一隻', 9);
+    this.nextImage = this.add.image(previewX + 17, previewY + 1, 'serpentela-w50-01').setDisplaySize(38.25, 38.25); parent.add(this.nextImage);
   }
 }

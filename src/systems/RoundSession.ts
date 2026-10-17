@@ -6,6 +6,7 @@ export interface PieceSnapshot {
   frozen: boolean;
   bounds: { min: { x: number; y: number }; max: { x: number; y: number } };
 }
+export interface RoundBounds { safeLeft: number; safeRight: number; fallLimit: number; }
 export interface RoundResult {
   target: number;
   placedCount: number;
@@ -37,13 +38,13 @@ export class RoundSession {
     this.droppedCount++;
     return true;
   }
-  update(delta: number, pieces: readonly PieceSnapshot[], platformY: number): boolean {
+  update(delta: number, pieces: readonly PieceSnapshot[], platformY: number, bounds: RoundBounds = ROUND): boolean {
     if (this.state !== 'playing') return false;
     this.elapsedMilliseconds += Math.max(0, delta);
     this.placedCount = pieces.filter((piece) => piece.frozen).length;
     this.warning = false;
     for (const piece of pieces) {
-      const out = piece.bounds.max.x < ROUND.safeLeft || piece.bounds.min.x > ROUND.safeRight || piece.bounds.min.y > ROUND.fallLimit;
+      const out = piece.bounds.max.x < bounds.safeLeft || piece.bounds.min.x > bounds.safeRight || piece.bounds.min.y > bounds.fallLimit;
       if (out) {
         this.warning = true;
         const since = this.outsideSince.get(piece.id) ?? this.elapsedMilliseconds;

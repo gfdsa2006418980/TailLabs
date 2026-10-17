@@ -4,8 +4,7 @@ import { SERPENTELAS } from '../data/serpentelas';
 import type { SerpentelaDefinition } from '../data/serpentelas';
 import { SerpentelaPicker } from './SerpentelaPicker';
 import { DrawQueue } from './DrawQueue';
-import { STAGE } from '../game/StageConfig';
-import { ROUND } from '../game/RoundConfig';
+import type { StageLayout } from '../game/StageConfig';
 
 export class SpawnSystem {
   private held?: Serpentela;
@@ -14,10 +13,12 @@ export class SpawnSystem {
   private readonly picker = new SerpentelaPicker(SERPENTELAS);
   private readonly pinned = SERPENTELAS.find((item) => item.id === new URLSearchParams(location.search).get('shape'));
   private queue!: DrawQueue<SerpentelaDefinition>;
-  private spawnY: number = STAGE.spawnY;
-  private lastX = STAGE.width / 2;
+  private spawnY: number;
+  private lastX: number;
 
-  constructor(private readonly scene: Phaser.Scene, private readonly parent: Phaser.GameObjects.Container, target: number) {
+  constructor(private readonly scene: Phaser.Scene, private readonly parent: Phaser.GameObjects.Container, target: number, private readonly layout: StageLayout) {
+    this.spawnY = layout.spawnY;
+    this.lastX = layout.width / 2;
     this.reset(target);
   }
   get x(): number { return this.held?.x ?? this.lastX; }
@@ -34,7 +35,7 @@ export class SpawnSystem {
   setSpawnY(y: number): void { this.spawnY = y; this.held?.moveTo(this.x, y); }
   moveTo(x: number): void {
     if (!this.held) return;
-    this.lastX = Phaser.Math.Clamp(x, ROUND.safeLeft + this.held.leftExtent, ROUND.safeRight - this.held.rightExtent);
+    this.lastX = Phaser.Math.Clamp(x, this.layout.safeLeft + this.held.leftExtent, this.layout.safeRight - this.held.rightExtent);
     this.held.moveTo(this.lastX, this.spawnY);
   }
   drop(): Serpentela | undefined {
@@ -51,7 +52,7 @@ export class SpawnSystem {
   drawOutlines(graphics: Phaser.GameObjects.Graphics): void { this.orbs.forEach((orb) => orb.drawOutline(graphics)); }
   reset(target: number): void {
     this.orbs.forEach((orb) => orb.destroy()); this.orbs.clear(); this.dropped = [];
-    this.picker.reset(); this.spawnY = STAGE.spawnY; this.lastX = STAGE.width / 2;
+    this.picker.reset(); this.spawnY = this.layout.spawnY; this.lastX = this.layout.width / 2;
     this.queue = new DrawQueue(() => this.pinned ?? this.picker.next(), target);
     this.held = this.queue.current ? this.create(this.queue.current) : undefined;
     this.updateName();
@@ -59,7 +60,7 @@ export class SpawnSystem {
   private create(definition: SerpentelaDefinition): Serpentela {
     const orb = new Serpentela(this.scene, this.lastX, this.spawnY, definition, this.parent);
     this.orbs.set(orb.id, orb);
-    this.lastX = Phaser.Math.Clamp(this.lastX, 34 + orb.leftExtent, 486 - orb.rightExtent);
+    this.lastX = Phaser.Math.Clamp(this.lastX, this.layout.safeLeft + orb.leftExtent, this.layout.safeRight - orb.rightExtent);
     orb.moveTo(this.lastX, this.spawnY);
     return orb;
   }
