@@ -13,7 +13,7 @@ export class LoopingMusic {
     } catch { /* Browser privacy settings may block storage. */ }
     this.audio.loop = true;
     this.audio.preload = 'auto';
-    this.audio.volume = 0.28;
+    this.audio.volume = 0.196;
     this.render();
     this.button.addEventListener('click', this.toggle);
   }
