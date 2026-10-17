@@ -26,15 +26,19 @@ document.addEventListener('click', (event) => {
 window.matchMedia('(min-width: 821px)').addEventListener('change', closeMenu);
 
 const remixButton = document.querySelector('#remix');
-const heroStage = document.querySelector('.toy-stage');
-const heroToys = [...heroStage.querySelectorAll('.toy')];
-const spriteNames = ['w50-01', 'w50-02', 'w50-03', 'w50-04', 'w50-05', 'w20-01', 'w20-03', 'w1-01'];
+const heroStage = document.querySelector('.ball-stage');
+const heroBalls = [...heroStage.querySelectorAll('.hero-ball')];
+const faceSets = [
+  ['😄', '😊', '😎', '🥳', '😆', '🙂'],
+  ['🤩', '😋', '🙂', '😄', '😎', '🥰'],
+  ['😌', '🥳', '🤗', '😋', '🤩', '😄'],
+];
 let remixCount = 0;
 remixButton.addEventListener('click', () => {
   remixCount++;
   heroStage.classList.toggle('remixed', remixCount % 2 === 1);
-  heroToys.forEach((toy, index) => {
-    toy.src = `./assets/serpentela-${spriteNames[(index + remixCount) % spriteNames.length]}.webp`;
+  heroBalls.forEach((ball, index) => {
+    ball.textContent = faceSets[remixCount % faceSets.length][index];
   });
 });
 
