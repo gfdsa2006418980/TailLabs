@@ -6,7 +6,7 @@ const KEY = 'taillabs.tl001.leaderboard.v1';
 const TARGETS = [10, 50, 100, 500];
 // LAN previews over HTTP may not expose crypto.randomUUID; this is a local record id.
 export function recordId(uuid?: () => string): string { return uuid?.() ?? `local-${Date.now()}-${Math.random().toString(36).slice(2)}`; }
-export function playerName(value: string): string { return Array.from(value.trim()).slice(0, 12).join('') || '匿名煉金術士'; }
+export function playerName(value: string): string { return Array.from(value.trim()).slice(0, 12).join('') || '匿名飼主'; }
 export function compareEntries(a: LeaderboardEntry, b: LeaderboardEntry): number {
   if (a.completed !== b.completed) return Number(b.completed) - Number(a.completed);
   if (a.completed) return b.score - a.score || a.elapsedMilliseconds - b.elapsedMilliseconds || a.createdAt.localeCompare(b.createdAt);
