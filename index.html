@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#f4f2e9" />
+    <meta name="description" content="TailLabs TL001《誰複製了500隻蛇貂》最小物理實驗場。" />
+    <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
+    <title>labs · TL001 誰複製了500隻蛇貂</title>
+  </head>
+  <body>
+    <main class="lab">
+      <header class="masthead">
+        <a class="wordmark" href="./" aria-label="TailLabs 首頁"><span class="brand-dot"></span>tail<span class="brand-light">labs</span><span class="brand-period">.</span></a>
+        <span class="edition">WEB EXPERIMENTS <span>/</span> 001</span>
+      </header>
+      <div class="workspace">
+        <section class="intro" aria-labelledby="game-title">
+          <p class="eyebrow"><span class="status-dot"></span> TL001 · 原型實驗</p>
+          <h1 id="game-title">誰複製了<br /><span class="number">500</span> 隻蛇貂<span class="title-dot">？</span></h1>
+          <p class="description">一切，都從第一隻開始。<br />先讓牠穩穩落在魔法陣上吧。</p>
+          <div class="experiment-note"><span class="note-index">01 /</span><div><h2>落下實驗</h2><p>輕輕碰撞、軟軟回彈。接觸後約 3 秒開始減速，停穩後就會黏住。</p></div></div>
+          <dl class="readout">
+            <div><dt>已放下</dt><dd><span id="drop-count" aria-live="polite">0</span><span class="unit">隻</span></dd></div>
+            <div><dt>狀態</dt><dd class="readout-status" id="game-status" role="status">準備實驗中…</dd></div>
+          </dl>
+          <p class="prototype-note">PROTOTYPE 0.1 <span>·</span> 蛇貂即將抵達</p>
+        </section>
+        <section class="experiment" aria-label="TL001 遊戲實驗場">
+          <div class="stage-toolbar"><span><span class="status-dot"></span> LIVE CHAMBER</span><button id="reset-button" type="button" disabled>重新開始 <span aria-hidden="true">↻</span></button></div>
+          <div id="game" role="group" aria-label="落下實驗；可使用下方按鈕或鍵盤操作"></div>
+          <div class="controls" aria-label="遊戲操作">
+            <button id="move-left" class="move-button" type="button" aria-label="向左移動" disabled>←</button>
+            <button id="drop-button" class="drop-button" type="button" disabled>放下這一隻 <span aria-hidden="true">↓</span></button>
+            <button id="move-right" class="move-button" type="button" aria-label="向右移動" disabled>→</button>
+          </div>
+          <p class="control-hint">滑動定位，點擊落下 <span>·</span> 鍵盤 ← → 移動 / 空白鍵落下</p>
+          <noscript><p>這個遊戲需要開啟 JavaScript 才能執行。</p></noscript>
+        </section>
+      </div>
+      <footer class="footer"><span>SMALL EXPERIMENTS. CURIOUS TAILS.</span><span>TAIL LABS © 2026</span></footer>
+    </main>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
