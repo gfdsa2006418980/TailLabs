@@ -15,7 +15,7 @@ export class Serpentela implements StickyTarget {
   private frozen = false;
   hasLanded = false;
 
-  constructor(scene: Phaser.Scene, x: number, y: number, definition: SerpentelaDefinition, parent?: Phaser.GameObjects.Container) {
+  constructor(scene: Phaser.Scene, x: number, y: number, definition: SerpentelaDefinition, parent?: Phaser.GameObjects.Container, private readonly onStable?: () => void) {
     this.scene = scene;
     this.definition = definition;
     const vertices = definition.outline.map((p) => ({ x: p.x * SERPENTELA_SCALE, y: p.y * SERPENTELA_SCALE }));
@@ -66,6 +66,35 @@ export class Serpentela implements StickyTarget {
     const x = (this.definition.bounds.maxX - this.definition.center.x) * SERPENTELA_SCALE - 4;
     const y = (this.definition.bounds.minY - this.definition.center.y) * SERPENTELA_SCALE + 4;
     this.visual.add(this.scene.add.circle(x, y, 2.5, 0x73966a));
+    this.flashGlow();
+    this.onStable?.();
+  }
+
+  private flashGlow(): void {
+    const glow = this.scene.add.graphics().setBlendMode(Phaser.BlendModes.ADD);
+    const trace = () => {
+      glow.beginPath();
+      this.definition.outline.forEach((point, index) => {
+        const x = (point.x - this.definition.center.x) * SERPENTELA_SCALE;
+        const y = (point.y - this.definition.center.y) * SERPENTELA_SCALE;
+        if (index === 0) glow.moveTo(x, y); else glow.lineTo(x, y);
+      });
+      glow.closePath();
+    };
+    trace(); glow.fillStyle(0xffedac, 0.12).fillPath();
+    trace(); glow.lineStyle(8, 0xffd76c, 0.28).strokePath();
+    trace(); glow.lineStyle(2, 0xfff5ce, 0.92).strokePath();
+    const flash = this.scene.add.container(0, 0, [glow]).setScale(0.96);
+    this.visual.add(flash);
+    this.scene.tweens.add({
+      targets: flash,
+      alpha: { from: 0.95, to: 0 },
+      scaleX: { from: 0.96, to: 1.1 },
+      scaleY: { from: 0.96, to: 1.1 },
+      duration: 340,
+      ease: 'Cubic.Out',
+      onComplete: () => flash.destroy(),
+    });
   }
 
   impact(worldX: number, worldY: number, normalX: number, normalY: number, strength: number): void {
