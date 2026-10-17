@@ -9,11 +9,15 @@ export interface ElasticNode {
 
 export const ELASTICITY = {
   cells: 6,
-  minImpactSpeed: 1.5,
-  cooldownMs: 180,
-  maxDisplacement: 2.5,
-  spring: 320,
-  damping: 24,
+  minImpactSpeed: 0.75,
+  cooldownMs: 240,
+  maxDisplacement: 7,
+  impulseMultiplier: 11,
+  maxImpulse: 100,
+  secondPulseDelayMs: 220,
+  secondPulseMultiplier: 0.46,
+  spring: 200,
+  damping: 9,
   influenceRadius: 27,
 } as const;
 
@@ -23,6 +27,8 @@ export class LocalElasticMesh {
   readonly cells: number;
   private active = false;
   private lastImpactAt = -Infinity;
+  private secondPulse?: { x: number; y: number }[];
+  private secondPulseRemainingMs = 0;
 
   constructor(width: number, height: number, cells = ELASTICITY.cells) {
     this.cells = cells;
@@ -46,16 +52,20 @@ export class LocalElasticMesh {
     const ny = normalY / length;
     const tx = -ny;
     const ty = nx;
-    const impulse = Math.min(speed * 6, 56);
-    for (const node of this.nodes) {
+    const impulse = Math.min(speed * ELASTICITY.impulseMultiplier, ELASTICITY.maxImpulse);
+    this.secondPulse = this.nodes.map((node) => {
       const dx = node.restX - x;
       const dy = node.restY - y;
       const distance2 = dx * dx + dy * dy;
       const weight = Math.exp(-distance2 / (2 * ELASTICITY.influenceRadius ** 2));
       const side = Math.max(-1, Math.min(1, (dx * tx + dy * ty) / ELASTICITY.influenceRadius));
-      node.vx += (nx + tx * side * 0.35) * impulse * weight;
-      node.vy += (ny + ty * side * 0.35) * impulse * weight;
-    }
+      const impulseX = (nx + tx * side * 0.35) * impulse * weight;
+      const impulseY = (ny + ty * side * 0.35) * impulse * weight;
+      node.vx += impulseX;
+      node.vy += impulseY;
+      return { x: impulseX * ELASTICITY.secondPulseMultiplier, y: impulseY * ELASTICITY.secondPulseMultiplier };
+    });
+    this.secondPulseRemainingMs = ELASTICITY.secondPulseDelayMs;
     this.lastImpactAt = now;
     this.active = true;
     return true;
@@ -63,7 +73,21 @@ export class LocalElasticMesh {
 
   update(deltaMs: number): boolean {
     if (!this.active) return false;
-    let remaining = Math.min(deltaMs / 1000, 0.05);
+    const frameMs = Math.min(deltaMs, 50);
+    if (this.secondPulse) {
+      this.secondPulseRemainingMs -= frameMs;
+      if (this.secondPulseRemainingMs <= 0) {
+        this.nodes.forEach((node, index) => {
+          const pulse = this.secondPulse?.[index];
+          if (!pulse) return;
+          node.vx += pulse.x;
+          node.vy += pulse.y;
+        });
+        this.secondPulse = undefined;
+        this.secondPulseRemainingMs = 0;
+      }
+    }
+    let remaining = frameMs / 1000;
     while (remaining > 0) {
       const dt = Math.min(remaining, 1 / 120);
       for (const node of this.nodes) {
@@ -81,7 +105,7 @@ export class LocalElasticMesh {
       }
       remaining -= dt;
     }
-    const resting = this.nodes.every((node) => Math.hypot(node.x - node.restX, node.y - node.restY) < 0.015 && Math.hypot(node.vx, node.vy) < 0.08);
+    const resting = !this.secondPulse && this.nodes.every((node) => Math.hypot(node.x - node.restX, node.y - node.restY) < 0.015 && Math.hypot(node.vx, node.vy) < 0.08);
     if (resting) {
       for (const node of this.nodes) {
         node.x = node.restX;
