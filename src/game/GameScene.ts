@@ -362,7 +362,7 @@ export class GameScene extends Phaser.Scene {
     const previewHeight = 88;
     const previewRight = this.layout.chamberRight - 16;
     const previewLeft = previewRight - previewWidth;
-    const previewTop = this.layout.chamberTop + 16;
+    const previewTop = this.layout.chamberTop + 48;
     const previewCenter = previewLeft + previewWidth / 2;
     art.fillStyle(0xf1f0e5, 0.7).fillRoundedRect(previewLeft, previewTop, previewWidth, previewHeight, 12);
     this.nextLabel = label(previewCenter, previewTop + 9, t('next'), 14).setOrigin(0.5, 0).setStyle({ fontStyle: 'bold', align: 'center' });
