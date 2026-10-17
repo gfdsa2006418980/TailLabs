@@ -3,5 +3,10 @@ main = "worker/index.ts"
 compatibility_date = "2026-10-17"
 workers_dev = true
 
+[[d1_databases]]
+binding = "DB"
+database_name = "taillabs-leaderboard"
+database_id = "81428c3d-b171-4c28-8704-c0a72556ec31"
+
 [vars]
 ALLOWED_ORIGINS = "https://gfdsa2006418980.github.io,http://localhost:5173,http://127.0.0.1:5173"
