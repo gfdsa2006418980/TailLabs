@@ -26,21 +26,48 @@ document.addEventListener('click', (event) => {
 window.matchMedia('(min-width: 821px)').addEventListener('change', closeMenu);
 
 const remixButton = document.querySelector('#remix');
-const heroStage = document.querySelector('.ball-stage');
-const heroBalls = [...heroStage.querySelectorAll('.hero-ball')];
-const faceSets = [
-  ['😄', '😊', '😎', '🥳', '😆', '🙂'],
-  ['🤩', '😋', '🙂', '😄', '😎', '🥰'],
-  ['😌', '🥳', '🤗', '😋', '🤩', '😄'],
+const heroArtwork = document.querySelector('#hero-artwork');
+const artworkOptions = [
+  './assets/snakes/stack-play.png',
+  './assets/snakes/tail-glide.png',
+  './assets/snakes/sleeping-basket.png',
+  './assets/snakes/jumping-laugh.png',
+  './assets/snakes/strawberry-tail.png',
+  './assets/snakes/curled-sleep.png',
 ];
 let remixCount = 0;
-remixButton.addEventListener('click', () => {
-  remixCount++;
-  heroStage.classList.toggle('remixed', remixCount % 2 === 1);
-  heroBalls.forEach((ball, index) => {
-    ball.textContent = faceSets[remixCount % faceSets.length][index];
-  });
+let artworkChanging = false;
+remixButton.addEventListener('click', async () => {
+  if (artworkChanging) return;
+  artworkChanging = true;
+  const nextIndex = (remixCount + 1) % artworkOptions.length;
+  const nextArtwork = new Image();
+  nextArtwork.src = artworkOptions[nextIndex];
+  try {
+    await nextArtwork.decode();
+    heroArtwork.classList.add('is-changing');
+    window.setTimeout(() => {
+      heroArtwork.src = artworkOptions[nextIndex];
+      remixCount = nextIndex;
+      requestAnimationFrame(() => heroArtwork.classList.remove('is-changing'));
+      artworkChanging = false;
+    }, 180);
+  } catch {
+    artworkChanging = false;
+  }
 });
+
+const revealSections = document.querySelectorAll('.plans-section, .showcase, .consultation, .addons, .contact, .details-section');
+if ('IntersectionObserver' in window && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+  document.documentElement.classList.add('scroll-reveal-ready');
+  const revealObserver = new IntersectionObserver((entries) => {
+    entries.forEach((entry) => entry.target.classList.toggle('is-visible', entry.isIntersecting));
+  }, { rootMargin: '-10% 0px -10% 0px', threshold: 0 });
+  revealSections.forEach((section) => {
+    section.classList.add('scroll-reveal');
+    revealObserver.observe(section);
+  });
+}
 
 const tabs = [...document.querySelectorAll('[role="tab"]')];
 const art = document.querySelector('.showcase-art');
