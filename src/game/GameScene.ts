@@ -5,6 +5,7 @@ import { SpawnSystem } from '../systems/SpawnSystem';
 import { StickinessSystem } from '../systems/StickinessSystem';
 import { RoundSession } from '../systems/RoundSession';
 import { TowerCamera } from '../systems/TowerCamera';
+import { TowerSupportSystem } from '../systems/TowerSupportSystem';
 import { GameSounds } from '../systems/GameSounds';
 import { GameUI } from '../ui/GameUI';
 import { bindControls } from '../ui/controls';
@@ -37,11 +38,11 @@ export class GameScene extends Phaser.Scene {
   private hidden = false;
   private worldCamera!: Phaser.Cameras.Scene2D.Camera;
   private readonly towerCamera = new TowerCamera();
+  private readonly towerSupport = new TowerSupportSystem();
   private readonly sounds = new GameSounds();
   private nextImage!: Phaser.GameObjects.Image;
   private nextLabel!: Phaser.GameObjects.Text;
   private nextTexture = '';
-  private readonly supportIds = new Set<number>();
   private readonly pillarBodies: MatterJS.BodyType[] = [];
   private pillarVisual?: Phaser.GameObjects.Graphics;
   private lastHudAt = -Infinity;
@@ -77,7 +78,9 @@ export class GameScene extends Phaser.Scene {
       .setScroll(this.layout.chamberLeft, this.layout.chamberTop);
     this.worldCamera.ignore(hud);
     this.createPlatform(world);
-    this.spawner = new SpawnSystem(this, world, this.round.target, this.layout, () => this.sounds.playSettle());
+    this.spawner = new SpawnSystem(this, world, this.round.target, this.layout, (piece) => {
+      this.towerSupport.onFreeze(piece.id); this.sounds.playSettle();
+    });
     this.guide = this.add.graphics(); world.add(this.guide);
     this.outlines = this.add.graphics(); world.add(this.outlines);
     this.rescueHighlights = this.add.graphics().setDepth(4); world.add(this.rescueHighlights);
@@ -103,8 +106,7 @@ export class GameScene extends Phaser.Scene {
         const a = pair.bodyA.parent, b = pair.bodyB.parent;
         const pieceA = this.spawner.getOrb(a.id), pieceB = this.spawner.getOrb(b.id);
         if (pieceA?.grabbed || pieceB?.grabbed) continue;
-        if (pieceA && (this.supportIds.has(b.id) || pieceB?.hasLanded)) pieceA.hasLanded = true;
-        if (pieceB && (this.supportIds.has(a.id) || pieceA?.hasLanded)) pieceB.hasLanded = true;
+        this.towerSupport.beginContact(a.id, b.id, pair.id);
         this.stickiness.beginContact(a.id, b.id, this.round.elapsedMilliseconds, pair.id);
         const normal = pair.collision.normal;
         // Phaser's event typings omit the count used by its bundled Matter version.
@@ -134,10 +136,17 @@ export class GameScene extends Phaser.Scene {
       impacts.forEach((impact, id) => this.spawner.getOrb(id)?.impact(impact.x, impact.y, impact.nx, impact.ny, impact.strength));
     };
     const onCollisionEnd = (event: Phaser.Physics.Matter.Events.CollisionEndEvent) => {
-      for (const pair of event.pairs) this.stickiness.endContact(pair.bodyA.parent.id, pair.bodyB.parent.id, pair.id);
+      for (const pair of event.pairs) {
+        this.stickiness.endContact(pair.bodyA.parent.id, pair.bodyB.parent.id, pair.id);
+        this.towerSupport.endContact(pair.bodyA.parent.id, pair.bodyB.parent.id, pair.id);
+      }
+    };
+    const onCollisionActive = (event: Phaser.Physics.Matter.Events.CollisionActiveEvent) => {
+      for (const pair of event.pairs) this.towerSupport.beginContact(pair.bodyA.parent.id, pair.bodyB.parent.id, pair.id);
     };
     this.matter.world.on('collisionstart', onCollisionStart);
     this.matter.world.on('collisionend', onCollisionEnd);
+    this.matter.world.on('collisionactive', onCollisionActive);
     const toggle = document.querySelector<HTMLInputElement>('#outline-toggle');
     if (toggle) toggle.checked = this.showOutlines;
     const onToggle = () => { this.showOutlines = toggle?.checked ?? false; this.requestFrame(); };
@@ -165,6 +174,7 @@ export class GameScene extends Phaser.Scene {
         if (pointer.wasTouch) this.touchId = pointer.id;
         this.rescueTouchIdentifier = pointer.wasTouch ? pointer.identifier : undefined;
         this.stickiness.suspend(caught.id);
+        this.towerSupport.detach(caught.id);
         this.spawner.beginRescue(caught);
         this.round.resetEscapeTimer(caught.id);
         this.game.canvas.style.cursor = 'grabbing';
@@ -245,7 +255,7 @@ export class GameScene extends Phaser.Scene {
       this.input.off('pointerup', onUp); this.input.off('pointerupoutside', cancelTouch);
       this.input.keyboard?.off('keydown-SPACE', onKeyboardDrop); this.input.keyboard?.off('keydown-DOWN', onKeyboardDrop);
       this.input.keyboard?.off('keydown-LEFT', onKeyboardMove); this.input.keyboard?.off('keydown-RIGHT', onKeyboardMove);
-      matterWorld.off('collisionstart', onCollisionStart); matterWorld.off('collisionend', onCollisionEnd);
+      matterWorld.off('collisionstart', onCollisionStart); matterWorld.off('collisionend', onCollisionEnd); matterWorld.off('collisionactive', onCollisionActive);
       toggle?.removeEventListener('change', onToggle); document.removeEventListener('visibilitychange', onVisibility);
       for (const event of ['pointerdown', 'pointermove', 'pointerup', 'pointercancel']) canvas.removeEventListener(event, wakePointer);
       window.removeEventListener('pointerup', wakePointer);
@@ -256,7 +266,7 @@ export class GameScene extends Phaser.Scene {
       window.removeEventListener('blur', cancelPointer);
       if (this.rescue.pointerId !== undefined) this.rescue.release(this.rescue.pointerId);
       this.touchId = undefined;
-      this.spawner.destroy(); this.stickiness.clear();
+      this.spawner.destroy(); this.stickiness.clear(); this.towerSupport.clear();
       this.sounds.destroy();
     };
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, cleanup);
@@ -326,7 +336,7 @@ export class GameScene extends Phaser.Scene {
     this.round = new RoundSession([10, 50, 100, 500].includes(target) ? target : ROUND.target);
     this.stickiness.setDelayMs(getRoundAssist(this.round.target).stickinessDelayMs);
     this.updateContactTuning(0);
-    this.spawner.reset(this.round.target); this.stickiness.clear();
+    this.spawner.reset(this.round.target); this.stickiness.clear(); this.towerSupport.clear();
     this.updateLightPillars(this.round.target);
     // Flush the detector's references to the destroyed round before sleeping again.
     this.matter.world.step(1000 / 60);
@@ -346,7 +356,7 @@ export class GameScene extends Phaser.Scene {
       const pieces = this.spawner.pieces;
       const ended = this.round.update(elapsed, pieces, this.layout.platformY, this.layout);
       this.updateContactTuning(pieces.length);
-      const offset = this.towerCamera.update(this.round.towerTop, delta, this.layout.chamberTop + this.layout.chamberHeight * 0.46);
+      const offset = this.towerCamera.update(this.towerSupport.top, delta, this.layout.chamberTop + this.layout.chamberHeight * 0.46);
       const cameraY = this.layout.chamberTop + offset;
       if (this.worldCamera.scrollX !== this.layout.chamberLeft || this.worldCamera.scrollY !== cameraY) this.worldCamera.setScroll(this.layout.chamberLeft, cameraY);
       this.spawner.setSpawnY(this.layout.spawnY + offset);
@@ -441,7 +451,7 @@ export class GameScene extends Phaser.Scene {
     const piece = this.spawner.drop(); if (!piece) return;
     this.sounds.playDrop();
     this.round.elapsedMilliseconds += this.playClock.consume(now);
-    this.round.recordDrop(); this.stickiness.track(piece); this.lastDropAt = now;
+    this.round.recordDrop(); this.stickiness.track(piece); this.towerSupport.track(piece); this.lastDropAt = now;
     this.updatePreview(); this.refreshControls(); this.refreshReadout();
     this.requestFrame();
   }
@@ -515,7 +525,7 @@ export class GameScene extends Phaser.Scene {
     const centerX = this.layout.width / 2;
     const platformWidth = this.layout.safeRight - this.layout.safeLeft;
     const platform = this.matter.add.rectangle(centerX, this.layout.platformY + this.layout.platformDepth / 2, platformWidth, this.layout.platformDepth, { isStatic: true, friction: 0.75, label: 'magic-circle-platform' });
-    this.supportIds.clear(); this.supportIds.add(platform.id);
+    this.towerSupport.addFloor(platform.id);
     this.stickiness.addSupport(platform.id);
     this.updateLightPillars(this.round.target, parent);
     const circleHeight = Math.min(platformWidth * 0.43, Math.max(60, (this.layout.chamberBottom - this.layout.platformY - 12) * 2));
@@ -526,7 +536,6 @@ export class GameScene extends Phaser.Scene {
   private updateLightPillars(target: number, parent?: Phaser.GameObjects.Container): void {
     for (const wall of this.pillarBodies) {
       this.matter.world.remove(wall);
-      this.supportIds.delete(wall.id);
       this.stickiness.removeSupport(wall.id);
     }
     this.pillarBodies.length = 0;
@@ -549,7 +558,6 @@ export class GameScene extends Phaser.Scene {
         isStatic: true, friction: 0.8, frictionStatic: 0.9, restitution: 0.05, label: 'magic-circle-light-pillar',
       });
       this.pillarBodies.push(wall);
-      this.supportIds.add(wall.id);
       this.stickiness.addSupport(wall.id);
       pillars.lineStyle(pillarWidth * 1.85, 0x93ae93, 0.09).lineBetween(x, top, x, bottom);
       pillars.lineStyle(pillarWidth * 0.85, 0xc2b47d, 0.17).lineBetween(x, top + 3, x, bottom);

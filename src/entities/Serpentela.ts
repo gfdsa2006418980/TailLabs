@@ -20,7 +20,6 @@ export class Serpentela implements StickyTarget {
   private grabbedState = false;
   private glow?: Phaser.GameObjects.Container;
   private glowTween?: Phaser.Tweens.Tween;
-  hasLanded = false;
 
   constructor(scene: Phaser.Scene, x: number, y: number, definition: SerpentelaDefinition, parent?: Phaser.GameObjects.Container, private readonly onStable?: () => void) {
     this.scene = scene;
@@ -79,7 +78,6 @@ export class Serpentela implements StickyTarget {
 
   releaseFromRescue(): void {
     this.grabbedState = false;
-    this.hasLanded = false;
     this.visual.setDepth(2);
     this.release();
   }

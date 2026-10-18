@@ -7,7 +7,7 @@ import { StickinessSystem } from '../src/systems/StickinessSystem.ts';
 const area = { safeLeft: 120, safeRight: 400, platformY: 548 };
 function piece(id, x = 130, y = 480) {
   const value = {
-    id, frozen: false, grabbed: false, hasLanded: true,
+    id, frozen: false, grabbed: false,
     body: { position: { x, y }, velocity: { x: -1, y: 0 }, bounds: { min: { x: x - 20, y: y - 20 }, max: { x: x + 20, y: y + 20 } } },
     get bounds() { return this.body.bounds; },
     containsPoint(px, py, padding) { return Math.abs(px - this.body.position.x) <= 20 + padding && Math.abs(py - this.body.position.y) <= 20 + padding; },
@@ -16,7 +16,7 @@ function piece(id, x = 130, y = 480) {
       this.body.position = { x: px, y: py };
       this.body.bounds = { min: { x: px - 20, y: py - 20 }, max: { x: px + 20, y: py + 20 } };
     },
-    releaseFromRescue() { this.grabbed = false; this.hasLanded = false; },
+    releaseFromRescue() { this.grabbed = false; },
   };
   return value;
 }
@@ -28,13 +28,13 @@ test('rescue selects outward-sliding or fallen pieces, leaving fresh drops and s
   assert.equal(canRescue(loose, area), false);
   loose.moveTo(420, 480);
   assert.equal(canRescue(loose, area), true);
-  loose.moveTo(260, 610); loose.hasLanded = false;
+  loose.moveTo(260, 610);
   assert.equal(canRescue(loose, area), true);
   loose.moveTo(130, 180); loose.body.velocity.x = 0;
   assert.equal(canRescue(loose, area), false);
   loose.body.velocity.x = -1;
   assert.equal(canRescue(loose, area), true);
-  loose.hasLanded = true; loose.frozen = true;
+  loose.frozen = true;
   assert.equal(canRescue(loose, area), false);
 });
 
@@ -58,7 +58,6 @@ test('one pointer owns the grab and preserves the point where the piece was caug
   assert.deepEqual(caught.body.position, { x: 255, y: 305 });
   assert.equal(rescue.release(1), caught);
   assert.equal(caught.grabbed, false);
-  assert.equal(caught.hasLanded, false);
   assert.equal(rescue.active, undefined);
   assert.equal(rescue.release(1), undefined);
 });

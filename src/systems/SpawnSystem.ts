@@ -18,7 +18,7 @@ export class SpawnSystem {
   private spawnY: number;
   private lastX: number;
 
-  constructor(private readonly scene: Phaser.Scene, private readonly parent: Phaser.GameObjects.Container, target: number, private readonly layout: StageLayout, private readonly onStable: () => void = () => undefined) {
+  constructor(private readonly scene: Phaser.Scene, private readonly parent: Phaser.GameObjects.Container, target: number, private readonly layout: StageLayout, private readonly onStable: (piece: Serpentela) => void = () => undefined) {
     this.spawnY = layout.spawnY;
     this.lastX = layout.width / 2;
     this.reset(target);
@@ -86,7 +86,7 @@ export class SpawnSystem {
   }
   private create(definition: SerpentelaDefinition): Serpentela {
     const orb = new Serpentela(this.scene, this.lastX, this.spawnY, definition, this.parent, () => {
-      this.moving.delete(orb); this.onStable();
+      this.moving.delete(orb); this.onStable(orb);
     });
     this.orbs.set(orb.id, orb);
     this.lastX = Phaser.Math.Clamp(this.lastX, this.layout.safeLeft + orb.leftExtent, this.layout.safeRight - orb.rightExtent);
