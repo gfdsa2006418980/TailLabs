@@ -10,7 +10,7 @@ import { GameUI } from '../ui/GameUI';
 import { bindControls } from '../ui/controls';
 import { subscribeLanguage, t } from '../ui/i18n';
 import { createStageLayout, type StageLayout } from './StageConfig';
-import { ROUND } from './RoundConfig';
+import { getRoundAssist, ROUND } from './RoundConfig';
 import { CONTACT_TUNING_THRESHOLDS, CONTACT_TUNING_TIERS } from './PhysicsTuning';
 import { performancePreferences } from '../systems/PerformancePreferences';
 import { PlayClock } from '../systems/PlayClock';
@@ -276,6 +276,7 @@ export class GameScene extends Phaser.Scene {
   }
   private startRound(target: number): void {
     this.round = new RoundSession([10, 50, 100, 500].includes(target) ? target : ROUND.target);
+    this.stickiness.setDelayMs(getRoundAssist(this.round.target).stickinessDelayMs);
     this.updateContactTuning(0);
     this.spawner.reset(this.round.target); this.stickiness.clear();
     this.updateLightPillars(this.round.target);
@@ -438,7 +439,9 @@ export class GameScene extends Phaser.Scene {
     this.pillarVisual = undefined;
 
     const scale = target === 10 ? 0 : target === 50 ? 0.5 : target === 500 ? 2 : 1;
-    const pillarHeight = this.layout.lightPillarHeight * scale;
+    const heightMultiplier = getRoundAssist(target).lightPillarHeightMultiplier;
+    const maxPillarHeight = Math.max(0, this.layout.platformY - this.layout.chamberTop);
+    const pillarHeight = Math.min(this.layout.lightPillarHeight * scale * heightMultiplier, maxPillarHeight);
     if (!pillarHeight) return;
 
     const pillarWidth = this.layout.lightPillarWidth;

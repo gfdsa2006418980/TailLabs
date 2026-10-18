@@ -24,13 +24,16 @@ interface StickyEntry {
   dampingMs: number;
 }
 
-/** Contact → 3-second grace → progressive damping → stable rest → static support. */
+/** Contact → challenge-specific delay → progressive damping → stable rest → static support. */
 export class StickinessSystem {
   private entries = new Map<number, StickyEntry>();
   private supports = new Set<number>();
   private frozenTotal = 0;
+  private delayMs: number = STICKINESS.delayMs;
 
   get frozenCount(): number { return this.frozenTotal; }
+
+  setDelayMs(delayMs: number): void { this.delayMs = Math.max(0, delayMs); }
 
   addSupport(id: number): void { this.supports.add(id); }
   removeSupport(id: number): void { this.supports.delete(id); }
@@ -53,7 +56,7 @@ export class StickinessSystem {
     let changed = false;
     for (const entry of this.entries.values()) {
       if (entry.frozen || entry.firstContactAt === undefined) continue;
-      if (entry.contacts.size === 0 || now - entry.firstContactAt < STICKINESS.delayMs) {
+      if (entry.contacts.size === 0 || now - entry.firstContactAt < this.delayMs) {
         entry.stillSince = undefined;
         continue;
       }
