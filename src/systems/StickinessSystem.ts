@@ -22,6 +22,8 @@ interface StickyEntry {
   stillSince?: number;
   frozen: boolean;
   dampingMs: number;
+  suspended?: boolean;
+  freshAfterRescue?: boolean;
 }
 
 /** Contact → challenge-specific delay → progressive damping → stable rest → static support. */
@@ -42,21 +44,38 @@ export class StickinessSystem {
     this.entries.set(target.id, { target, contacts: new Set(), frozen: false, dampingMs: 0 });
   }
 
+  suspend(id: number): void {
+    const entry = this.entries.get(id);
+    if (!entry || entry.frozen) return;
+    entry.suspended = true;
+    entry.freshAfterRescue = true;
+    entry.firstContactAt = undefined;
+    entry.stillSince = undefined;
+    entry.dampingMs = 0;
+  }
+
+  resume(id: number): void {
+    const entry = this.entries.get(id);
+    if (entry) { entry.suspended = false; entry.firstContactAt = undefined; }
+  }
+
   beginContact(a: number, b: number, now: number, contactId = `${Math.min(a, b)}:${Math.max(a, b)}`): void {
     this.touch(a, b, now, contactId);
     this.touch(b, a, now, contactId);
   }
 
   endContact(a: number, b: number, contactId = `${Math.min(a, b)}:${Math.max(a, b)}`): void {
-    this.entries.get(a)?.contacts.delete(contactId);
-    this.entries.get(b)?.contacts.delete(contactId);
+    this.removeContact(a, contactId);
+    this.removeContact(b, contactId);
   }
 
   update(now: number, delta: number): boolean {
     let changed = false;
     for (const entry of this.entries.values()) {
-      if (entry.frozen || entry.firstContactAt === undefined) continue;
-      if (entry.contacts.size === 0 || now - entry.firstContactAt < this.delayMs) {
+      if (entry.frozen || entry.suspended) continue;
+      if (entry.contacts.size === 0) { entry.stillSince = undefined; continue; }
+      entry.firstContactAt ??= now;
+      if (now - entry.firstContactAt < this.delayMs) {
         entry.stillSince = undefined;
         continue;
       }
@@ -87,10 +106,16 @@ export class StickinessSystem {
     this.frozenTotal = 0;
   }
 
+  private removeContact(id: number, contactId: string): void {
+    const entry = this.entries.get(id);
+    entry?.contacts.delete(contactId);
+    if (entry?.freshAfterRescue && !entry.contacts.size) entry.firstContactAt = undefined;
+  }
+
   private touch(id: number, other: number, now: number, contactId: string): void {
     const entry = this.entries.get(id);
     if (!entry || entry.frozen || (!this.supports.has(other) && !this.entries.has(other))) return;
     entry.contacts.add(contactId);
-    entry.firstContactAt ??= now;
+    if (!entry.suspended) entry.firstContactAt ??= now;
   }
 }

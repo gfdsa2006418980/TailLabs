@@ -14,6 +14,7 @@ import { getRoundAssist, ROUND } from './RoundConfig';
 import { CONTACT_TUNING_THRESHOLDS, CONTACT_TUNING_TIERS } from './PhysicsTuning';
 import { performancePreferences } from '../systems/PerformancePreferences';
 import { PlayClock } from '../systems/PlayClock';
+import { canRescue, RescueSystem } from '../systems/RescueSystem';
 
 const INK = 0x345442;
 const FONT = '"Segoe UI", "Microsoft JhengHei", sans-serif';
@@ -25,6 +26,10 @@ export class GameScene extends Phaser.Scene {
   private lastDropAt = -Infinity;
   private stickiness!: StickinessSystem;
   private outlines!: Phaser.GameObjects.Graphics;
+  private rescueHighlights!: Phaser.GameObjects.Graphics;
+  private readonly rescue = new RescueSystem<Serpentela>();
+  private rescueTouchIdentifier?: number;
+  private rescueDangerVisible = false;
   private showOutlines = new URLSearchParams(location.search).get('outline') === '1';
   private round = new RoundSession();
   private ui!: GameUI;
@@ -75,6 +80,7 @@ export class GameScene extends Phaser.Scene {
     this.spawner = new SpawnSystem(this, world, this.round.target, this.layout, () => this.sounds.playSettle());
     this.guide = this.add.graphics(); world.add(this.guide);
     this.outlines = this.add.graphics(); world.add(this.outlines);
+    this.rescueHighlights = this.add.graphics().setDepth(4); world.add(this.rescueHighlights);
     this.ui = new GameUI({
       start: (target) => this.startRound(target),
       restart: () => this.startRound(this.round.target),
@@ -96,6 +102,7 @@ export class GameScene extends Phaser.Scene {
       for (const pair of event.pairs) {
         const a = pair.bodyA.parent, b = pair.bodyB.parent;
         const pieceA = this.spawner.getOrb(a.id), pieceB = this.spawner.getOrb(b.id);
+        if (pieceA?.grabbed || pieceB?.grabbed) continue;
         if (pieceA && (this.supportIds.has(b.id) || pieceB?.hasLanded)) pieceA.hasLanded = true;
         if (pieceB && (this.supportIds.has(a.id) || pieceA?.hasLanded)) pieceB.hasLanded = true;
         this.stickiness.beginContact(a.id, b.id, this.round.elapsedMilliseconds, pair.id);
@@ -141,22 +148,53 @@ export class GameScene extends Phaser.Scene {
     const inChamber = (pointer: Phaser.Input.Pointer) => pointer.x >= this.layout.chamberLeft && pointer.x <= this.layout.chamberRight
       && pointer.y >= this.layout.chamberTop && pointer.y <= this.layout.chamberBottom;
     const onMove = (pointer: Phaser.Input.Pointer) => {
+      if (this.rescue.active) { if (this.isPlaying) this.moveRescue(pointer); return; }
       if (!this.isPlaying || !inChamber(pointer) || (pointer.wasTouch && pointer.id !== this.touchId)) return;
-      this.spawner.moveTo(this.worldCamera.getWorldPoint(pointer.x, pointer.y).x);
+      const point = this.worldCamera.getWorldPoint(pointer.x, pointer.y);
+      if (!pointer.wasTouch) this.game.canvas.style.cursor = this.rescue.pick(this.spawner.movingPieces, point.x, point.y, this.layout, 7) ? 'grab' : '';
+      this.spawner.moveTo(point.x);
     };
     const onDown = (pointer: Phaser.Input.Pointer) => {
       if (!this.isPlaying || !inChamber(pointer)) return;
       if (pointer.wasTouch && this.touchId !== undefined && this.touchId !== pointer.id) return;
       if (!pointer.wasTouch && pointer.button !== 0) return;
-      this.spawner.moveTo(this.worldCamera.getWorldPoint(pointer.x, pointer.y).x);
+      if (this.rescue.active) return;
+      const point = this.worldCamera.getWorldPoint(pointer.x, pointer.y);
+      const caught = this.rescue.pick(this.spawner.movingPieces, point.x, point.y, this.layout, pointer.wasTouch ? 14 : 7);
+      if (caught && this.rescue.begin(caught, pointer.id, point.x, point.y)) {
+        if (pointer.wasTouch) this.touchId = pointer.id;
+        this.rescueTouchIdentifier = pointer.wasTouch ? pointer.identifier : undefined;
+        this.stickiness.suspend(caught.id);
+        this.spawner.beginRescue(caught);
+        this.round.resetEscapeTimer(caught.id);
+        this.game.canvas.style.cursor = 'grabbing';
+        this.refreshControls(); this.refreshReadout(); this.requestFrame();
+        return;
+      }
+      this.spawner.moveTo(point.x);
       if (pointer.wasTouch) { if (this.touchId === undefined) this.touchId = pointer.id; } else this.drop();
     };
     const onUp = (pointer: Phaser.Input.Pointer) => {
+      if (this.rescue.pointerId === pointer.id) {
+        this.moveRescue(pointer); this.finishRescue(pointer.id); return;
+      }
       if (!pointer.wasTouch || pointer.id !== this.touchId) return;
       this.touchId = undefined;
       if (inChamber(pointer)) this.drop();
     };
-    const cancelTouch = () => { this.touchId = undefined; };
+    const cancelTouch = (pointer: Phaser.Input.Pointer) => {
+      if (this.rescue.pointerId === pointer.id) this.finishRescue(pointer.id, true);
+      if (pointer.id === this.touchId) this.touchId = undefined;
+    };
+    const cancelPointer = () => {
+      if (this.rescue.pointerId !== undefined) this.finishRescue(this.rescue.pointerId, true);
+      this.touchId = undefined;
+    };
+    const cancelNativePointer = (event: PointerEvent) => { if (event.pointerType !== 'touch') cancelPointer(); };
+    const cancelNativeTouch = (event: TouchEvent) => {
+      if (this.rescue.active && !Array.from(event.changedTouches).some((touch) => touch.identifier === this.rescueTouchIdentifier)) return;
+      cancelPointer();
+    };
     const onKeyboardDrop = (event: KeyboardEvent) => {
       if (!this.isPlaying) return;
       if (document.querySelector('dialog[open]') || document.activeElement instanceof HTMLButtonElement || document.activeElement instanceof HTMLInputElement || document.activeElement instanceof HTMLSelectElement) return;
@@ -175,7 +213,7 @@ export class GameScene extends Phaser.Scene {
     this.input.keyboard?.on('keydown-RIGHT', onKeyboardMove);
     const unbind = bindControls({
       move: (direction) => {
-        if (this.isPlaying) { this.spawner.moveTo(this.spawner.x + direction * 28); this.requestFrame(); }
+        if (this.isPlaying && !this.rescue.active) { this.spawner.moveTo(this.spawner.x + direction * 28); this.requestFrame(); }
       },
       drop: () => this.drop(),
     });
@@ -189,6 +227,9 @@ export class GameScene extends Phaser.Scene {
     const wakeResize = () => queueMicrotask(this.requestFrame);
     const canvas = this.game.canvas;
     for (const event of ['pointerdown', 'pointermove', 'pointerup', 'pointercancel']) canvas.addEventListener(event, wakePointer);
+    canvas.addEventListener('pointercancel', cancelNativePointer);
+    canvas.addEventListener('touchcancel', cancelNativeTouch);
+    window.addEventListener('blur', cancelPointer);
     window.addEventListener('pointerup', wakePointer);
     window.addEventListener('keydown', wakeKeyboard); window.addEventListener('keyup', wakeKeyboard);
     this.scale.on(Phaser.Scale.Events.RESIZE, wakeResize);
@@ -211,6 +252,10 @@ export class GameScene extends Phaser.Scene {
       window.removeEventListener('keydown', wakeKeyboard); window.removeEventListener('keyup', wakeKeyboard);
       this.scale.off(Phaser.Scale.Events.RESIZE, wakeResize);
       this.game.events.off(Phaser.Core.Events.POST_RENDER, this.afterRender);
+      canvas.removeEventListener('pointercancel', cancelNativePointer); canvas.removeEventListener('touchcancel', cancelNativeTouch);
+      window.removeEventListener('blur', cancelPointer);
+      if (this.rescue.pointerId !== undefined) this.rescue.release(this.rescue.pointerId);
+      this.touchId = undefined;
       this.spawner.destroy(); this.stickiness.clear();
       this.sounds.destroy();
     };
@@ -220,6 +265,7 @@ export class GameScene extends Phaser.Scene {
 
   private get isPlaying(): boolean { return this.round.state === 'playing' && !this.paused && !this.hidden; }
   private refreshPaused(): void {
+    if (!this.isPlaying && this.rescue.pointerId !== undefined) this.finishRescue(this.rescue.pointerId, true);
     this.playClock.setRunning(this.isPlaying, performance.now());
     this.refreshControls(); this.requestFrame();
   }
@@ -236,7 +282,7 @@ export class GameScene extends Phaser.Scene {
   private readonly afterRender = (): void => {
     if (!this.spawner || this.prewarmIndex < SERPENTELAS.length) return;
     this.matter.world.enabled = this.isPlaying && this.spawner.hasMovingPieces;
-    const inputActive = this.touchId !== undefined || this.cursors?.left.isDown || this.cursors?.right.isDown;
+    const inputActive = !!this.rescue.active || this.touchId !== undefined || this.cursors?.left.isDown || this.cursors?.right.isDown;
     if (this.isPlaying && (this.spawner.hasMovingPieces || this.spawner.hasVisualActivity || !this.towerCamera.settled || inputActive)) return;
     this.game.loop.sleep();
     if (this.isPlaying && this.idleHudTimer === undefined) {
@@ -263,18 +309,20 @@ export class GameScene extends Phaser.Scene {
   private refreshControls(): void {
     for (const id of ['move-left', 'move-right', 'drop-button']) {
       const button = document.getElementById(id) as HTMLButtonElement | null;
-      if (button) button.disabled = !this.isPlaying || !this.round.remaining;
+      if (button) button.disabled = !this.isPlaying || !this.round.remaining || !!this.rescue.active;
     }
     const drop = document.getElementById('drop-button') as HTMLButtonElement | null;
     if (drop && this.spawner) {
       const waiting = this.isPlaying && this.round.remaining > 0 && (!this.spawner.canRelease || performance.now() - this.lastDropAt < ROUND.dropCooldownMs);
       drop.disabled ||= waiting;
-      const label = !this.round.remaining ? t('dropWaitingFinal') : waiting ? t('dropWaiting') : t('drop');
+      const label = this.rescue.active ? t('rescueHolding') : !this.round.remaining ? t('dropWaitingFinal') : waiting ? t('dropWaiting') : t('drop');
       const text = document.getElementById('drop-label');
       if (text && text.textContent !== label) text.textContent = label;
     }
   }
   private startRound(target: number): void {
+    if (this.rescue.pointerId !== undefined) this.finishRescue(this.rescue.pointerId, true);
+    this.rescueDangerVisible = false; this.rescueHighlights.clear(); this.game.canvas.style.cursor = '';
     this.round = new RoundSession([10, 50, 100, 500].includes(target) ? target : ROUND.target);
     this.stickiness.setDelayMs(getRoundAssist(this.round.target).stickinessDelayMs);
     this.updateContactTuning(0);
@@ -308,7 +356,7 @@ export class GameScene extends Phaser.Scene {
         this.refreshPaused(); this.refreshReadout(); this.ui.finish(result);
       }
       const direction = Number(this.cursors?.right.isDown) - Number(this.cursors?.left.isDown);
-      if (direction && !document.querySelector('dialog[open]')) this.spawner.moveTo(this.spawner.x + direction * Math.min(delta, 50) * 0.32);
+      if (direction && !this.rescue.active && !document.querySelector('dialog[open]')) this.spawner.moveTo(this.spawner.x + direction * Math.min(delta, 50) * 0.32);
       if (performance.now() - this.lastHudAt > performancePreferences.profile.hudIntervalMs) {
         this.refreshReadout(); this.refreshControls(); this.lastHudAt = performance.now();
       }
@@ -321,6 +369,7 @@ export class GameScene extends Phaser.Scene {
       top: this.worldCamera.scrollY - margin, bottom: this.worldCamera.scrollY + this.worldCamera.height + margin,
     });
     this.spawner.sync(this.isPlaying ? delta : 0, this.visibleBounds);
+    this.refreshRescueHighlights();
     if (this.showOutlines) {
       this.outlines.clear(); this.spawner.drawOutlines(this.outlines); this.outlinesWereVisible = true;
     } else if (this.outlinesWereVisible) {
@@ -373,7 +422,7 @@ export class GameScene extends Phaser.Scene {
     }
   }
   private refreshGuide(): void {
-    const visible = this.round.state === 'playing' && this.round.remaining > 0;
+    const visible = this.round.state === 'playing' && this.round.remaining > 0 && !this.rescue.active;
     if (!visible) {
       if (this.guideVisible) this.guide.clear();
       this.guideVisible = false; this.lastGuideX = Number.NaN; this.lastGuideOffset = Number.NaN;
@@ -388,7 +437,7 @@ export class GameScene extends Phaser.Scene {
   }
   private drop(): void {
     const now = performance.now();
-    if (!this.isPlaying || !this.round.remaining || now - this.lastDropAt < ROUND.dropCooldownMs) return;
+    if (!this.isPlaying || this.rescue.active || !this.round.remaining || now - this.lastDropAt < ROUND.dropCooldownMs) return;
     const piece = this.spawner.drop(); if (!piece) return;
     this.sounds.playDrop();
     this.round.elapsedMilliseconds += this.playClock.consume(now);
@@ -411,9 +460,55 @@ export class GameScene extends Phaser.Scene {
     const message = this.round.state === 'ready' ? t('ready')
       : this.round.state === 'completed' ? t('completedStatus')
         : this.round.state === 'failed' ? t('failedStatus')
-          : this.round.warning ? t('warning') : !this.round.remaining ? t('waitingFinal') : t('placedStable', { count: this.round.placedCount });
+          : this.rescue.active ? t('rescuing') : this.round.warning || this.rescueDangerVisible ? t('warning') : !this.round.remaining ? t('waitingFinal') : t('placedStable', { count: this.round.placedCount });
     const statusSymbol = this.round.warning ? '!' : this.round.state === 'ready' ? '○' : !this.round.remaining ? '…' : '✓';
     this.ui.render(this.round.remaining, this.round.elapsedMilliseconds, this.round.score, message, statusSymbol, this.round.placedCount, this.round.warning);
+    const hint = document.querySelector<HTMLElement>('[data-i18n="controlHint"]');
+    const text = t(this.rescue.active || this.rescueDangerVisible ? 'rescueHint' : 'controlHint');
+    if (hint && hint.textContent !== text) hint.textContent = text;
+  }
+
+  private moveRescue(pointer: Phaser.Input.Pointer): void {
+    const x = Phaser.Math.Clamp(pointer.x, this.layout.chamberLeft, this.layout.chamberRight);
+    const y = Phaser.Math.Clamp(pointer.y, this.layout.chamberTop, this.layout.chamberBottom);
+    const point = this.worldCamera.getWorldPoint(x, y);
+    this.rescue.move(pointer.id, point.x, point.y);
+  }
+
+  private finishRescue(pointerId: number, returnToSpawn = false): void {
+    const piece = this.rescue.active;
+    if (!piece || this.rescue.pointerId !== pointerId) return;
+    const solids = this.matter.world.getAllBodies().filter((body) => body !== piece.body && body.collisionFilter.mask !== 0);
+    // A ghost-held body must not become dynamic inside the settled tower.
+    const overlapping = this.matter.intersectBody(piece.body, solids).length > 0;
+    if (returnToSpawn || overlapping) {
+      const bounds = piece.body.bounds, position = piece.body.position;
+      const left = position.x - bounds.min.x, right = bounds.max.x - position.x, bottom = bounds.max.y - position.y;
+      const x = Phaser.Math.Clamp(position.x, this.layout.safeLeft + left + 2, this.layout.safeRight - right - 2);
+      let top = this.layout.spawnY + this.towerCamera.offset;
+      for (const body of solids) {
+        if (body.bounds.max.x > x - left && body.bounds.min.x < x + right) top = Math.min(top, body.bounds.min.y - bottom - 10);
+      }
+      piece.moveTo(x, top);
+    }
+    this.rescue.release(pointerId);
+    this.stickiness.resume(piece.id); this.spawner.endRescue(piece); this.round.resetEscapeTimer(piece.id);
+    this.touchId = undefined; this.rescueTouchIdentifier = undefined;
+    this.lastDropAt = performance.now(); this.game.canvas.style.cursor = '';
+    this.refreshControls(); this.refreshReadout(); this.requestFrame();
+  }
+
+  private refreshRescueHighlights(): void {
+    let danger = false;
+    this.rescueHighlights.clear();
+    if (this.isPlaying) {
+      for (const piece of this.spawner.movingPieces) {
+        if (!canRescue(piece, this.layout)) continue;
+        piece.drawRescueHighlight(this.rescueHighlights); danger = true;
+      }
+      this.rescue.active?.drawRescueHighlight(this.rescueHighlights);
+    }
+    if (danger !== this.rescueDangerVisible) { this.rescueDangerVisible = danger; this.refreshReadout(); }
   }
   private createPlatform(parent: Phaser.GameObjects.Container): void {
     // An open platform: falling off the sides is now a real failure.

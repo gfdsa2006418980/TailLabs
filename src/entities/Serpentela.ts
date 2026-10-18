@@ -17,6 +17,7 @@ export class Serpentela implements StickyTarget {
   private readonly visual: Phaser.GameObjects.Container;
   private readonly artwork: ElasticArtwork;
   private frozenState = false;
+  private grabbedState = false;
   private glow?: Phaser.GameObjects.Container;
   private glowTween?: Phaser.Tweens.Tween;
   hasLanded = false;
@@ -48,6 +49,7 @@ export class Serpentela implements StickyTarget {
   get id(): number { return this.body.id; }
   get isFrozen(): boolean { return this.frozenState; }
   get frozen(): boolean { return this.frozenState; }
+  get grabbed(): boolean { return this.grabbedState; }
   get hasVisualActivity(): boolean { return this.artwork.isActive || !!this.glow; }
   get bounds(): MatterJS.IBound { return this.body.bounds; }
   get x(): number { return this.physics.x; }
@@ -57,6 +59,38 @@ export class Serpentela implements StickyTarget {
   get angularSpeed(): number { return Math.abs(this.body.angularVelocity); }
 
   moveTo(x: number, y: number): void { this.physics.setPosition(x, y); }
+
+  containsPoint(x: number, y: number, padding = 0): boolean {
+    if (this.scene.matter.query.point([this.body], { x, y }).length) return true;
+    if (padding <= 0) return false;
+    const bounds = this.body.bounds;
+    const dx = Math.max(bounds.min.x - x, 0, x - bounds.max.x);
+    const dy = Math.max(bounds.min.y - y, 0, y - bounds.max.y);
+    return Math.hypot(dx, dy) <= padding;
+  }
+
+  grab(): void {
+    this.grabbedState = true;
+    this.physics.setVelocity(0, 0).setAngularVelocity(0).setStatic(true).setCollidesWith(0);
+    this.artwork.stopEffects();
+    this.visual.setDepth(5);
+    this.visual.parentContainer?.bringToTop(this.visual);
+  }
+
+  releaseFromRescue(): void {
+    this.grabbedState = false;
+    this.hasLanded = false;
+    this.visual.setDepth(2);
+    this.release();
+  }
+
+  setPlacementDimmed(dimmed: boolean): void { this.visual.setAlpha(dimmed ? 0.3 : 1); }
+
+  drawRescueHighlight(graphics: Phaser.GameObjects.Graphics): void {
+    const bounds = this.body.bounds;
+    graphics.lineStyle(1.8, this.grabbedState ? 0x73966a : 0xc78d50, 0.85)
+      .strokeEllipse((bounds.min.x + bounds.max.x) / 2, (bounds.min.y + bounds.max.y) / 2, bounds.max.x - bounds.min.x + 12, bounds.max.y - bounds.min.y + 12);
+  }
 
   release(): void {
     this.physics.setStatic(false).setCollidesWith(0xffffffff).setAwake();

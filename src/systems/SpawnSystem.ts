@@ -29,6 +29,7 @@ export class SpawnSystem {
   get current(): SerpentelaDefinition | undefined { return this.queue.current; }
   get pieces(): readonly Serpentela[] { return this.dropped; }
   get hasMovingPieces(): boolean { return this.moving.size > 0; }
+  get movingPieces(): ReadonlySet<Serpentela> { return this.moving; }
   get hasVisualActivity(): boolean { return this.visualActivity; }
   get canRelease(): boolean {
     if (!this.held) return false;
@@ -58,6 +59,14 @@ export class SpawnSystem {
     return dropped;
   }
   getOrb(id: number): Serpentela | undefined { return this.orbs.get(id); }
+  beginRescue(piece: Serpentela): void {
+    this.moving.delete(piece);
+    this.held?.setPlacementDimmed(true);
+  }
+  endRescue(piece: Serpentela): void {
+    this.moving.add(piece);
+    this.held?.setPlacementDimmed(false);
+  }
   sync(delta: number, view?: VisibilityBounds): void {
     this.visualActivity = false;
     this.orbs.forEach((orb) => { orb.sync(delta, view); this.visualActivity ||= orb.hasVisualActivity; });
