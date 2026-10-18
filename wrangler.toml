@@ -9,4 +9,4 @@ database_name = "taillabs-leaderboard"
 database_id = "81428c3d-b171-4c28-8704-c0a72556ec31"
 
 [vars]
-ALLOWED_ORIGINS = "https://tailmaskgames.github.io,http://localhost:5173,http://127.0.0.1:5173"
+ALLOWED_ORIGINS = "https://tailmaskgames.github.io,https://gfdsa2006418980.github.io,http://localhost:5173,http://127.0.0.1:5173"

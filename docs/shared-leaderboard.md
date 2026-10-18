@@ -19,7 +19,7 @@ The browser keeps its existing local records as a fallback. Shared results are r
 
 ## GitHub account rename
 
-The production origin in `wrangler.toml` is `https://tailmaskgames.github.io`. After changing the GitHub username, redeploy the existing Worker with `npx --yes wrangler@4.44.0 deploy` so its CORS allowlist accepts the new Pages origin. A Pages deployment does not deploy the Worker. Keep the existing Worker URL and D1 database; the GitHub account rename does not require creating another backend.
+The Worker allowlist in `wrangler.toml` includes both the legacy Pages origin (`https://tailmaskgames.github.io`) and the renamed account origin (`https://gfdsa2006418980.github.io`). After changing this list, redeploy the existing Worker with `npx --yes wrangler@4.44.0 deploy`; a Pages deployment does not deploy the Worker. Keep the existing Worker URL and D1 database binding so leaderboard records remain in the same database.
 
 ## Local API preview
 
