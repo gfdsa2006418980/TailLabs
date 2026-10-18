@@ -17,9 +17,3 @@ export interface SerpentelaDefinition {
 
 export const SERPENTELAS: readonly SerpentelaDefinition[] = manifest.definitions;
 export const SERPENTELA_SCALE = manifest.displayScale;
-
-export function preloadSerpentelas(scene: Phaser.Scene): void {
-  for (const definition of SERPENTELAS) {
-    scene.load.image(definition.texture, `${import.meta.env.BASE_URL}assets/serpentelas/${definition.file}`);
-  }
-}

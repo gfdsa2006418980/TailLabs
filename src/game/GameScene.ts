@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { preloadSerpentelas, SERPENTELAS } from '../data/serpentelas';
+import { SERPENTELAS } from '../data/serpentelas';
 import { Serpentela, type VisibilityBounds } from '../entities/Serpentela';
 import { SpawnSystem } from '../systems/SpawnSystem';
 import { StickinessSystem } from '../systems/StickinessSystem';
@@ -61,11 +61,6 @@ export class GameScene extends Phaser.Scene {
   private readonly visibleBounds: VisibilityBounds = { left: 0, right: 0, top: 0, bottom: 0 };
 
   constructor() { super('GameScene'); }
-  preload(): void {
-    preloadSerpentelas(this);
-    this.load.svg('magic-circle', `${import.meta.env.BASE_URL}assets/magic-circle.svg`);
-  }
-
   create(): void {
     this.layout = createStageLayout(this.scale.gameSize.width, this.scale.gameSize.height);
     this.stickiness = new StickinessSystem();

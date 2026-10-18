@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { GameScene } from './GameScene';
+import { AssetScene } from './AssetScene';
 import { PHYSICS_CONFIG } from './PhysicsConfig';
 import { STAGE } from './StageConfig';
 import { performancePreferences } from '../systems/PerformancePreferences';
@@ -12,7 +13,7 @@ export const GAME_CONFIG: Phaser.Types.Core.GameConfig = {
   height: STAGE.height,
   backgroundColor: '#faf9f2',
   physics: PHYSICS_CONFIG,
-  scene: [GameScene],
+  scene: [AssetScene, GameScene],
   scale: {
     mode: Phaser.Scale.FIT,
     autoCenter: Phaser.Scale.CENTER_BOTH,

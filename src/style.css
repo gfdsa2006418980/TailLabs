@@ -394,3 +394,9 @@ html.power-saving .leaderboard-list li { animation: none; }
   }
   .control-hint { display: block; }
 }
+
+.asset-loading { position: fixed; inset: 0; z-index: 10; display: grid; place-items: center; padding: 24px; background: #faf9f2; }
+.asset-loading-card { width: min(360px, 100%); text-align: center; color: var(--ink); }
+.asset-loading-card p { margin: 0; line-height: 1.8; }
+.asset-loading-card .primary-action { justify-content: center; margin-top: 20px; }
+.asset-loading[hidden], .asset-loading-card button[hidden] { display: none; }

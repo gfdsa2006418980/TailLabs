@@ -30,6 +30,7 @@
       </section>
     </div>
   </main>
+  <div id="asset-loading" class="asset-loading" hidden><div class="asset-loading-card"><p id="asset-loading-status" role="status">正在準備遊戲圖片…</p><button id="asset-retry-button" class="primary-action" type="button" hidden>重試載入</button></div></div>
   <dialog id="tutorial-dialog" aria-labelledby="tutorial-title"><div class="dialog-card tutorial-card">
     <div class="dialog-tools"><button class="menu-trigger" data-menu-open type="button" aria-label="開啟選單" data-i18n-aria="openMenu" aria-haspopup="dialog" aria-controls="settings-dialog" aria-expanded="false"><span class="menu-icon" aria-hidden="true"><i></i><i></i><i></i></span></button></div>
     <h2 id="tutorial-title" tabindex="-1" autofocus><span class="tutorial-oops" data-i18n="tutorialOops">喔不！</span><span data-i18n="tutorialTitle">有隻蛇貂闖進你的魔法陣了！</span></h2>
@@ -40,7 +41,7 @@
       <figure><img src="./assets/tutorial/tower.svg" width="260" height="180" alt="蛇貂掉到魔法陣外" data-i18n-alt="tutorialFall" /><figcaption><span>03</span><strong data-i18n="tutorialFall">掉到魔法陣外就大事不好了</strong></figcaption></figure>
     </div>
     <div class="start-options"><label for="target-select" data-i18n="challenge">這次想挑戰</label><select id="target-select"><option value="10" data-count-option="10">10 隻</option><option value="50" data-count-option="50">50 隻</option><option value="100" data-count-option="100">100 隻</option><option value="500" data-count-option="500">500 隻</option></select></div>
-    <button id="start-button" class="primary-action" type="button"><span id="start-label" data-i18n="start">把牠們疊回去</span><span aria-hidden="true">→</span></button>
+    <button id="start-button" class="primary-action" type="button" disabled><span id="start-label" data-i18n="start">把牠們疊回去</span><span aria-hidden="true">→</span></button>
   </div></dialog>
   <dialog id="result-dialog" aria-labelledby="result-title"><div class="dialog-card result-card">
     <div class="dialog-tools"><button class="menu-trigger" data-menu-open type="button" aria-label="開啟選單" data-i18n-aria="openMenu" aria-haspopup="dialog" aria-controls="settings-dialog" aria-expanded="false"><span class="menu-icon" aria-hidden="true"><i></i><i></i><i></i></span></button></div>

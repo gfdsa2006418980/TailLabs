@@ -37,6 +37,8 @@ const messages: Record<Language, Catalog> = {
     next: 'NEXT', last: 'LAST', allPlaced: 'ALL PLACED', gameAreaAria: 'Serpentela stacking challenge. Current: {{current}}. Next: {{next}}.',
     allDropped: 'All Serpentelas placed', noNext: 'None', warning: 'Careful, a Serpentela is about to fall!', waitingFinal: 'Waiting for the last Serpentela to settle…',
     placedStable: '{{count}} placed safely', completedStatus: 'Challenge complete', failedStatus: 'Challenge failed', startupError: 'Could not start the game. Please refresh.',
+    loadingAssets: 'Preparing the game artwork…', retryingAssets: 'Retrying the missing artwork…',
+    assetLoadFailed: 'Some images could not be loaded. Check your connection and try again.', retryAssets: 'Retry loading',
   },
   zh: {
     gameMenu: '選單', openMenu: '開啟選單', closeMenu: '關閉選單',
@@ -72,6 +74,8 @@ const messages: Record<Language, Catalog> = {
     next: '下一隻', last: '最後一隻', allPlaced: '全部放下', gameAreaAria: '蛇貂落下實驗場。目前：{{current}}；下一隻：{{next}}。',
     allDropped: '已全部放下', noNext: '無', warning: '小心，蛇貂快掉出去了', waitingFinal: '等最後的蛇貂停穩…',
     placedStable: '已放穩 {{count}} 隻', completedStatus: '挑戰完成', failedStatus: '挑戰失敗', startupError: '啟動失敗，請重新整理。',
+    loadingAssets: '正在準備遊戲圖片…', retryingAssets: '正在重新載入缺少的圖片…',
+    assetLoadFailed: '部分圖片載入失敗，請確認網路後重試。', retryAssets: '重試載入',
   },
   ja: {
     gameMenu: 'メニュー', openMenu: 'メニューを開く', closeMenu: 'メニューを閉じる',
@@ -107,6 +111,8 @@ const messages: Record<Language, Catalog> = {
     next: 'つぎ', last: 'さいご', allPlaced: '配置完了', gameAreaAria: 'テンレラ積み上げチャレンジ。現在：{{current}}。次：{{next}}。',
     allDropped: 'すべて配置済み', noNext: 'なし', warning: 'テンレラが落ちそう！気をつけて', waitingFinal: '最後のテンレラが落ち着くのを待っています…',
     placedStable: '{{count}} 匹を安定して配置', completedStatus: 'チャレンジ成功', failedStatus: 'チャレンジ失敗', startupError: 'ゲームを開始できませんでした。再読み込みしてください。',
+    loadingAssets: 'ゲームの画像を準備しています…', retryingAssets: '読み込めなかった画像を再試行しています…',
+    assetLoadFailed: '一部の画像を読み込めませんでした。通信状態を確認して、再試行してください。', retryAssets: '読み込みを再試行',
   },
 };
 
