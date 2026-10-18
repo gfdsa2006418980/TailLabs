@@ -2,16 +2,21 @@
   "name": "labs",
   "private": true,
   "version": "0.3.3",
-  "description": "TailLabs TL001 — 誰複製了500隻蛇貂 Web game prototype",
+  "description": "TailLabs — TL001 蛇貂堆疊 / TL002 蛇貂逃家了 Web prototypes",
   "type": "module",
   "engines": { "node": ">=22.12.0" },
   "scripts": {
     "dev": "vite --host 0.0.0.0 --port 5173 --strictPort",
+    "dev:tl002": "vite --config vite.tl002.config.ts",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.worker.json",
     "test": "node --experimental-strip-types --test tests/*.test.mjs",
+    "test:tl002": "node --experimental-strip-types --test tests/runner*.test.mjs",
+    "typecheck:tl002": "tsc --noEmit -p tsconfig.tl002.json",
     "prebuild": "node tools/clean-dist.mjs",
-    "build": "npm run typecheck && vite build && node tools/build-commission.mjs",
-    "preview": "vite preview --host 0.0.0.0 --port 4173 --strictPort"
+    "build": "npm run typecheck && vite build && npm run build:tl002 && node tools/build-commission.mjs",
+    "build:tl002": "npm run typecheck:tl002 && vite build --config vite.tl002.config.ts",
+    "preview": "vite preview --host 0.0.0.0 --port 4173 --strictPort",
+    "preview:tl002": "vite preview --config vite.tl002.config.ts"
   },
   "dependencies": { "phaser": "3.90.0" },
   "devDependencies": { "typescript": "7.0.2", "vite": "8.3.4" }

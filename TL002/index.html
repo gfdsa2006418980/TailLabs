@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#f4f2e9" />
+    <meta name="description" content="蛇貂逃家了！跳過障礙、收集金幣，看看這次能逃多遠。TailLabs TL002。" />
+    <title>蛇貂逃家了！ · TailLabs TL002</title>
+  </head>
+  <body>
+    <svg class="icon-definitions" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><defs>
+      <symbol id="icon-trophy" viewBox="0 0 24 24"><path d="M8 3h8v7a4 4 0 0 1-8 0V3Zm0 2H4v3a4 4 0 0 0 4 4m8-7h4v3a4 4 0 0 1-4 4m-4 2v6m-4 1h8" /></symbol>
+      <symbol id="icon-score" viewBox="0 0 24 24"><path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-3-5.6 3 1.1-6.2L3 9.6l6.2-.9L12 3Z" /></symbol>
+      <symbol id="icon-sound" viewBox="0 0 24 24"><path d="M11 5 6 9H3v6h3l5 4V5Zm4 3a6 6 0 0 1 0 8m3-11a10 10 0 0 1 0 14" /></symbol>
+      <symbol id="icon-credits" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3" /><path d="M3.5 20a5.5 5.5 0 0 1 11 0M16 5.5a3 3 0 0 1 0 5.8m1.5 3.1a5.5 5.5 0 0 1 3 5.6" /></symbol>
+    </defs></svg>
+    <main class="game-shell" aria-labelledby="game-title">
+      <h1 id="game-title" class="sr-only" data-i18n="title">蛇貂逃家了！</h1>
+      <div class="stage-wrap">
+        <div id="game"></div>
+        <div id="loading" class="loading" role="status" data-i18n="loading">載入中…</div>
+        <div id="gate-cue" class="gate-cue" hidden>
+          <span id="gate-label" class="sr-only" role="status" aria-live="polite"></span>
+          <div class="gate-track" aria-hidden="true"><span class="gate-failure-window gate-early-window"></span><span class="gate-window"></span><span class="gate-failure-window gate-late-window"></span><span id="gate-marker" class="gate-marker"></span></div>
+        </div>
+        <div id="overlay" class="overlay" hidden>
+          <section id="ready-panel" class="panel ready-panel" aria-labelledby="ready-title">
+            <img class="panel-art" src="./assets/serpentela/serpentela-w20-01.webp" width="96" height="96" alt="" />
+            <h2 id="ready-title" data-i18n="readyTitle">蛇貂逃家了！</h2>
+            <p class="play-hint" data-i18n="playHint">點一下跳躍，再點二段跳</p>
+            <button id="start-button" class="button primary" type="button"><span data-i18n="start">開始</span><span aria-hidden="true">→</span></button>
+          </section>
+          <section id="result-panel" class="panel result-panel" hidden aria-labelledby="result-title">
+            <p id="result-kicker" class="record-badge" hidden data-i18n="newRecord">新紀錄</p>
+            <h2 id="result-title" data-i18n="caught">被抓回來了</h2>
+            <div class="result-summary">
+              <img id="result-image" class="result-image" src="./assets/results/caught-placeholder.webp" width="84" height="84" alt="" />
+              <div class="result-score"><strong id="result-score">0</strong><span data-i18n="points">分</span><span id="result-multiplier" class="multiplier">×1.00</span></div>
+            </div>
+            <p id="result-gate-feedback" class="gate-feedback" hidden></p>
+            <div class="result-stats">
+              <span><span class="sr-only" data-i18n="time">時間</span><strong id="result-time">0</strong><small>s</small></span>
+              <span><span class="coin-icon small-coin" aria-hidden="true">✦</span><span class="sr-only" data-i18n="coins">金幣</span><strong id="result-coins">0</strong></span>
+              <span><span class="sr-only" data-i18n="distance">距離</span><strong id="result-distance">0</strong><small>m</small></span>
+            </div>
+            <p class="result-best"><svg class="ui-icon" aria-hidden="true"><use href="#icon-score" /></svg><span data-i18n="best">最佳</span><strong id="result-best">0</strong><small data-i18n="points">分</small></p>
+            <div class="result-actions"><button id="restart-button" class="button primary" type="button"><span data-i18n="retry">再逃一次</span><span aria-hidden="true">↗</span></button><button id="result-board-button" class="icon-button" type="button" aria-label="排行榜" data-i18n-aria="leaderboard"><svg class="ui-icon" aria-hidden="true"><use href="#icon-trophy" /></svg></button></div>
+          </section>
+          <section id="pause-panel" class="panel pause-panel" hidden aria-labelledby="pause-title">
+            <span class="pause-symbol" aria-hidden="true">Ⅱ</span><h2 id="pause-title" data-i18n="pause">暫停</h2><button id="resume-button" class="button primary" type="button"><span data-i18n="continue">繼續</span><span aria-hidden="true">→</span></button>
+          </section>
+          <section id="countdown-panel" class="countdown-panel" hidden aria-label="準備開始" data-i18n-aria="prepareStart"><strong id="countdown-label" role="status" aria-live="polite">2</strong></section>
+        </div>
+      </div>
+      <div class="hud">
+        <div class="game-metrics">
+          <div class="metric distance-metric"><span class="metric-icon" aria-hidden="true">↗</span><span class="sr-only" data-i18n="distance">距離</span><strong id="distance">0<small>m</small></strong></div>
+          <div class="metric score-metric"><svg class="ui-icon metric-icon" aria-hidden="true"><use href="#icon-score" /></svg><span class="sr-only" data-i18n="score">當前分數</span><strong id="score">0<small data-i18n="points">分</small></strong><span id="multiplier" class="multiplier" aria-label="速度倍率" data-i18n-aria="speedMultiplier">×1.00</span></div>
+        </div>
+        <div class="stage-actions">
+          <div class="coin-score" aria-label="本局金幣" data-i18n-aria="coinCount"><span id="coin-target" class="coin-icon" role="img" aria-label="金幣" data-i18n-aria="coins">✦</span><strong id="coin-count">0</strong></div>
+          <button id="menu-button" class="menu-trigger" type="button" aria-label="選單" data-i18n-aria="menu" aria-haspopup="dialog" aria-controls="menu-dialog" aria-expanded="false"><span class="menu-icon" aria-hidden="true"><i></i><i></i><i></i></span></button>
+        </div>
+      </div>
+      <p class="control-hint"><span class="desktop-input" data-i18n="desktopControls">Space／↑／點擊</span><span class="mobile-input" data-i18n="mobileControls">輕點畫面</span><span class="hint-separator" aria-hidden="true">·</span><span data-i18n="doubleJump">再按一次二段跳</span></p>
+      <div id="coin-fx" aria-hidden="true"></div>
+    </main>
+    <dialog id="menu-dialog" class="menu-dialog" aria-labelledby="menu-title">
+      <div class="dialog-heading"><h2 id="menu-title" data-i18n="menu">選單</h2><button id="close-menu-button" class="close-button" type="button" aria-label="關閉選單" data-i18n-aria="closeMenu">×</button></div>
+      <div id="menu-main-content" class="menu-dialog-content">
+        <nav class="menu-nav" aria-label="遊戲選單" data-i18n-aria="menuControls">
+          <button id="board-button" type="button"><svg class="ui-icon" aria-hidden="true"><use href="#icon-trophy" /></svg><span data-i18n="leaderboard">排行榜</span><span aria-hidden="true">›</span></button>
+          <button id="menu-restart-button" type="button"><span aria-hidden="true">↻</span><span data-i18n="restart">重新開始</span><span aria-hidden="true">›</span></button>
+          <button id="credits-button" type="button"><svg class="ui-icon" aria-hidden="true"><use href="#icon-credits" /></svg><span data-i18n="credits">製作名單</span><span aria-hidden="true">›</span></button>
+        </nav>
+        <section class="menu-settings" aria-label="遊戲設定" data-i18n-aria="gameSettings">
+          <div class="setting-row language-row">
+            <span class="setting-name" data-i18n="language">語言</span>
+            <div class="language-options" role="group" aria-label="語言" data-i18n-aria="language">
+              <button type="button" data-language="zh-Hant" aria-pressed="true">中</button>
+              <button type="button" data-language="en" aria-pressed="false">EN</button>
+              <button type="button" data-language="ja" aria-pressed="false">日本語</button>
+            </div>
+          </div>
+          <div class="setting-row audio-setting">
+            <label class="setting-name" for="music-volume" data-i18n="music">音樂</label>
+            <input id="music-volume" class="volume-slider" type="range" min="0" max="50" step="0.5" value="17.5" aria-label="音樂音量" data-i18n-aria="music" />
+            <button id="music-toggle" class="setting-toggle" type="button" role="switch" aria-label="音樂" aria-checked="true" data-i18n-aria="music"><span id="music-state">開</span></button>
+          </div>
+          <div class="setting-row audio-setting">
+            <label class="setting-name" for="effects-volume" data-i18n="soundEffects">音效</label>
+            <input id="effects-volume" class="volume-slider" type="range" min="0" max="150" step="1" value="70" aria-label="音效音量" data-i18n-aria="soundEffects" />
+            <button id="effects-toggle" class="setting-toggle" type="button" role="switch" aria-label="音效" aria-checked="true" data-i18n-aria="soundEffects"><span id="effects-state">開</span></button>
+          </div>
+          <div class="setting-row power-setting">
+            <span class="setting-name" data-i18n="lowPower">低耗電模式</span>
+            <button id="power-toggle" class="setting-toggle" type="button" role="switch" aria-label="低耗電模式" aria-checked="false" data-i18n-aria="lowPower"><span id="power-state">關</span></button>
+          </div>
+        </section>
+      </div>
+      <div id="credits-content" class="menu-dialog-content credits-content" hidden>
+        <div class="credits-list">
+          <div class="credit-row"><span data-i18n="programDevelopment">程式開發</span><strong data-i18n="developerName">浣熊拉芙</strong></div>
+          <div class="credit-row"><span data-i18n="art">美術</span><strong data-i18n="artName">阿樹</strong></div>
+        </div>
+        <button id="credits-back-button" class="button credits-back" type="button" data-i18n="creditsBack">返回選單</button>
+      </div>
+      <button id="menu-return-button" class="button primary" type="button" data-i18n="returnGame">返回遊戲</button>
+    </dialog>
+    <dialog id="board-dialog" class="board-dialog" aria-labelledby="board-title">
+      <div class="dialog-heading"><h2 id="board-title" data-i18n="leaderboard">排行榜</h2><button id="close-board-button" class="close-button" type="button" aria-label="關閉排行榜" data-i18n-aria="rankingClose">×</button></div>
+      <ol id="board-list" class="board-list"></ol>
+      <p id="board-storage-note" class="board-footnote" data-i18n="localTopTen">本機 Top 10</p>
+    </dialog>
+    <noscript>這款遊戲需要啟用 JavaScript 才能遊玩。</noscript>
+    <audio id="music-track" loop preload="none">
+      <source src="./assets/audio/Bouncy_Bass_Groove_V2_Extended_3m35s_128k.m4a" type="audio/mp4" />
+    </audio>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

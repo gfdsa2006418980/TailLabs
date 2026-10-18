@@ -1,0 +1,61 @@
+import type { RunnerLanguage } from './RunnerPreferences';
+
+export const RUNNER_TEXT = {
+  'zh-Hant': {
+    title: '蛇貂逃家了！', loading: '載入中…', start: '開始', readyTitle: '蛇貂逃家了！',
+    playHint: '點一下跳躍，再點二段跳', caught: '被抓回來了', newRecord: '新紀錄', points: '分',
+    time: '時間', coins: '金幣', distance: '距離', best: '最佳', score: '當前分數',
+    leaderboard: '排行榜', retry: '再逃一次', pause: '暫停', continue: '繼續',
+    prepareStart: '準備開始', menu: '選單', closeMenu: '關閉選單', restart: '重新開始',
+    soundEffects: '音效', music: '音樂', language: '語言', lowPower: '低耗電模式',
+    on: '開', off: '關', instructions: '點一下跳躍，再點二段跳', gameSettings: '遊戲設定',
+    menuKeys: 'Space／↑／輕點畫面', credits: '製作名單', creditsBack: '返回選單',
+    programDevelopment: '程式開發', art: '美術', developerName: '浣熊拉芙', artName: '阿樹', returnGame: '返回遊戲',
+    desktopControls: 'Space／↑／點擊', mobileControls: '輕點畫面', doubleJump: '再按一次二段跳',
+    rankingClose: '關閉排行榜', localTopTen: '本機 Top 10', temporaryBoard: '暫存紀錄，關閉分頁後消失',
+    noRecords: '還沒有紀錄', coinCount: '本局金幣', menuControls: '遊戲選單',
+    gateInstructions: '節奏門：灰色可跳、綠色開門、橘紅失敗', gateSafe: '節奏門 · 可跳躍', gateWait: '節奏門 · 等綠色', gateNow: '現在按！', gateOpen: '開門成功',
+    gateEarly: '按太早了，蛇貂跌倒了', gateLate: '按太晚了', gateMissed: '錯過開門時機',
+    speedMultiplier: '速度倍率', canvasLabel: '蛇貂逃家了遊戲區，空白鍵、上方向鍵或輕點跳躍，空中再按一次二段跳；節奏門提示指標進入綠色時按一下開門',
+  },
+  en: {
+    title: 'Serpentela Escaped!', loading: 'Loading…', start: 'Start', readyTitle: 'Serpentela Escaped!',
+    playHint: 'Tap to jump, tap again for a double jump', caught: 'Caught!', newRecord: 'New record', points: 'pts',
+    time: 'Time', coins: 'Coins', distance: 'Distance', best: 'Best', score: 'Current score',
+    leaderboard: 'Leaderboard', retry: 'Run again', pause: 'Paused', continue: 'Continue',
+    prepareStart: 'Get ready', menu: 'Menu', closeMenu: 'Close menu', restart: 'Restart',
+    soundEffects: 'Sound effects', music: 'Music', language: 'Language', lowPower: 'Low power mode',
+    on: 'On', off: 'Off', instructions: 'Tap to jump, tap again for a double jump', gameSettings: 'Settings',
+    menuKeys: 'Space / ↑ / Tap', credits: 'Credits', creditsBack: 'Back to menu',
+    programDevelopment: 'Program Development', art: 'Art', developerName: 'Raccoon Rafu', artName: '阿樹', returnGame: 'Return to game',
+    desktopControls: 'Space / ↑ / Click', mobileControls: 'Tap anywhere', doubleJump: 'Tap again to double jump',
+    rankingClose: 'Close leaderboard', localTopTen: 'Local Top 10', temporaryBoard: 'Temporary scores; cleared when this tab closes',
+    noRecords: 'No runs yet', coinCount: 'Coins this run', menuControls: 'Game menu',
+    gateInstructions: 'Gate: gray = jump, green = open, orange = fail', gateSafe: 'Gate · Jump freely', gateWait: 'Gate · Wait for green', gateNow: 'Press now!', gateOpen: 'Gate opened',
+    gateEarly: 'Too early! Serpentela tripped!', gateLate: 'Too late', gateMissed: 'Missed the gate',
+    speedMultiplier: 'Speed multiplier', canvasLabel: 'Serpentela Escaped game area. Press Space, Up Arrow, or tap to jump; press again in the air to double jump. At a gate, press when the timing marker enters green.',
+  },
+  ja: {
+    title: 'イタチが家出した！', loading: '読み込み中…', start: 'スタート', readyTitle: 'イタチが家出した！',
+    playHint: 'タップでジャンプ、もう一度で二段ジャンプ', caught: 'つかまっちゃった！', newRecord: '新記録', points: '点',
+    time: '時間', coins: 'コイン', distance: '距離', best: 'ベスト', score: '現在のスコア',
+    leaderboard: 'ランキング', retry: 'もう一度逃げる', pause: '一時停止', continue: '続ける',
+    prepareStart: 'スタート準備', menu: 'メニュー', closeMenu: 'メニューを閉じる', restart: '最初から',
+    soundEffects: '効果音', music: '音楽', language: '言語', lowPower: '省電力モード',
+    on: 'オン', off: 'オフ', instructions: 'タップでジャンプ、もう一度で二段ジャンプ', gameSettings: '設定',
+    menuKeys: 'Space／↑／タップ', credits: 'クレジット', creditsBack: 'メニューに戻る',
+    programDevelopment: 'プログラム開発', art: '美術', developerName: 'ラフラフ', artName: '阿樹', returnGame: 'ゲームに戻る',
+    desktopControls: 'Space／↑／クリック', mobileControls: '画面をタップ', doubleJump: 'もう一度押して二段ジャンプ',
+    rankingClose: 'ランキングを閉じる', localTopTen: 'ローカル Top 10', temporaryBoard: '一時記録。このタブを閉じると消去されます',
+    noRecords: 'まだ記録はありません', coinCount: '今回のコイン', menuControls: 'ゲームメニュー',
+    gateInstructions: 'ゲート：灰色はジャンプ、緑で開く、橙赤は失敗', gateSafe: 'ゲート · ジャンプOK', gateWait: 'ゲート · 緑を待って', gateNow: '今押して！', gateOpen: 'ゲート開放',
+    gateEarly: '早すぎた！転んじゃった！', gateLate: '遅すぎた！', gateMissed: '開くタイミングを逃した',
+    speedMultiplier: '速度倍率', canvasLabel: 'ゲームエリア。Space、上矢印、またはタップでジャンプ。空中でもう一度押すと二段ジャンプ。ゲートでは目印が緑に入ったら押す。',
+  },
+} as const;
+
+export type RunnerTextKey = keyof typeof RUNNER_TEXT['zh-Hant'];
+
+export function runnerText(language: RunnerLanguage, key: RunnerTextKey): string {
+  return RUNNER_TEXT[language][key] ?? RUNNER_TEXT['zh-Hant'][key];
+}

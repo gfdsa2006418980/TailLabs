@@ -1,4 +1,10 @@
-# TailLabs — TL001《誰複製了 500 隻蛇貂？》
+# TailLabs — 瀏覽器遊戲實驗
+
+目前收錄 TL001《誰複製了 500 隻蛇貂？》與 TL002《蛇貂逃家了》。
+
+**TL002《蛇貂逃家了》已可遊玩**：Space／點擊／Tap 單跳與二段跳、矮／高障礙、可站立平台、本局金幣及五階段收集動畫、日夜循環背景。使用既有 3 張奔跑與 2 張跳躍圖片，保留 Jump Buffer、Coyote Time；即時總分為「（公尺＋金幣）× 速度倍率」，倍率最高 ×5，本機 Top 10 依總分排序。開始與恢復遊戲會顯示 2→1→START，重玩先回開始畫面；跳躍／碰撞／收幣有音效，選單可開關。執行 `npm run dev:tl002` 或雙擊 `啟動 TL002.cmd`，在 `http://localhost:5174/` 遊玩。TL002 專屬驗證指令為 `npm run test:tl002`、`npm run build:tl002`；規則與參數見 [docs/TL002.md](docs/TL002.md)。
+
+## TL001《誰複製了 500 隻蛇貂？》
 
 TailLabs 是一組瀏覽器遊戲實驗；TL001 是一款把蛇貂疊回魔法陣的物理堆疊挑戰。每局可選 10、50、100 或 500 隻，預設從 10 隻開始；蛇貂會從 15 種造型中依權重抽選，最近兩次抽到的造型不會立刻重複。
 
@@ -123,9 +129,10 @@ GitHub Pages 部署工作流程已設定；合入 `main` 並完成 Pages 設定�
 2. 將變更推送到 `main`，或從 Actions 手動執行 **Deploy to GitHub Pages**。
 3. 工作流程會安裝鎖定套件、型別檢查、建置、執行黏性物理測試，然後發布 `dist/`。
 
-正式建置會先清空 `dist/`，將 TL001 建置至 `dist/TL001/`，再由 `tools/build-commission.mjs` 將遊戲委託頁輸出至 `dist/Commission/`。工作流程發布整個 `dist/`：
+正式建置會先清空 `dist/`，將 TL001 建置至 `dist/TL001/`、TL002 建置至 `dist/TL002/`，再由 `tools/build-commission.mjs` 將遊戲委託頁輸出至 `dist/Commission/`。工作流程發布整個 `dist/`：
 
 - 遊戲入口：[蛇貂疊疊樂](https://gfdsa2006418980.github.io/TailLabs/TL001/)
+- TL002 部署路徑：`https://gfdsa2006418980.github.io/TailLabs/TL002/`（需推送並完成部署後才會更新）
 - 委託入口：[浣熊拉芙・遊戲委託](https://gfdsa2006418980.github.io/TailLabs/Commission/)
 
 委託頁的 HTML、樣式、互動位於 `commission/`，直接編輯後執行 `npm run build` 即可。內容依[遊戲委託文件](https://docs.google.com/document/d/1NwfgXDX-ODlL-yqW9u1Fa0S5FQNrrzrTELzfNiWD2zs/edit?tab=t.0) 於 2026-10-18 的版本整理；文件後續修改需同步更新網頁。頁面以靜態檔案運作，主視覺使用 CSS 橘色表情球，包含方案範例切換、可展開條款、取消費用試算，以及可複製的委託訊息；資料只在訪客的瀏覽器中處理。
