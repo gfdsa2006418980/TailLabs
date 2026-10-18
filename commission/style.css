@@ -236,7 +236,7 @@ body.dialog-open { overflow: hidden; }
 .platform-list { display: grid; grid-template-columns: 1fr 1fr; gap: 0 36px; }
 .platform { display: flex; align-items: center; gap: 15px; border-top: 1px solid var(--line); min-height: 100px; padding: 20px 0; flex-wrap: wrap; }
 .platform-icon { width: 40px; height: 40px; display: grid; place-items: center; background: #f6efed; border: 1px solid #e9dddc; border-radius: 12px; color: #80646a; font-size: 21px; flex-shrink: 0; font-weight: 600; }
-.phone-icon { font-size: 32px; font-weight: 400; }
+.platform-logo { display: block; width: 21px; height: 21px; fill: currentColor; }
 .platform > div { flex: 1; min-width: 140px; }
 .platform h3 { font-size: 15px; line-height: 1.7; letter-spacing: -.02em; display: flex; align-items: center; gap: 10px; }
 .tag { display: inline-block; background: #f5e7e7; color: #85525b; border-radius: 5px; padding: 1px 6px; font-size: 10px; font-weight: 500; }
