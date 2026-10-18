@@ -17,6 +17,10 @@ Set the GitHub repository variable `VITE_LEADERBOARD_API_URL` to the Worker URL,
 
 The browser keeps its existing local records as a fallback. Shared results are recalculated by the Worker from the round fields, names are trimmed to 12 characters, challenge sizes are checked, and only the top ten per size remain in D1. The public client can still be modified to submit fabricated but plausible rounds; this lightweight leaderboard is not a cheat-proof competitive service.
 
+## GitHub account rename
+
+The production origin in `wrangler.toml` is `https://tailmaskgames.github.io`. After changing the GitHub username, redeploy the existing Worker with `npx --yes wrangler@4.44.0 deploy` so its CORS allowlist accepts the new Pages origin. A Pages deployment does not deploy the Worker. Keep the existing Worker URL and D1 database; the GitHub account rename does not require creating another backend.
+
 ## Local API preview
 
 Run `npx --yes wrangler@4.44.0 dev` in one terminal and the Vite development server in another. Wrangler uses a local D1 database by default; initialize it with `npx --yes wrangler@4.44.0 d1 execute taillabs-leaderboard --local --file=worker/schema.sql`.

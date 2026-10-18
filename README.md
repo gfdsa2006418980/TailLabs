@@ -131,9 +131,11 @@ GitHub Pages 部署工作流程已設定；合入 `main` 並完成 Pages 設定�
 
 正式建置會先清空 `dist/`，將 TL001 建置至 `dist/TL001/`、TL002 建置至 `dist/TL002/`，再由 `tools/build-commission.mjs` 將遊戲委託頁輸出至 `dist/Commission/`。工作流程發布整個 `dist/`：
 
-- 遊戲入口：[蛇貂疊疊樂](https://gfdsa2006418980.github.io/TailLabs/TL001/)
-- TL002 部署路徑：`https://gfdsa2006418980.github.io/TailLabs/TL002/`（需推送並完成部署後才會更新）
-- 委託入口：[浣熊拉芙・遊戲委託](https://gfdsa2006418980.github.io/TailLabs/Commission/)
+- TL001 入口：[蛇貂疊疊樂](https://tailmaskgames.github.io/TailLabs/TL001/)
+- TL002 入口：[蛇貂逃家了](https://tailmaskgames.github.io/TailLabs/TL002/)
+- 委託入口：[浣熊拉芙・遊戲委託](https://tailmaskgames.github.io/TailLabs/Commission/)
+
+GitHub 帳號使用 `tailmaskgames`，本地 `origin` 應指向 `https://github.com/tailmaskgames/TailLabs.git`。帳號改名後，確認 GitHub Pages 的 Actions 部署成功；若啟用共用排行榜，也需重新部署 Worker，讓 `wrangler.toml` 中的正式來源白名單生效，詳見 [共用排行榜設定](docs/shared-leaderboard.md)。
 
 委託頁的 HTML、樣式、互動位於 `commission/`，直接編輯後執行 `npm run build` 即可。內容依[遊戲委託文件](https://docs.google.com/document/d/1NwfgXDX-ODlL-yqW9u1Fa0S5FQNrrzrTELzfNiWD2zs/edit?tab=t.0) 於 2026-10-18 的版本整理；文件後續修改需同步更新網頁。頁面以靜態檔案運作，主視覺使用 CSS 橘色表情球，包含方案範例切換、可展開條款、取消費用試算，以及可複製的委託訊息；資料只在訪客的瀏覽器中處理。
 
