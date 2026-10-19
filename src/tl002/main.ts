@@ -565,7 +565,8 @@ for (const dialog of [menuDialog, boardDialog]) dialog.addEventListener('click',
   if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) dialog.close();
 }, { signal });
 stage.parentElement!.addEventListener('pointerdown', (event) => {
-  if (event.button !== 0 || (event.target as HTMLElement).closest('button')) return;
+  const target = event.target as Element;
+  if (event.button !== 0 || target.closest('button, a, input, textarea, select, label, form, [contenteditable="true"]')) return;
   event.preventDefault(); action();
 }, { signal });
 window.addEventListener('keydown', (event) => {
