@@ -78,7 +78,7 @@ function applyLanguage(): void {
     button.setAttribute('aria-pressed', String(button.dataset.language === language));
   }
   renderSoundPreference();
-  scoreLabel.innerHTML = `${scene.model.score.toLocaleString('en-US')}<small>${t('points')}</small>`;
+  scoreLabel.textContent = scene.model.score.toLocaleString('en-US');
   previousScore = scene.model.score;
   updateStorageNotice();
   if (boardDialog.open) renderBoard();
@@ -127,6 +127,16 @@ function updateGateCue(model: RunnerModel): void {
   stage.dataset.gateWindow = gate ? gate.windowSeconds.toFixed(4) : '';
 }
 
+function updateVolumeSliderFill(slider: HTMLInputElement): void {
+  const minimum = Number(slider.min) || 0;
+  const maximum = Number(slider.max) || 100;
+  const value = Number(slider.value);
+  const progress = maximum > minimum && Number.isFinite(value)
+    ? Math.max(0, Math.min(100, (value - minimum) / (maximum - minimum) * 100))
+    : 0;
+  slider.style.setProperty('--slider-progress', `${progress}%`);
+}
+
 function renderSoundPreference(): void {
   const setSwitch = (button: string, state: string, checked: boolean): void => {
     element(button).setAttribute('aria-checked', String(checked));
@@ -135,8 +145,12 @@ function renderSoundPreference(): void {
   setSwitch('music-toggle', 'music-state', preferences.musicEnabled);
   setSwitch('effects-toggle', 'effects-state', preferences.effectsEnabled);
   setSwitch('power-toggle', 'power-state', preferences.lowPower);
-  element<HTMLInputElement>('music-volume').value = String(preferences.musicVolume);
-  element<HTMLInputElement>('effects-volume').value = String(preferences.effectsVolume);
+  const musicSlider = element<HTMLInputElement>('music-volume');
+  const effectsSlider = element<HTMLInputElement>('effects-volume');
+  musicSlider.value = String(preferences.musicVolume);
+  effectsSlider.value = String(preferences.effectsVolume);
+  updateVolumeSliderFill(musicSlider);
+  updateVolumeSliderFill(effectsSlider);
 }
 
 function updateStorageNotice(): void {
@@ -256,11 +270,11 @@ function updateFrame(model: RunnerModel, dt: number): void {
   coinFx.update(dt, model);
   updateGateCue(model);
   if (model.distance !== previousDistance) {
-    distanceLabel.innerHTML = `${model.distance.toLocaleString('en-US')}<small>m</small>`;
+    distanceLabel.textContent = model.distance.toLocaleString('en-US');
     previousDistance = model.distance;
   }
   if (model.score !== previousScore) {
-    scoreLabel.innerHTML = `${model.score.toLocaleString('en-US')}<small>${t('points')}</small>`;
+    scoreLabel.textContent = model.score.toLocaleString('en-US');
     previousScore = model.score;
   }
   if (model.multiplier !== previousMultiplier) {
@@ -392,12 +406,16 @@ for (const button of document.querySelectorAll<HTMLButtonElement>('[data-languag
   }, { signal });
 }
 element<HTMLInputElement>('music-volume').addEventListener('input', (event) => {
-  preferences.musicVolume = Number((event.currentTarget as HTMLInputElement).value);
+  const slider = event.currentTarget as HTMLInputElement;
+  preferences.musicVolume = Number(slider.value);
+  updateVolumeSliderFill(slider);
   music.setVolume(preferences.musicVolume / 100);
 }, { signal });
 element<HTMLInputElement>('music-volume').addEventListener('change', savePreferences, { signal });
 element<HTMLInputElement>('effects-volume').addEventListener('input', (event) => {
-  preferences.effectsVolume = Number((event.currentTarget as HTMLInputElement).value);
+  const slider = event.currentTarget as HTMLInputElement;
+  preferences.effectsVolume = Number(slider.value);
+  updateVolumeSliderFill(slider);
   audio.setVolume(preferences.effectsVolume / 100);
 }, { signal });
 element<HTMLInputElement>('effects-volume').addEventListener('change', savePreferences, { signal });

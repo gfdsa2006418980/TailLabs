@@ -4,7 +4,7 @@ export const RUNNER_TEXT = {
   'zh-Hant': {
     title: '蛇貂逃家了！', loading: '載入中…', start: '開始', readyTitle: '蛇貂逃家了！',
     playHint: '點一下跳躍，再點二段跳', caught: '被抓回來了', newRecord: '新紀錄', points: '分',
-    time: '時間', coins: '金幣', distance: '距離', best: '最佳', score: '當前分數',
+    time: '時間', coins: '金幣', distance: '距離', travelled: '走了', best: '最佳', score: '總分', totalScore: '總分', speed: '速度', times: '倍',
     leaderboard: '排行榜', retry: '再逃一次', pause: '暫停', continue: '繼續',
     prepareStart: '準備開始', menu: '選單', closeMenu: '關閉選單', restart: '重新開始',
     soundEffects: '音效', music: '音樂', language: '語言', lowPower: '低耗電模式',
@@ -21,7 +21,7 @@ export const RUNNER_TEXT = {
   en: {
     title: 'Serpentela Escaped!', loading: 'Loading…', start: 'Start', readyTitle: 'Serpentela Escaped!',
     playHint: 'Tap to jump, tap again for a double jump', caught: 'Caught!', newRecord: 'New record', points: 'pts',
-    time: 'Time', coins: 'Coins', distance: 'Distance', best: 'Best', score: 'Current score',
+    time: 'Time', coins: 'Coins', distance: 'Distance', travelled: 'Ran', best: 'Best', score: 'Total score', totalScore: 'Total score', speed: 'Speed', times: 'x',
     leaderboard: 'Leaderboard', retry: 'Run again', pause: 'Paused', continue: 'Continue',
     prepareStart: 'Get ready', menu: 'Menu', closeMenu: 'Close menu', restart: 'Restart',
     soundEffects: 'Sound effects', music: 'Music', language: 'Language', lowPower: 'Low power mode',
@@ -38,7 +38,7 @@ export const RUNNER_TEXT = {
   ja: {
     title: 'イタチが家出した！', loading: '読み込み中…', start: 'スタート', readyTitle: 'イタチが家出した！',
     playHint: 'タップでジャンプ、もう一度で二段ジャンプ', caught: 'つかまっちゃった！', newRecord: '新記録', points: '点',
-    time: '時間', coins: 'コイン', distance: '距離', best: 'ベスト', score: '現在のスコア',
+    time: '時間', coins: 'コイン', distance: '距離', travelled: '走行', best: 'ベスト', score: '合計スコア', totalScore: '合計スコア', speed: '速度', times: '倍',
     leaderboard: 'ランキング', retry: 'もう一度逃げる', pause: '一時停止', continue: '続ける',
     prepareStart: 'スタート準備', menu: 'メニュー', closeMenu: 'メニューを閉じる', restart: '最初から',
     soundEffects: '効果音', music: '音楽', language: '言語', lowPower: '省電力モード',
