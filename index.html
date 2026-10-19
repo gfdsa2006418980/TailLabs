@@ -54,9 +54,13 @@
   </div></dialog>
   <dialog id="leaderboard-dialog" aria-labelledby="leaderboard-title"><div class="dialog-card leaderboard-card">
     <div class="dialog-tools"><button class="menu-trigger" data-menu-open type="button" aria-label="開啟選單" data-i18n-aria="openMenu" aria-haspopup="dialog" aria-controls="settings-dialog" aria-expanded="false"><span class="menu-icon" aria-hidden="true"><i></i><i></i><i></i></span></button></div>
-    <p class="eyebrow" data-i18n="leaderboardEyebrow">GLOBAL RANKING / TOP 10</p><h2 id="leaderboard-title" tabindex="-1" data-i18n="leaderboardTitle">最佳紀錄</h2>
+    <p class="eyebrow" data-i18n="leaderboardEyebrow">GLOBAL RANKING / TOP 100</p><h2 id="leaderboard-title" tabindex="-1" data-i18n="leaderboardTitle">最佳紀錄</h2>
+    <div class="ranking-tabs" role="group" aria-label="排行榜期間" data-i18n-aria="rankingPeriod"><button id="board-daily" type="button" aria-pressed="true" data-i18n="dailyRanking">每日排行</button><button id="board-history" type="button" aria-pressed="false" data-i18n="historyRanking">歷史排行</button></div>
+    <p id="board-period-note" class="ranking-period-note" data-i18n="dailyReset">每天 00:00 更新（UTC+8）</p>
     <label for="board-target" data-i18n="viewChallenge">查看挑戰</label><select id="board-target"><option value="10" data-count-option="10">10 隻</option><option value="50" data-count-option="50">50 隻</option><option value="100" data-count-option="100">100 隻</option><option value="500" data-count-option="500">500 隻</option></select>
-    <ol id="leaderboard-list" class="leaderboard-list"></ol><p id="leaderboard-storage" class="dialog-footnote"></p><button id="board-close-button" class="primary-action" type="button"><span data-i18n="back">返回</span><span aria-hidden="true">→</span></button>
+    <ol id="leaderboard-list" class="leaderboard-list"></ol>
+    <div class="ranking-footer"><nav class="ranking-pagination" aria-label="排行榜分頁" data-i18n-aria="rankingPages"><button id="board-previous" type="button" data-i18n="previousPage" disabled>上一頁</button><span id="board-page-status" role="status" aria-live="polite"></span><button id="board-next" type="button" data-i18n="nextPage" disabled>下一頁</button></nav>
+    <p id="leaderboard-storage" class="dialog-footnote"></p><button id="board-close-button" class="primary-action" type="button"><span data-i18n="back">返回</span><span aria-hidden="true">→</span></button></div>
   </div></dialog>
   <dialog id="settings-dialog" class="settings-dialog" aria-labelledby="settings-title">
     <div class="settings-card">

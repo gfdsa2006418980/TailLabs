@@ -1,4 +1,5 @@
 import type { LeaderboardEntry } from './LeaderboardSystem';
+import type { RankingPage, RankingPeriod } from './LeaderboardPaging';
 
 const API_URL = (import.meta.env.VITE_LEADERBOARD_API_URL ?? '').replace(/\/$/, '');
 
@@ -10,11 +11,11 @@ export class SharedLeaderboard {
   private readonly pendingSaves = new Map<string, Promise<number | null>>();
   get enabled(): boolean { return API_URL.length > 0; }
 
-  async top(target: number): Promise<LeaderboardEntry[]> {
-    const response = await fetch(`${API_URL}/api/leaderboard?target=${target}`);
+  async page(target: number, period: RankingPeriod, page = 1): Promise<RankingPage<LeaderboardEntry>> {
+    const response = await fetch(`${API_URL}/api/leaderboard?target=${target}&period=${period}&page=${page}`);
     if (!response.ok) throw new Error(`Leaderboard request failed (${response.status})`);
-    const result = await response.json() as { entries?: ApiEntry[] };
-    return (result.entries ?? []).map((entry) => ({ ...entry, completed: Boolean(entry.completed) }));
+    const result = await response.json() as RankingPage<ApiEntry>;
+    return { ...result, entries: (result.entries ?? []).map((entry) => ({ ...entry, completed: Boolean(entry.completed) })) };
   }
 
   save(entry: LeaderboardEntry): Promise<number | null> {

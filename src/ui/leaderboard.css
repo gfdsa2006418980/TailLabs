@@ -1,0 +1,61 @@
+#leaderboard-dialog .ranking-tabs {
+  display: flex;
+  gap: 6px;
+  margin: 18px 0 8px;
+}
+#leaderboard-dialog .ranking-tabs button {
+  flex: 1;
+  min-height: 44px;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--button-rose-soft, #f4f3eb);
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+}
+#leaderboard-dialog .ranking-tabs button[aria-pressed="true"] {
+  border-color: var(--accent, var(--ink));
+  background: var(--accent, var(--ink));
+  color: var(--paper, #faf9f2);
+}
+#leaderboard-dialog .ranking-period-note {
+  margin: 0 0 16px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.6;
+}
+#leaderboard-dialog .ranking-footer {
+  position: sticky;
+  bottom: 10px;
+  z-index: 2;
+  flex-shrink: 0;
+  padding-top: 8px;
+  background: var(--paper, #f4f2e9);
+  box-shadow: 0 -8px 16px var(--paper, #f4f2e9);
+}
+#leaderboard-dialog .ranking-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 16px 0;
+}
+#leaderboard-dialog .ranking-pagination button {
+  min-height: 44px;
+  padding: 8px 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--button-rose-soft, #f4f3eb);
+  color: var(--ink);
+  font: inherit;
+  font-size: 12px;
+}
+#leaderboard-dialog .ranking-pagination button:disabled { opacity: .4; cursor: default; }
+#leaderboard-dialog .ranking-pagination span {
+  color: var(--muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+#leaderboard-dialog .ranking-footer .ranking-pagination { margin: 0 0 10px; }

@@ -1,6 +1,10 @@
 import Phaser from 'phaser';
 import { RunnerScene } from './RunnerScene';
-import { RunnerLeaderboard } from './RunnerLeaderboard';
+import { RUNNER_NAME_KEY, RunnerLeaderboard, runnerPlayerName } from './RunnerLeaderboard';
+import type { RunnerEntry } from './RunnerLeaderboard';
+import { RunnerSharedLeaderboard } from './RunnerSharedLeaderboard';
+import { paginateRanking } from '../systems/LeaderboardPaging';
+import type { RankingPage, RankingPeriod } from '../systems/LeaderboardPaging';
 import { RUNNER } from './RunnerModel';
 import type { RunnerModel } from './RunnerModel';
 import { CoinFlightLayer } from './CoinFlightLayer';
@@ -12,6 +16,7 @@ import type { RunnerLanguage } from './RunnerPreferences';
 import { runnerText } from './RunnerLocale';
 import { gateCueWindow, gateJudgement, gateProgress } from './RunnerGate';
 import './style.css';
+import './leaderboard.css';
 
 function element<T extends HTMLElement>(id: string): T {
   const value = document.getElementById(id);
@@ -46,6 +51,13 @@ let mode: Panel | 'playing' = 'ready';
 let ready = false;
 let resultTimer: ReturnType<typeof setTimeout> | undefined;
 let lastEntryId: string | undefined;
+let currentEntry: RunnerEntry | undefined;
+let boardRequest = 0;
+let boardPeriod: RankingPeriod = 'daily';
+let boardPage = 1;
+let boardPages = 1;
+let saveStatusKey: 'syncing' | 'savedRank' | 'savedOutsideTop' | 'saveFailed' | 'savedLocal' | 'saveTemporary' | undefined;
+let savedRank: number | undefined;
 let disposed = false;
 let resumeAfterMenu = false;
 
@@ -53,6 +65,7 @@ let storage: Storage | undefined;
 try { storage = window.localStorage; } catch { /* Session scores still work. */ }
 const preferences = loadRunnerPreferences(storage);
 const board = new RunnerLeaderboard(storage);
+const sharedBoard = new RunnerSharedLeaderboard();
 const music = new RunnerMusic(musicTrack, preferences.musicEnabled, preferences.musicVolume / 100);
 let best = board.best;
 let language: RunnerLanguage = preferences.language;
@@ -154,7 +167,48 @@ function renderSoundPreference(): void {
 }
 
 function updateStorageNotice(): void {
-  element('board-storage-note').textContent = board.persistent ? t('localTopTen') : t('temporaryBoard');
+  if (!sharedBoard.enabled) element('board-storage-note').textContent = board.persistent ? t('localRecords') : t('temporaryBoard');
+}
+
+function setSaveStatus(key?: typeof saveStatusKey, rank?: number): void {
+  saveStatusKey = key;
+  savedRank = rank;
+  renderSaveStatus();
+}
+
+function renderSaveStatus(): void {
+  const status = element('runner-save-status');
+  const key = saveStatusKey;
+  if (!key) { status.textContent = ''; return; }
+  status.textContent = key === 'savedRank' && savedRank
+    ? t('savedRank').replace('{rank}', String(savedRank))
+    : t(key);
+}
+
+function persistCurrentEntry(): void {
+  if (!currentEntry) return;
+  const input = element<HTMLInputElement>('runner-player-name');
+  const playerName = runnerPlayerName(input.value, t('anonymous'));
+  currentEntry = { ...currentEntry, playerName };
+  input.value = playerName;
+  try { storage?.setItem(RUNNER_NAME_KEY, playerName); } catch { /* The run still stays in memory. */ }
+  board.save(currentEntry);
+  best = board.best;
+  element('result-best').textContent = best.toLocaleString('en-US');
+  if (!sharedBoard.enabled) {
+    setSaveStatus(board.persistent ? 'savedLocal' : 'saveTemporary');
+    updateStorageNotice();
+    return;
+  }
+  setSaveStatus('syncing');
+  const entry = { ...currentEntry, playerName };
+  void sharedBoard.save(entry).then((rank) => {
+    if (currentEntry?.id !== entry.id) return;
+    setSaveStatus(rank ? 'savedRank' : 'savedOutsideTop', rank ?? undefined);
+  }).catch(() => {
+    if (currentEntry?.id !== entry.id) return;
+    setSaveStatus('saveFailed');
+  });
 }
 
 function showPanel(panel?: Panel): void {
@@ -213,10 +267,53 @@ function action(): void {
 }
 
 function renderBoard(): void {
+  const request = ++boardRequest;
+  const period = boardPeriod, page = boardPage;
+  best = board.best;
+  const note = element('board-storage-note');
+  renderBoardControls(true);
+  if (!sharedBoard.enabled) {
+    renderBoardPage(paginateRanking(board.top(period), period, page));
+    note.textContent = board.persistent ? t('localRecords') : t('temporaryBoard');
+    return;
+  }
   const list = element('board-list');
   list.replaceChildren();
-  const entries = board.top();
-  best = entries[0]?.score ?? 0;
+  const loadingRow = document.createElement('li'); loadingRow.className = 'empty';
+  loadingRow.textContent = t('loadingLeaderboard'); list.append(loadingRow);
+  note.hidden = false;
+  note.textContent = t('loadingLeaderboard');
+  void sharedBoard.page(period, page).then((result) => {
+    if (request !== boardRequest || !boardDialog.open) return;
+    renderBoardPage(result);
+    note.hidden = false;
+    note.textContent = t('globalTop100');
+  }).catch(() => {
+    if (request !== boardRequest || !boardDialog.open) return;
+    renderBoardPage(paginateRanking(board.top(period), period, page));
+    note.hidden = false;
+    note.textContent = t('leaderboardUnavailable');
+  });
+}
+
+function renderBoardControls(loading = false): void {
+  for (const period of ['daily', 'history']) element(`runner-board-${period}`).setAttribute('aria-pressed', String(period === boardPeriod));
+  element('runner-board-period-note').hidden = boardPeriod !== 'daily';
+  element('runner-board-page-status').textContent = t('pageStatus').replace('{page}', String(boardPage)).replace('{pages}', String(boardPages));
+  element<HTMLButtonElement>('runner-board-previous').disabled = loading || boardPage <= 1;
+  element<HTMLButtonElement>('runner-board-next').disabled = loading || boardPage >= boardPages;
+}
+
+function renderBoardPage(result: RankingPage<RunnerEntry & { score: number }>): void {
+  boardPage = result.page; boardPages = result.totalPages;
+  renderBoardEntries(result.entries, (result.page - 1) * result.pageSize);
+  renderBoardControls();
+}
+
+function renderBoardEntries(entries: Array<RunnerEntry & { score: number; playerName?: string }>, offset = 0): void {
+  const list = element('board-list');
+  list.style.setProperty('--rank-offset', String(offset));
+  list.replaceChildren();
   if (!entries.length) {
     const empty = document.createElement('li'); empty.className = 'empty';
     empty.textContent = t('noRecords'); list.append(empty);
@@ -224,17 +321,24 @@ function renderBoard(): void {
   for (const entry of entries) {
     const row = document.createElement('li');
     if (entry.id === lastEntryId) row.className = 'current-entry';
+    const name = document.createElement('span'); name.className = 'entry-name';
+    name.textContent = entry.playerName || t('anonymous');
     const score = document.createElement('span'); score.className = 'entry-score';
     score.textContent = `${entry.score.toLocaleString('en-US')} ${t('points')}`;
     const detail = document.createElement('span'); detail.className = 'entry-detail';
-    detail.textContent = `${(entry.elapsedMilliseconds / 1000).toFixed(1)}s / ${entry.coins ?? 0} ${t('coins')} / ${entry.distance.toLocaleString('en-US')}m`;
-    row.append(score, detail); list.append(row);
+    detail.textContent = `${entry.distance.toLocaleString('en-US')}m · ${entry.coins ?? 0} ${t('coins')} · ${(entry.elapsedMilliseconds / 1000).toFixed(1)}s`;
+    row.append(name, score, detail); list.append(row);
   }
-  updateStorageNotice();
+}
+
+function saveRunnerName(): void {
+  if (!currentEntry) return;
+  persistCurrentEntry();
 }
 
 function openBoard(): void {
   resumeAfterMenu = false; menuDialog.close();
+  boardPage = 1;
   pauseRun(); renderBoard();
   if (!boardDialog.open) boardDialog.showModal();
 }
@@ -310,9 +414,12 @@ function endRun(model: RunnerModel): void {
   audio.collision(); countdown.cancel();
   const previousBest = best;
   lastEntryId = `run-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-  board.save({ id: lastEntryId, distance: model.distance, score: model.score, multiplier: model.multiplier,
-    elapsedMilliseconds: Math.round(model.elapsed * 1000), coins: model.coinsCollected, createdAt: new Date().toISOString() });
-  best = board.best; updateStorageNotice();
+  let savedName = '';
+  try { savedName = storage?.getItem(RUNNER_NAME_KEY) ?? ''; } catch { /* Use the anonymous name for this session. */ }
+  element<HTMLInputElement>('runner-player-name').value = savedName;
+  currentEntry = { id: lastEntryId, distance: model.distance, score: model.score, multiplier: model.multiplier,
+    elapsedMilliseconds: Math.round(model.elapsed * 1000), coins: model.coinsCollected, createdAt: new Date().toISOString() };
+  persistCurrentEntry();
   element('result-score').textContent = model.score.toLocaleString('en-US');
   element('result-multiplier').textContent = `×${model.multiplier.toFixed(2)}`;
   element('result-kicker').hidden = model.score <= previousBest;
@@ -436,6 +543,21 @@ element('power-toggle').addEventListener('click', () => {
 }, { signal });
 element('board-button').addEventListener('click', openBoard, { signal });
 element('result-board-button').addEventListener('click', openBoard, { signal });
+for (const period of ['daily', 'history'] as const) element(`runner-board-${period}`).addEventListener('click', () => {
+  if (boardPeriod === period) return;
+  boardPeriod = period; boardPage = 1; renderBoard();
+}, { signal });
+element('runner-board-previous').addEventListener('click', () => {
+  if (boardPage > 1) { boardPage--; renderBoard(); }
+}, { signal });
+element('runner-board-next').addEventListener('click', () => {
+  if (boardPage < boardPages) { boardPage++; renderBoard(); }
+}, { signal });
+boardDialog.addEventListener('close', () => { boardRequest++; }, { signal });
+element<HTMLFormElement>('runner-name-form').addEventListener('submit', (event) => {
+  event.preventDefault();
+  saveRunnerName();
+}, { signal });
 element('close-board-button').addEventListener('click', () => boardDialog.close(), { signal });
 for (const dialog of [menuDialog, boardDialog]) dialog.addEventListener('click', (event) => {
   if (event.target !== dialog) return;

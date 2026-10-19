@@ -283,11 +283,13 @@ test('TL002 fixed stepping gives identical scores across frame rates and bounds 
   assert.deepEqual(values[0], values[1]); assert.deepEqual(values[1], values[2]);
   const model = new RunnerModel(); model.start(); model.advance(30); assert.ok(model.elapsed <= 0.101);
 });
-test('TL002 Top 10 persists total scores, coin counts and elapsed-time tie ordering', () => {
+test('TL002 retains the top 100 total scores, coin counts and elapsed-time tie ordering', () => {
   const saved = storage(), board = new RunnerLeaderboard(saved);
-  for (let i = 0; i < 15; i++) board.save(entry(`r${i}`, i * 100)); board.save(entry('fast', 1400, 5000));
-  const reload = new RunnerLeaderboard(saved); assert.equal(reload.top().length, 10);
-  assert.equal(reload.best, 1412); assert.equal(reload.top()[0].id, 'fast'); assert.equal(reload.top()[0].coins, 12);
+  for (let i = 0; i < 115; i++) board.save(entry(`r${i}`, i * 100)); board.save(entry('fast', 11400, 5000));
+  const reload = new RunnerLeaderboard(saved); const top = reload.top();
+  assert.equal(top.length, 100);
+  assert.equal(reload.best, 11412); assert.equal(top[0].id, 'fast'); assert.equal(top[0].coins, 12);
+  assert.equal(top[1].id, 'r114'); assert.equal(top.at(-1)?.id, 'r16');
 });
 test('TL002 older distance-only entries remain readable and duplicate saves do not duplicate a run', () => {
   const saved = storage(); const legacy = entry('old', 40); delete legacy.coins; delete legacy.multiplier;

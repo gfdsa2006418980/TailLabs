@@ -1,6 +1,6 @@
 # Shared leaderboard setup
 
-The game stays on GitHub Pages. A Cloudflare Worker exposes the public leaderboard API, and Cloudflare D1 stores the shared top ten for each challenge size.
+The games stay on GitHub Pages. A Cloudflare Worker exposes the public leaderboard APIs, and Cloudflare D1 stores TL001 challenge rankings and TL002 runner scores in separate tables.
 
 ## Create the free backend
 
@@ -15,7 +15,17 @@ The game stays on GitHub Pages. A Cloudflare Worker exposes the public leaderboa
 
 Set the GitHub repository variable `VITE_LEADERBOARD_API_URL` to the Worker URL, without a trailing slash. In GitHub, open **Settings → Secrets and variables → Actions → Variables**. The Pages workflow injects this value into the production build. For local development, put the same value in the ignored `.env.local` file as `VITE_LEADERBOARD_API_URL=...`.
 
-The browser keeps its existing local records as a fallback. Shared results are recalculated by the Worker from the round fields, names are trimmed to 12 characters, challenge sizes are checked, and only the top ten per size remain in D1. The public client can still be modified to submit fabricated but plausible rounds; this lightweight leaderboard is not a cheat-proof competitive service.
+The browser keeps existing local records as a fallback. TL001 results are recalculated by the Worker from round fields. TL002 uses the separate `runner_leaderboard_scores` table and `/api/runner-leaderboard` plus `/api/runner-scores`; its score is recalculated as `(distance + coins) × speed multiplier`, rounded down. Names are trimmed to 12 characters. The public clients can still be modified to submit fabricated but plausible runs; these lightweight leaderboards are not cheat-proof competitive services.
+
+To add the TL002 table to an existing D1 database without touching TL001 records, run `npx --yes wrangler@4.44.0 d1 execute taillabs-leaderboard --remote --file=worker/migrations/0002_tl002_runner_leaderboard.sql`. New D1 databases can use the complete `worker/schema.sql` instead.
+
+## Daily and all-time rankings
+
+Both games default to the current daily board, with an all-time tab. Daily records use the submission timestamp in Taiwan time (UTC+8), from 00:00 inclusive to the next 00:00 exclusive. Renaming a record preserves its timestamp. TL001 still separates challenge sizes and keeps its existing completed/progress ranking rules; TL002 sorts by total score.
+
+GET `/api/leaderboard?target=10&period=daily&page=1` and `/api/runner-leaderboard?period=history&page=1` return `entries`, `page`, `pageSize`, `totalEntries`, `totalPages`, `period`, and `day` (a Taiwan date for daily rankings, otherwise null). Pages contain up to 10 entries; each board exposes only its first 100 entries, up to 10 pages. Empty boards return page 1 of 1. Invalid pages outside 1–10 are rejected; a stale page beyond the available results is clamped to the last page. The API defaults to history when `period` is omitted.
+
+Scores are retained in D1 instead of being deleted when they leave the all-time top 100, so a new daily result can still appear on its daily board. Each browser fallback retains the union of its all-time top 100 and current daily top 100. Scores deleted by older deployments are not reconstructed. Apply `worker/migrations/0003_daily_rankings.sql` after the TL002 migration to add time lookup indexes; these migrations only add tables/indexes and preserve existing scores. Then deploy the Worker and rebuild Pages together.
 
 ## GitHub account rename
 

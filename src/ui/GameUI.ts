@@ -2,6 +2,8 @@ import type { RoundResult } from '../systems/RoundSession';
 import { LeaderboardSystem, playerName, recordId } from '../systems/LeaderboardSystem';
 import type { LeaderboardEntry } from '../systems/LeaderboardSystem';
 import { SharedLeaderboard } from '../systems/SharedLeaderboard';
+import { paginateRanking } from '../systems/LeaderboardPaging';
+import type { RankingPage, RankingPeriod } from '../systems/LeaderboardPaging';
 import { LoopingMusic } from '../systems/LoopingMusic';
 import { audioPreferences } from '../systems/AudioPreferences';
 import { performancePreferences } from '../systems/PerformancePreferences';
@@ -39,6 +41,9 @@ export class GameUI {
   private resumeAfterSettings = false;
   private resultCompleted = false;
   private boardRequest = 0;
+  private boardPeriod: RankingPeriod = 'daily';
+  private boardPage = 1;
+  private boardPages = 1;
   private lastResult?: RoundResult;
   private saveStatus?: { key: string; values?: Record<string, string | number> };
   constructor(private readonly actions: UIActions, private readonly ranked: boolean, sounds: GameSounds) {
@@ -117,7 +122,13 @@ export class GameUI {
     this.listen('result-board-button', 'click', () => { this.result.close(); this.showBoard(true); });
     this.listen('board-close-button', 'click', () => this.closeBoard());
     this.listen('target-select', 'change', () => this.renderTutorialCount());
-    this.listen('board-target', 'change', () => this.renderBoard());
+    this.listen('board-target', 'change', () => { this.boardPage = 1; this.renderBoard(); });
+    for (const period of ['daily', 'history'] as const) this.listen(`board-${period}`, 'click', () => {
+      if (this.boardPeriod === period) return;
+      this.boardPeriod = period; this.boardPage = 1; this.renderBoard();
+    });
+    this.listen('board-previous', 'click', () => { if (this.boardPage > 1) { this.boardPage--; this.renderBoard(); } });
+    this.listen('board-next', 'click', () => { if (this.boardPage < this.boardPages) { this.boardPage++; this.renderBoard(); } });
     this.listen('name-form', 'submit', (event) => { event.preventDefault(); this.saveName(); });
     for (const dialog of [this.tutorial, this.result, this.board]) {
       const cancel = (event: Event) => {
@@ -202,6 +213,7 @@ export class GameUI {
   }
   setMode(target: number): void {
     this.boardTarget.value = String(target);
+    this.boardPage = 1;
   }
   finish(result: RoundResult): void {
     this.started = false;
@@ -268,43 +280,60 @@ export class GameUI {
   private showBoard(fromResult: boolean): void {
     if (!this.board.open) this.boardReturn = fromResult ? this.result : [this.tutorial, this.result].find((dialog) => dialog.open);
     this.closeSettings(false); this.tutorial.close(); this.result.close();
+    this.boardPage = 1;
     this.actions.pause(true); this.renderBoard(); this.show(this.board, 'leaderboard-title');
   }
   private closeBoard(): void {
+    this.boardRequest++;
     this.board.close();
     if (this.boardReturn) this.show(this.boardReturn, this.boardReturn === this.result ? 'result-title' : 'tutorial-title');
     else this.actions.pause(false);
   }
   private renderBoard(): void {
+    const request = ++this.boardRequest;
     const list = element('leaderboard-list'); list.replaceChildren();
     const target = Number(this.boardTarget.value);
-    const rows = this.leaderboard.top(target);
+    const period = this.boardPeriod;
+    const page = this.boardPage;
     const storage = element('leaderboard-storage');
     storage.hidden = false;
+    this.renderBoardControls(true);
     if (!this.sharedLeaderboard.enabled) {
-      this.renderBoardRows(rows);
+      this.renderBoardPage(paginateRanking(this.leaderboard.top(target, period), period, page));
       storage.textContent = t(this.leaderboard.persistent ? 'localRecords' : 'storageUnavailable');
       return;
     }
-    const request = ++this.boardRequest;
     storage.textContent = t('loadingLeaderboard');
-    void this.sharedLeaderboard.top(target).then((sharedRows) => {
-      if (request !== this.boardRequest || this.boardTarget.value !== String(target)) return;
-      this.renderBoardRows(sharedRows);
+    void this.sharedLeaderboard.page(target, period, page).then((result) => {
+      if (request !== this.boardRequest || !this.board.open) return;
+      this.renderBoardPage(result);
       storage.textContent = '';
       storage.hidden = true;
     }).catch(() => {
-      if (request !== this.boardRequest || this.boardTarget.value !== String(target)) return;
+      if (request !== this.boardRequest || !this.board.open) return;
+      this.renderBoardPage(paginateRanking(this.leaderboard.top(target, period), period, page));
       storage.textContent = t('leaderboardUnavailable');
     });
   }
-  private renderBoardRows(rows: LeaderboardEntry[]): void {
+  private renderBoardControls(loading = false): void {
+    for (const period of ['daily', 'history']) element(`board-${period}`).setAttribute('aria-pressed', String(period === this.boardPeriod));
+    element('board-period-note').hidden = this.boardPeriod !== 'daily';
+    element('board-page-status').textContent = t('pageStatus', { page: this.boardPage, pages: this.boardPages });
+    element<HTMLButtonElement>('board-previous').disabled = loading || this.boardPage <= 1;
+    element<HTMLButtonElement>('board-next').disabled = loading || this.boardPage >= this.boardPages;
+  }
+  private renderBoardPage(result: RankingPage<LeaderboardEntry>): void {
+    this.boardPage = result.page; this.boardPages = result.totalPages;
+    this.renderBoardRows(result.entries, (result.page - 1) * result.pageSize);
+    this.renderBoardControls();
+  }
+  private renderBoardRows(rows: LeaderboardEntry[], offset = 0): void {
     const list = element('leaderboard-list'); list.replaceChildren();
     if (!rows.length) { const empty = document.createElement('li'); empty.className = 'empty-records'; empty.textContent = t('noRecords'); list.append(empty); }
     rows.forEach((row, index) => {
       const item = document.createElement('li');
       item.style.animationDelay = `${Math.min(index * 8, 120)}ms`;
-      const rank = document.createElement('span'); rank.className = 'record-rank'; rank.textContent = String(index + 1).padStart(2, '0');
+      const rank = document.createElement('span'); rank.className = 'record-rank'; rank.textContent = String(offset + index + 1).padStart(2, '0');
       const detail = document.createElement('div');
       const name = document.createElement('strong'); name.textContent = row.playerName;
       const info = document.createElement('small'); info.textContent = `${row.completed ? t('completedRecord') : t('progressRecord', { placed: row.placedCount, target: row.target })} · ${formatTime(row.elapsedMilliseconds)}`;

@@ -3,6 +3,7 @@ import { GAME_CONFIG } from './game/GameConfig';
 import { showStartupError } from './ui/controls';
 import { t } from './ui/i18n';
 import './style.css';
+import './ui/leaderboard.css';
 
 let game: Phaser.Game;
 try {

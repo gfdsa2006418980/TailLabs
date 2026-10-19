@@ -44,6 +44,11 @@
               <span><span class="sr-only" data-i18n="distance">距離</span><strong id="result-distance">0</strong><small>m</small></span>
             </div>
             <p class="result-best"><svg class="ui-icon" aria-hidden="true"><use href="#icon-score" /></svg><span data-i18n="best">最佳</span><strong id="result-best">0</strong><small data-i18n="points">分</small></p>
+            <form id="runner-name-form" class="runner-name-form">
+              <label for="runner-player-name" data-i18n="playerName">你的名字</label>
+              <div class="runner-name-row"><input id="runner-player-name" name="playerName" maxlength="24" autocomplete="nickname" /><button type="submit" data-i18n="saveName">儲存名字</button></div>
+              <small id="runner-save-status" role="status" aria-live="polite"></small>
+            </form>
             <div class="result-actions"><button id="restart-button" class="button primary" type="button"><span data-i18n="retry">再逃一次</span><span aria-hidden="true">↗</span></button><button id="result-board-button" class="icon-button" type="button" aria-label="排行榜" data-i18n-aria="leaderboard"><svg class="ui-icon" aria-hidden="true"><use href="#icon-trophy" /></svg></button></div>
           </section>
           <section id="pause-panel" class="panel pause-panel" hidden aria-labelledby="pause-title">
@@ -110,8 +115,11 @@
     </dialog>
     <dialog id="board-dialog" class="board-dialog" aria-labelledby="board-title">
       <div class="dialog-heading"><h2 id="board-title" data-i18n="leaderboard">排行榜</h2><button id="close-board-button" class="close-button" type="button" aria-label="關閉排行榜" data-i18n-aria="rankingClose">×</button></div>
+      <div class="ranking-tabs" role="group" aria-label="排行榜期間" data-i18n-aria="rankingPeriod"><button id="runner-board-daily" type="button" aria-pressed="true" data-i18n="dailyRanking">每日排行</button><button id="runner-board-history" type="button" aria-pressed="false" data-i18n="historyRanking">歷史排行</button></div>
+      <p id="runner-board-period-note" class="ranking-period-note" data-i18n="dailyReset">每天 00:00 更新（UTC+8）</p>
       <ol id="board-list" class="board-list"></ol>
-      <p id="board-storage-note" class="board-footnote" data-i18n="localTopTen">本機 Top 10</p>
+      <nav class="ranking-pagination" aria-label="排行榜分頁" data-i18n-aria="rankingPages"><button id="runner-board-previous" type="button" data-i18n="previousPage" disabled>上一頁</button><span id="runner-board-page-status" role="status" aria-live="polite"></span><button id="runner-board-next" type="button" data-i18n="nextPage" disabled>下一頁</button></nav>
+      <p id="board-storage-note" class="board-footnote" data-i18n="globalTop100">依總分排名 · 顯示前 100 名</p>
     </dialog>
     <noscript>這款遊戲需要啟用 JavaScript 才能遊玩。</noscript>
     <audio id="music-track" loop preload="none">
