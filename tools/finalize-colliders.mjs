@@ -32,16 +32,18 @@ const manifest = { version: 1, alphaThreshold: 128, displayScale: 0.5625, defini
 const json = JSON.stringify(manifest, null, 2) + '\n';
 await writeFile(path.join(root, 'public/assets/serpentelas/colliders.json'), json);
 await writeFile(path.join(root, 'src/data/serpentelas.generated.json'), json);
+await import('./build-tl001-art.mjs');
 
 const escape = (value) => value.replaceAll('&', '&amp;').replaceAll('<', '&lt;');
 const points = (polygon) => polygon.map((p) => `${p.x},${p.y}`).join(' ');
 const tiles = await Promise.all(definitions.map(async (definition, index) => {
-  const bytes = await readFile(path.join(root, 'public/assets/serpentelas', definition.file));
+  const file = 'rose/' + definition.file.replace('.webp', '.svg');
+  const bytes = await readFile(path.join(root, 'public/assets/serpentelas', file));
   const x = 24 + (index % 5) * 204;
   const y = 90 + Math.floor(index / 5) * 218;
-  return `<g transform="translate(${x} ${y})"><rect width="188" height="202" rx="12" fill="#fffef8" stroke="#d8ddcf"/><g transform="translate(22 12) scale(1.5)"><image width="96" height="96" href="data:image/webp;base64,${bytes.toString('base64')}"/>${definition.parts.map((part) => `<polygon points="${points(part)}" fill="#63b39b" fill-opacity=".08" stroke="#63b39b" stroke-width=".35"/>`).join('')}<polygon points="${points(definition.outline)}" fill="none" stroke="#d96c36" stroke-width=".9"/></g><text x="94" y="174" text-anchor="middle" fill="#284c3c" font-size="13">${escape(definition.name)}</text><text x="94" y="191" text-anchor="middle" fill="#7a8579" font-size="10">${definition.outline.length} 節點 · ${definition.parts.length} 凸形分塊</text></g>`;
+  return `<g transform="translate(${x} ${y})"><rect width="188" height="202" rx="12" fill="#fffaf9" stroke="#eadedc"/><g transform="translate(22 12) scale(1.5)"><image width="96" height="96" href="data:image/svg+xml;base64,${bytes.toString('base64')}"/>${definition.parts.map((part) => `<polygon points="${points(part)}" fill="#855159" fill-opacity=".08" stroke="#855159" stroke-width=".35"/>`).join('')}<polygon points="${points(definition.outline)}" fill="none" stroke="#bd828a" stroke-width=".9"/></g><text x="94" y="174" text-anchor="middle" fill="#332629" font-size="13">${escape(definition.name)}</text><text x="94" y="191" text-anchor="middle" fill="#78696c" font-size="10">${definition.outline.length} 節點 · ${definition.parts.length} 凸形分塊</text></g>`;
 }));
-const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1052" height="770" viewBox="0 0 1052 770"><rect width="1052" height="770" fill="#f4f2e9"/><g font-family="Segoe UI,Microsoft JhengHei,sans-serif"><text x="24" y="38" fill="#284c3c" font-size="24" font-weight="600">TL001 · 15 種蛇貂碰撞輪廓</text><text x="24" y="64" fill="#7a8579" font-size="13">橘線：實際外框　綠線：凸形分塊　透明度門檻 128 / 255　原始 WebP 完整保留</text>${tiles.join('')}<text x="24" y="758" fill="#7a8579" font-size="11">尾巴與四肢的凹處保留；外框由原圖透明度描出，未重新生成或裁切美術。</text></g></svg>`;
+const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1052" height="770" viewBox="0 0 1052 770"><rect width="1052" height="770" fill="#faf5f3"/><g font-family="Segoe UI,Microsoft JhengHei,sans-serif"><text x="24" y="38" fill="#332629" font-size="24" font-weight="600">TL001 · 15 種蛇貂碰撞輪廓</text><text x="24" y="64" fill="#78696c" font-size="13">粉線：實際外框　棕線：凸形分塊　透明度門檻 128 / 255　原始 WebP 完整保留</text>${tiles.join('')}<text x="24" y="758" fill="#78696c" font-size="11">尾巴與四肢的凹處保留；外框由原圖透明度描出，未重新生成或裁切美術。</text></g></svg>`;
 await mkdir(path.join(root, 'docs'), { recursive: true });
 await writeFile(path.join(root, 'docs/collider-overview.svg'), svg);
 await writeFile(path.join(root, 'public/assets/serpentelas/collider-overview.svg'), svg);

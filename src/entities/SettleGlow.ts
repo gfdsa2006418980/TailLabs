@@ -18,9 +18,9 @@ export function addSettleGlow(scene: Phaser.Scene, definition: SerpentelaDefinit
         if (index) ctx.lineTo(x, y); else ctx.moveTo(x, y);
       });
       ctx.closePath();
-      ctx.fillStyle = 'rgba(255,237,172,0.12)'; ctx.fill();
-      ctx.strokeStyle = 'rgba(255,215,108,0.28)'; ctx.lineWidth = 8; ctx.stroke();
-      ctx.strokeStyle = 'rgba(255,245,206,0.92)'; ctx.lineWidth = 2; ctx.stroke();
+      ctx.fillStyle = 'rgba(239,217,218,0.12)'; ctx.fill();
+      ctx.strokeStyle = 'rgba(189,130,138,0.28)'; ctx.lineWidth = 8; ctx.stroke();
+      ctx.strokeStyle = 'rgba(255,249,248,0.92)'; ctx.lineWidth = 2; ctx.stroke();
       texture.refresh();
     }
   }

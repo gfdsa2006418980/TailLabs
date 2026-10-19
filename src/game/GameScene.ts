@@ -1,3 +1,4 @@
+import { THEME, themeCss } from './Theme';
 import Phaser from 'phaser';
 import { SERPENTELAS } from '../data/serpentelas';
 import { Serpentela, type VisibilityBounds } from '../entities/Serpentela';
@@ -17,7 +18,7 @@ import { performancePreferences } from '../systems/PerformancePreferences';
 import { PlayClock } from '../systems/PlayClock';
 import { canRescue, RescueSystem } from '../systems/RescueSystem';
 
-const INK = 0x345442;
+const INK = THEME.ink;
 const FONT = '"Segoe UI", "Microsoft JhengHei", sans-serif';
 
 export class GameScene extends Phaser.Scene {
@@ -554,11 +555,11 @@ export class GameScene extends Phaser.Scene {
       });
       this.pillarBodies.push(wall);
       this.stickiness.addSupport(wall.id);
-      pillars.lineStyle(pillarWidth * 1.85, 0x93ae93, 0.09).lineBetween(x, top, x, bottom);
-      pillars.lineStyle(pillarWidth * 0.85, 0xc2b47d, 0.17).lineBetween(x, top + 3, x, bottom);
-      pillars.lineStyle(pillarWidth * 0.3, 0xd8e8d1, 0.34).lineBetween(x, top + 6, x, bottom);
-      pillars.lineStyle(1, 0xfffced, 0.72).lineBetween(x, top + 10, x, bottom - 2);
-      pillars.fillStyle(0xc1b789, 0.32).fillEllipse(x, bottom, pillarWidth * 1.85, 7);
+      pillars.lineStyle(pillarWidth * 1.85, THEME.accent, 0.09).lineBetween(x, top, x, bottom);
+      pillars.lineStyle(pillarWidth * 0.85, THEME.accentDark, 0.17).lineBetween(x, top + 3, x, bottom);
+      pillars.lineStyle(pillarWidth * 0.3, THEME.glow, 0.34).lineBetween(x, top + 6, x, bottom);
+      pillars.lineStyle(1, THEME.pale, 0.72).lineBetween(x, top + 10, x, bottom - 2);
+      pillars.fillStyle(THEME.accent, 0.32).fillEllipse(x, bottom, pillarWidth * 1.85, 7);
     }
     (parent ?? this.worldContainer).add(pillars);
   }
@@ -570,7 +571,7 @@ export class GameScene extends Phaser.Scene {
       for (let y = this.layout.chamberTop + dotStep / 2; y < this.layout.chamberBottom; y += dotStep) art.fillCircle(x, y, 0.6);
     }
     art.lineStyle(1, INK, 0.11).strokeRoundedRect(this.layout.chamberLeft, this.layout.chamberTop, this.layout.chamberWidth, this.layout.chamberHeight, 14);
-    const label = (x: number, y: number, text: string, size = 11, color = '#7c8b7e') => {
+    const label = (x: number, y: number, text: string, size = 11, color = themeCss(THEME.muted)) => {
       const object = this.add.text(x, y, text, { fontFamily: FONT, fontSize: size, color }); parent.add(object); return object;
     };
     const previewWidth = 96;
@@ -579,7 +580,7 @@ export class GameScene extends Phaser.Scene {
     const previewLeft = previewRight - previewWidth;
     const previewTop = this.layout.chamberTop + 48;
     const previewCenter = previewLeft + previewWidth / 2;
-    art.fillStyle(0xf1f0e5, 0.7).fillRoundedRect(previewLeft, previewTop, previewWidth, previewHeight, 12);
+    art.fillStyle(THEME.blush, 0.7).fillRoundedRect(previewLeft, previewTop, previewWidth, previewHeight, 12);
     this.nextLabel = label(previewCenter, previewTop + 9, t('next'), 14).setOrigin(0.5, 0).setStyle({ fontStyle: 'bold', align: 'center' });
     this.nextImage = this.add.image(previewCenter, previewTop + 58, 'serpentela-w50-01').setDisplaySize(38.25, 38.25); parent.add(this.nextImage);
     // Graphics commands otherwise rebuild and triangulate all 504 dots every frame.

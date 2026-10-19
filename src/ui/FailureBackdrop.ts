@@ -1,3 +1,4 @@
+import { THEME, themeCss, serpentelaArtFile } from '../game/Theme';
 import { SERPENTELAS } from '../data/serpentelas';
 import { SerpentelaPicker } from '../systems/SerpentelaPicker';
 
@@ -26,7 +27,7 @@ export class FailureBackdrop {
     this.rule = this.stylesheet.sheet!.cssRules[0] as CSSStyleRule;
     for (const definition of SERPENTELAS) {
       const image = new Image();
-      image.src = `${import.meta.env.BASE_URL}assets/serpentelas/${definition.file}`;
+      image.src = `${import.meta.env.BASE_URL}assets/serpentelas/${serpentelaArtFile(definition.file)}`;
       this.images.set(definition.id, image);
     }
     this.imagesReady = Promise.all([...this.images.values()].map((image) => image.decode().catch(() => {}))).then(() => {});
@@ -52,7 +53,7 @@ export class FailureBackdrop {
     const ctx = this.canvas.getContext('2d');
     if (!ctx) return;
     ctx.scale(ratio, ratio);
-    ctx.fillStyle = '#d5ddcb';
+    ctx.fillStyle = themeCss(THEME.glow);
     ctx.fillRect(0, 0, width, height);
 
     const columns = Math.max(1, Math.ceil(Math.sqrt(this.count * width / height)));

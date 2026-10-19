@@ -1,3 +1,4 @@
+import { THEME } from '../game/Theme';
 import Phaser from 'phaser';
 import type { SerpentelaDefinition } from '../data/serpentelas';
 import { SERPENTELA_SCALE } from '../data/serpentelas';
@@ -86,7 +87,7 @@ export class Serpentela implements StickyTarget {
 
   drawRescueHighlight(graphics: Phaser.GameObjects.Graphics): void {
     const bounds = this.body.bounds;
-    graphics.lineStyle(1.8, this.grabbedState ? 0x73966a : 0xc78d50, 0.85)
+    graphics.lineStyle(1.8, this.grabbedState ? THEME.accent : THEME.accentDark, 0.85)
       .strokeEllipse((bounds.min.x + bounds.max.x) / 2, (bounds.min.y + bounds.max.y) / 2, bounds.max.x - bounds.min.x + 12, bounds.max.y - bounds.min.y + 12);
   }
 
@@ -108,7 +109,7 @@ export class Serpentela implements StickyTarget {
     this.artwork.stopEffects();
     const x = (this.definition.bounds.maxX - this.definition.center.x) * SERPENTELA_SCALE - 4;
     const y = (this.definition.bounds.minY - this.definition.center.y) * SERPENTELA_SCALE + 4;
-    this.visual.add(this.scene.add.circle(x, y, 2.5, 0x73966a));
+    this.visual.add(this.scene.add.circle(x, y, 2.5, THEME.accent));
     this.flashGlow();
     this.onStable?.();
   }
@@ -164,12 +165,12 @@ export class Serpentela implements StickyTarget {
 
   drawOutline(graphics: Phaser.GameObjects.Graphics): void {
     const parts = this.body.parts.length > 1 ? this.body.parts.slice(1) : this.body.parts;
-    graphics.lineStyle(0.6, 0x4a9b8a, 0.65);
+    graphics.lineStyle(0.6, THEME.accentDark, 0.65);
     for (const part of parts) if (part.vertices) graphics.strokePoints(part.vertices, true);
     const angle = this.body.angle;
     const cos = Math.cos(angle);
     const sin = Math.sin(angle);
-    graphics.lineStyle(1.1, 0xd96c36, 0.95).beginPath();
+    graphics.lineStyle(1.1, THEME.accent, 0.95).beginPath();
     this.definition.outline.forEach((point, index) => {
       const localX = (point.x - this.definition.center.x) * SERPENTELA_SCALE;
       const localY = (point.y - this.definition.center.y) * SERPENTELA_SCALE;

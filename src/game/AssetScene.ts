@@ -1,3 +1,4 @@
+import { serpentelaArtFile } from './Theme';
 import Phaser from 'phaser';
 import { SERPENTELAS } from '../data/serpentelas';
 import { loadRequiredAssets, type RequiredAsset } from '../systems/AssetReadiness';
@@ -5,8 +6,8 @@ import { t } from '../ui/i18n';
 
 const assets: readonly RequiredAsset[] = [
   ...SERPENTELAS.map((definition) => ({
-    key: definition.texture, type: 'image' as const,
-    url: `${import.meta.env.BASE_URL}assets/serpentelas/${definition.file}`,
+    key: definition.texture, type: 'svg' as const,
+    url: `${import.meta.env.BASE_URL}assets/serpentelas/${serpentelaArtFile(definition.file)}`,
   })),
   { key: 'magic-circle', type: 'svg', url: `${import.meta.env.BASE_URL}assets/magic-circle.svg` },
 ];

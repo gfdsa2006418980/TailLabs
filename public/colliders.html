@@ -3,19 +3,19 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta name="theme-color" content="#f4f2e9" />
+  <meta name="theme-color" content="#faf5f3" />
   <link rel="icon" href="./favicon.svg" />
   <title>15 種蛇貂碰撞外框 · TailLabs</title>
   <style>
-    :root { font-family: "Segoe UI", "Microsoft JhengHei", sans-serif; color: #284c3c; background: #f4f2e9; font-synthesis: none; }
+    :root { font-family: "Segoe UI", "Microsoft JhengHei", sans-serif; color: #332629; background: #faf5f3; font-synthesis: none; }
     * { box-sizing: border-box; }body { margin: 0; }main { max-width: 1160px; margin: auto; padding: 32px 26px 50px; }
-    a { color: #284c3c; text-underline-offset: 4px; }nav { display: flex; gap: 20px; flex-wrap: wrap; align-items: center; justify-content: space-between; font-size: 12px; padding-bottom: 24px; border-bottom: 1px solid #d8ddcf; }
-    h1 { font-size: 28px; margin: 30px 0 10px; letter-spacing: -.8px; }p { color: #788573; font-size: 13px; line-height: 1.8; }
-    .toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 16px; padding: 18px 0 24px; font-size: 12px; }.toolbar label { cursor: pointer; display: flex; align-items: center; gap: 6px; }input { accent-color: #284c3c; }.legend { margin-left: auto; color: #788573; font-size: 11px; }.orange { color: #d66d36; }.green { color: #419d82; }
-    .grid { display: grid; grid-template-columns: repeat(5,minmax(0,1fr)); gap: 16px; }.card { min-width: 0; background: #fffef8; border: 1px solid #d8ddcf; border-radius: 12px; padding: 12px; }.art { aspect-ratio: 1; width: 100%; display: block; border-radius: 7px; background-color: #faf9f2; background-image: linear-gradient(45deg,#e9ecdf 25%,transparent 25%),linear-gradient(-45deg,#e9ecdf 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#e9ecdf 75%),linear-gradient(-45deg,transparent 75%,#e9ecdf 75%); background-size: 16px 16px; background-position: 0 0,0 8px,8px -8px,-8px 0; }
-    h2 { font-size: 13px; margin: 14px 0 6px; font-weight: 600; }.weight { font-size: 11px; color: #788573; }.try { display: block; border: 1px solid #c8d1c0; border-radius: 6px; text-decoration: none; text-align: center; padding: 9px 2px; margin-top: 12px; font-size: 11px; }.try:hover { background: #e9eddf; }details { margin-top: 12px; font-size: 10px; color: #788573; }summary { cursor: pointer; }details p { font-size: 10px; margin: 6px 0 0; }
-    .hide-parts .parts { display: none; }.hide-outlines .outline { display: none; }a:focus-visible,input:focus-visible,summary:focus-visible { outline: 3px solid #d4864e; outline-offset: 4px; }
-    footer { margin-top: 28px; padding-top: 20px; border-top: 1px solid #d8ddcf; font-size: 11px; color: #788573; line-height: 1.8; }
+    a { color: #332629; text-underline-offset: 4px; }nav { display: flex; gap: 20px; flex-wrap: wrap; align-items: center; justify-content: space-between; font-size: 12px; padding-bottom: 24px; border-bottom: 1px solid #eadedc; }
+    h1 { font-size: 28px; margin: 30px 0 10px; letter-spacing: -.8px; }p { color: #78696c; font-size: 13px; line-height: 1.8; }
+    .toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 16px; padding: 18px 0 24px; font-size: 12px; }.toolbar label { cursor: pointer; display: flex; align-items: center; gap: 6px; }input { accent-color: #332629; }.legend { margin-left: auto; color: #78696c; font-size: 11px; }.rose { color: #bd828a; }.brown { color: #855159; }
+    .grid { display: grid; grid-template-columns: repeat(5,minmax(0,1fr)); gap: 16px; }.card { min-width: 0; background: #fffaf9; border: 1px solid #eadedc; border-radius: 12px; padding: 12px; }.art { aspect-ratio: 1; width: 100%; display: block; border-radius: 7px; background-color: #faf5f3; background-image: linear-gradient(45deg,#f6e8e8 25%,transparent 25%),linear-gradient(-45deg,#f6e8e8 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#f6e8e8 75%),linear-gradient(-45deg,transparent 75%,#f6e8e8 75%); background-size: 16px 16px; background-position: 0 0,0 8px,8px -8px,-8px 0; }
+    h2 { font-size: 13px; margin: 14px 0 6px; font-weight: 600; }.weight { font-size: 11px; color: #78696c; }.try { display: block; border: 1px solid #eadedc; border-radius: 6px; text-decoration: none; text-align: center; padding: 9px 2px; margin-top: 12px; font-size: 11px; }.try:hover { background: #f6e8e8; }details { margin-top: 12px; font-size: 10px; color: #78696c; }summary { cursor: pointer; }details p { font-size: 10px; margin: 6px 0 0; }
+    .hide-parts .parts { display: none; }.hide-outlines .outline { display: none; }a:focus-visible,input:focus-visible,summary:focus-visible { outline: 3px solid #855159; outline-offset: 4px; }
+    footer { margin-top: 28px; padding-top: 20px; border-top: 1px solid #eadedc; font-size: 11px; color: #78696c; line-height: 1.8; }
     @media(max-width:900px) { .grid { grid-template-columns: repeat(3,minmax(0,1fr)); } }
     @media(max-width:540px) { main { padding: 22px 16px 32px; }.grid { grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px; }h1 { font-size: 24px; }.legend { width: 100%; margin-left: 0; } }
   </style>
@@ -25,7 +25,7 @@
   <nav><a href="./">← 回到落下實驗</a><span><a href="./assets/serpentelas/collider-overview.svg" download="TL001-蛇貂碰撞外框總覽.svg">下載總覽</a> · <a href="./assets/serpentelas/colliders.json" download>下載外框資料</a></span></nav>
   <h1>15 種蛇貂，逐隻檢查外框。</h1>
   <p>外框沿原圖透明邊界描出，保留身體、尾巴與四肢的凹處。點選「試放這種造型」，可以重複放下同一隻檢查堆疊。</p>
-  <div class="toolbar"><label><input id="show-outlines" type="checkbox" checked /> 顯示外框</label><label><input id="show-parts" type="checkbox" checked /> 顯示分塊</label><span class="legend"><span class="orange">橘色：碰撞外沿</span>　<span class="green">綠色：內部分塊</span></span></div>
+  <div class="toolbar"><label><input id="show-outlines" type="checkbox" checked /> 顯示外框</label><label><input id="show-parts" type="checkbox" checked /> 顯示分塊</label><span class="legend"><span class="rose">粉色：碰撞外沿</span>　<span class="brown">棕色：內部分塊</span></span></div>
   <div id="gallery" class="grid" aria-live="polite"><p>正在載入蛇貂…</p></div>
   <footer>原始美術完整保留，這一頁的線條只用來檢查碰撞範圍；遊戲中的柔軟回彈仍會讓美術短暫超出固定外框。</footer>
 </main>
@@ -49,10 +49,10 @@
       const card = document.createElement('article');
       card.className = 'card';
       const svg = svgElement('svg', { viewBox: '-4 -4 104 104', role: 'img', 'aria-label': `${definition.name}碰撞外框`, class: 'art' });
-      svg.append(svgElement('image', { href: `./assets/serpentelas/${definition.file}`, width: definition.width, height: definition.height }));
+      svg.append(svgElement('image', { href: `./assets/serpentelas/${'rose/' + definition.file.replace('.webp', '.svg')}`, width: definition.width, height: definition.height }));
       const parts = svgElement('g', { class: 'parts' });
-      for (const polygon of definition.parts) parts.append(svgElement('polygon', { points: points(polygon), fill: '#63b39b', 'fill-opacity': .08, stroke: '#419d82', 'stroke-width': .35 }));
-      svg.append(parts, svgElement('polygon', { class: 'outline', points: points(definition.outline), fill: 'none', stroke: '#d66d36', 'stroke-width': .8 }));
+      for (const polygon of definition.parts) parts.append(svgElement('polygon', { points: points(polygon), fill: '#855159', 'fill-opacity': .08, stroke: '#855159', 'stroke-width': .35 }));
+      svg.append(parts, svgElement('polygon', { class: 'outline', points: points(definition.outline), fill: 'none', stroke: '#bd828a', 'stroke-width': .8 }));
       const name = document.createElement('h2');
       name.textContent = definition.name;
       const weight = document.createElement('span');

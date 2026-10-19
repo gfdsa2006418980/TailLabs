@@ -1,3 +1,4 @@
+import { MISSING_ART, THEME } from './Theme';
 import Phaser from 'phaser';
 import { GameScene } from './GameScene';
 import { AssetScene } from './AssetScene';
@@ -11,7 +12,8 @@ export const GAME_CONFIG: Phaser.Types.Core.GameConfig = {
   parent: 'game',
   width: STAGE.width,
   height: STAGE.height,
-  backgroundColor: '#faf9f2',
+  backgroundColor: THEME.paper,
+  images: { missing: MISSING_ART },
   physics: PHYSICS_CONFIG,
   scene: [AssetScene, GameScene],
   scale: {
