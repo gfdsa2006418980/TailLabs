@@ -14,7 +14,7 @@ import { RunnerMusic } from './RunnerMusic';
 import { loadRunnerPreferences, saveRunnerPreferences } from './RunnerPreferences';
 import type { RunnerLanguage } from './RunnerPreferences';
 import { runnerText } from './RunnerLocale';
-import { gateCueWindow, gateJudgement, gateProgress } from './RunnerGate';
+import { gateCueVisibleAt, gateCueWindow, gateJudgement, gateProgress } from './RunnerGate';
 import './style.css';
 import './leaderboard.css';
 
@@ -39,7 +39,7 @@ const countdownLabel = element('countdown-label');
 const gateCue = element('gate-cue');
 const gateLabel = element('gate-label');
 const gateMarker = element('gate-marker');
-let cueWindowSeconds = -1;
+let cueTimingKey = '';
 let gateTrackWidth = 246;
 const musicTrack = element<HTMLAudioElement>('music-track');
 const countdown = new RunnerCountdown();
@@ -112,10 +112,12 @@ function renderGateFeedback(): void {
 
 function updateGateCue(model: RunnerModel): void {
   const gate = model.activeGate ?? model.gates.find((item) => item.opened && model.elapsed - item.openedAt! < 0.6);
-  gateCue.hidden = mode !== 'playing' || model.phase !== 'running' || !gate;
+  const cueVisible = !!gate && (gate.opened || model.elapsed >= gateCueVisibleAt(gate) - 1e-9);
+  gateCue.hidden = mode !== 'playing' || model.phase !== 'running' || !cueVisible;
   let state = 'none';
   if (gate) {
-    if (gate.windowSeconds !== cueWindowSeconds) {
+    const timingKey = `${gate.windowSeconds}:${gate.cueLeadSeconds}`;
+    if (timingKey !== cueTimingKey) {
       const window = gateCueWindow(gate);
       gateCue.style.setProperty('--gate-window-left', `${window.left * 100}%`);
       gateCue.style.setProperty('--gate-window-width', `${window.width * 100}%`);
@@ -123,12 +125,12 @@ function updateGateCue(model: RunnerModel): void {
       gateCue.style.setProperty('--gate-early-width', `${window.earlyWidth * 100}%`);
       gateCue.style.setProperty('--gate-late-left', `${window.lateLeft * 100}%`);
       gateCue.style.setProperty('--gate-late-width', `${window.lateWidth * 100}%`);
-      cueWindowSeconds = gate.windowSeconds;
+      cueTimingKey = timingKey;
     }
     const judgement = gateJudgement(gate, model.elapsed);
-    state = gate.opened ? 'open' : gate.pendingFailure ? 'missed' : judgement === 'safe' ? 'safe' : judgement === 'open' ? 'hit' : 'waiting';
+    state = gate.opened || gate.pendingOpen ? 'open' : gate.pendingFailure ? 'missed' : judgement === 'safe' ? 'safe' : judgement === 'open' ? 'hit' : 'waiting';
     gateCue.dataset.state = state;
-    const label = t(gate.opened ? 'gateOpen' : gate.pendingFailure === 'late' ? 'gateLate'
+    const label = t(gate.opened || gate.pendingOpen ? 'gateOpen' : gate.pendingFailure === 'late' ? 'gateLate'
       : gate.pendingFailure === 'missed' ? 'gateMissed' : state === 'safe' ? 'gateSafe' : state === 'hit' ? 'gateNow' : 'gateWait');
     if (gateLabel.textContent !== label) gateLabel.textContent = label;
     gateMarker.style.transform = `translateX(${gateProgress(gate, model.elapsed) * gateTrackWidth}px)`;
@@ -137,6 +139,7 @@ function updateGateCue(model: RunnerModel): void {
   stage.dataset.gatesOpened = String(model.gatesOpened);
   stage.dataset.gateFailure = model.gateFailure ?? '';
   stage.dataset.gatePendingFailure = gate?.pendingFailure ?? '';
+  stage.dataset.gatePendingOpen = String(gate?.pendingOpen ?? false);
   stage.dataset.gateWindow = gate ? gate.windowSeconds.toFixed(4) : '';
 }
 
@@ -230,7 +233,7 @@ function beginCountdown(): void {
 
 function startRun(): void {
   if (!ready || mode !== 'ready' || boardDialog.open || menuDialog.open || document.hidden) return;
-  audio.unlock();
+  audio.unlock(); music.unlock();
   clearTimeout(resultTimer);
   coinFx.reset(); scene.startRun();
   beginCountdown();
@@ -255,7 +258,7 @@ function pauseRun(): void {
 
 function resumeRun(): void {
   if (!ready || scene.model.phase !== 'running' || boardDialog.open || menuDialog.open || document.hidden) return;
-  audio.unlock();
+  audio.unlock(); music.unlock();
   beginCountdown();
 }
 
@@ -362,7 +365,7 @@ function showMenuPage(showCredits: boolean): void {
 let previousDistance = -1, previousScore = -1, previousMultiplier = -1;
 let statsTime = 0;
 let lastSkyLabel = '';
-function updateFrame(model: RunnerModel, dt: number): void {
+function updateFrame(model: RunnerModel, dt: number, worldScale = 1): void {
   if (mode === 'countdown') {
     const label = countdown.label(performance.now());
     if (label) { if (countdownLabel.textContent !== label) countdownLabel.textContent = label; }
@@ -371,6 +374,7 @@ function updateFrame(model: RunnerModel, dt: number): void {
       showPanel(); music.afterCountdown(); focusGame();
     }
   }
+  coinFx.setWorldScale(worldScale);
   coinFx.update(dt, model);
   updateGateCue(model);
   if (model.distance !== previousDistance) {
@@ -439,7 +443,8 @@ function endRun(model: RunnerModel): void {
 // Local-only art preview; production always starts at daylight without a time offset.
 const skyPreview = import.meta.env.DEV ? Number(new URLSearchParams(location.search).get('skyTime') ?? 0) : 0;
 const scene = new RunnerScene({ frame: updateFrame, ended: endRun,
-  collected: (coin, model) => coinFx.collect(coin, model), jumped: (air) => audio.jump(air) }, Number.isFinite(skyPreview) ? skyPreview : 0);
+  collected: (coin, model, worldScale) => { coinFx.setWorldScale(worldScale); coinFx.collect(coin, model); },
+  jumped: (air) => audio.jump(air) }, Number.isFinite(skyPreview) ? skyPreview : 0);
 scene.setPowerSaving(preferences.lowPower);
 scene.setAccessibleLabel(t('canvasLabel'));
 const game = new Phaser.Game({
@@ -569,6 +574,8 @@ stage.parentElement!.addEventListener('pointerdown', (event) => {
   if (event.button !== 0 || target.closest('button, a, input, textarea, select, label, form, [contenteditable="true"]')) return;
   event.preventDefault(); action();
 }, { signal });
+window.addEventListener('pointerup', () => scene.model.releaseJump(), { signal });
+window.addEventListener('pointercancel', () => scene.model.releaseJump(), { signal });
 window.addEventListener('keydown', (event) => {
   if (boardDialog.open || menuDialog.open) return;
   if (event.code === 'Escape') { if (mode === 'playing' || mode === 'countdown') pauseRun(); return; }
@@ -576,8 +583,11 @@ window.addEventListener('keydown', (event) => {
   if (event.code === 'Space' && (event.target as HTMLElement).closest('button, a, input, textarea, select')) return;
   event.preventDefault(); if (!event.repeat) action();
 }, { signal });
+window.addEventListener('keyup', (event) => {
+  if (event.code === 'Space' || event.code === 'ArrowUp') scene.model.releaseJump();
+}, { signal });
 document.addEventListener('visibilitychange', () => { if (document.hidden) pauseRun(); }, { signal });
-window.addEventListener('blur', pauseRun, { signal });
+window.addEventListener('blur', () => { scene.model.releaseJump(); pauseRun(); }, { signal });
 window.addEventListener('scroll', () => { if (ready) coinFx.measure(game.canvas, game.scale.width, RUNNER.height); }, { signal, passive: true });
 window.addEventListener('storage', () => { best = board.best; if (boardDialog.open) renderBoard(); }, { signal });
 

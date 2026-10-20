@@ -35,7 +35,8 @@ export class RunnerAudio {
         this.output.gain.value = this.muted ? 0 : this.volume;
         this.output.connect(this.context.destination);
       }
-      if (this.context.state === 'suspended') void this.context.resume().catch(() => undefined);
+      // Safari may report an interrupted context after returning from background.
+      if (this.context.state !== 'running' && this.context.state !== 'closed') void this.context.resume().catch(() => undefined);
     } catch { /* Audio availability must not interrupt a run. */ }
   }
 

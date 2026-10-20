@@ -4,11 +4,13 @@ import type { CoinPickup, ObstacleKind } from './RunnerModel';
 import { RUNNER_ART, ATLAS_KEY, runnerFrame } from './RunnerArt';
 import { RunnerSky } from './RunnerSky';
 import { RHYTHM_GATE, gateJudgement } from './RunnerGate';
+import { deformationAt, runningMotion, worldVisualScale, worldViewportLeft, worldViewportRight } from './RunnerDeformation';
+import type { DeformationKind } from './RunnerDeformation';
 
 export interface RunnerCallbacks {
-  frame(model: RunnerModel, dt: number): void;
+  frame(model: RunnerModel, dt: number, worldScale: number): void;
   ended(model: RunnerModel): void;
-  collected(coin: CoinPickup, model: RunnerModel): void;
+  collected(coin: CoinPickup, model: RunnerModel, worldScale: number): void;
   jumped(air: boolean): void;
 }
 interface PooledView { image: Phaser.GameObjects.Image; seen: number }
@@ -18,6 +20,8 @@ export class RunnerScene extends Phaser.Scene {
   readonly model = new RunnerModel();
   paused = false;
   sky!: RunnerSky;
+  private worldView!: Phaser.GameObjects.Container;
+  private worldScale = 1;
   private runner!: Phaser.GameObjects.Image;
   private shadow!: Phaser.GameObjects.Ellipse;
   private skyOffset: number;
@@ -25,7 +29,8 @@ export class RunnerScene extends Phaser.Scene {
   private views = new Map<number, PooledView>();
   private freeViews: PooledView[] = [];
   private createdViews = 0;
-  private squash = 0;
+  private deformationKind: DeformationKind = 'jump';
+  private deformationAge = Infinity;
   private hitTime = 0;
   private lastJumps = 0;
   private lastLandings = 0;
@@ -44,11 +49,13 @@ export class RunnerScene extends Phaser.Scene {
   }
   create(): void {
     this.makeAtlas(); this.makeObjectTextures();
-    this.sky = new RunnerSky(this);
+    this.worldView = this.add.container(0, 0);
+    this.sky = new RunnerSky(this, this.worldView);
     this.model.viewportWidth = RUNNER.worldWidth;
     this.syncWorldView();
     this.shadow = this.add.ellipse(RUNNER.playerX, RUNNER.groundY + 4, 77, 10, 0x263544, 0.2).setDepth(2);
     this.runner = this.add.image(RUNNER.playerX, RUNNER.groundY, ATLAS_KEY, 'run-a').setOrigin(0.5, 112 / 128).setDepth(5);
+    this.worldView.add([this.shadow, this.runner]);
     this.scale.on(Phaser.Scale.Events.RESIZE, this.resize, this);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.scale.off(Phaser.Scale.Events.RESIZE, this.resize, this));
     this.game.canvas.setAttribute('aria-label', this.accessibleLabel);
@@ -141,7 +148,7 @@ export class RunnerScene extends Phaser.Scene {
     this.model.reset(); this.resetPresentation();
   }
   private resetPresentation(): void {
-    this.paused = false; this.ended = false; this.hitTime = 0; this.squash = 0;
+    this.paused = false; this.ended = false; this.hitTime = 0; this.deformationAge = Infinity;
     this.lastJumps = 0; this.lastLandings = 0; this.cameras.main.resetFX(); this.releaseViews();
   }
   setPaused(paused: boolean): void { this.paused = paused; this.model.clearInput(); }
@@ -151,16 +158,23 @@ export class RunnerScene extends Phaser.Scene {
   }
   setPowerSaving(enabled: boolean): void {
     this.reducedMotion = enabled || window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (this.reducedMotion) this.deformationAge = Infinity;
     if (this.runner) this.artFrame = '';
   }
   private syncWorldView(): void {
     const width = this.scale.width;
-    // Keep both camera axes at the same scale so sprites, coins and scenery
-    // retain their authored proportions. The world itself adapts to the
-    // logical canvas width; spawn points and scenery follow that edge.
+    // Render a slightly wider prebuilt world, then zoom its foreground around
+    // the runner as speed rises. Simulation and collision dimensions stay fixed.
     this.cameras.main.setZoom(1, 1).setScroll(0, 0);
-    this.model.viewportWidth = width;
-    this.sky.resize(width);
+    this.sky.resize(width, worldViewportRight(width, worldVisualScale(5), RUNNER.playerX));
+    this.updateWorldScale();
+  }
+  private updateWorldScale(): void {
+    this.worldScale = worldVisualScale(this.model.speed / RUNNER.baseSpeed);
+    this.model.viewportLeft = worldViewportLeft(0, this.worldScale, RUNNER.playerX);
+    this.model.viewportWidth = worldViewportRight(this.scale.width, this.worldScale, RUNNER.playerX);
+    this.worldView.setScale(this.worldScale)
+      .setPosition(RUNNER.playerX * (1 - this.worldScale), RUNNER.groundY * (1 - this.worldScale));
   }
   private resize(): void { this.syncWorldView(); }
   private releaseViews(): void {
@@ -171,7 +185,11 @@ export class RunnerScene extends Phaser.Scene {
     let entry = this.views.get(id);
     if (!entry) {
       entry = this.freeViews.pop();
-      if (!entry) { entry = { image: this.add.image(0, 0, key, frame), seen: 0 }; this.createdViews++; }
+      if (!entry) {
+        const image = this.add.image(0, 0, key, frame);
+        this.worldView.add(image);
+        entry = { image, seen: 0 }; this.createdViews++;
+      }
       entry.image.setTexture(key, frame).setVisible(true).clearTint(); this.views.set(id, entry);
     }
     entry.seen = this.frameId;
@@ -180,22 +198,35 @@ export class RunnerScene extends Phaser.Scene {
 
   update(_time: number, delta: number): void {
     const begin = performance.now(), dt = Math.min(delta / 1000, 0.1), model = this.model;
+    this.updateWorldScale();
     if (!this.paused) model.advance(dt);
-    for (const pickup of model.pickups) this.callbacks.collected(pickup, model);
+    this.updateWorldScale();
+    for (const pickup of model.pickups) this.callbacks.collected(pickup, model, this.worldScale);
     model.pickups.length = 0;
-    if (model.jumps !== this.lastJumps) {
-      this.squash = -0.11; this.lastJumps = model.jumps; this.callbacks.jumped(model.motor.jumpsUsed > 1);
+    const didJump = model.jumps !== this.lastJumps;
+    const didLand = model.landings !== this.lastLandings;
+    if (didJump) {
+      if (!this.reducedMotion) {
+        this.deformationKind = model.motor.jumpsUsed > 1 ? 'doubleJump' : 'jump';
+        this.deformationAge = 0;
+      }
+      this.lastJumps = model.jumps; this.callbacks.jumped(model.motor.jumpsUsed > 1);
     }
-    if (model.landings !== this.lastLandings) { this.squash = 0.14; this.lastLandings = model.landings; }
+    if (didLand) {
+      if (!this.reducedMotion && !didJump) {
+        this.deformationKind = 'land'; this.deformationAge = 0;
+      }
+      this.lastLandings = model.landings;
+    }
     if (model.phase === 'over' && !this.ended) {
       this.ended = true; if (!this.reducedMotion) this.cameras.main.shake(130, 0.004); this.callbacks.ended(model);
     }
     if (!this.paused) {
-      this.squash *= Math.exp(-dt * 15);
+      this.deformationAge += dt;
       if (model.phase === 'over') this.hitTime = Math.min(0.5, this.hitTime + dt);
     }
-    this.sky.update(model.elapsed + this.skyOffset, model.travel);
-    this.drawWorld(); this.drawRunner(); this.callbacks.frame(model, this.paused ? 0 : dt);
+    this.sky.update(model.elapsed + this.skyOffset, model.travel, this.worldScale);
+    this.drawWorld(); this.drawRunner(); this.callbacks.frame(model, this.paused ? 0 : dt, this.worldScale);
     this.samples[this.sampleCount++ % this.samples.length] = performance.now() - begin;
   }
 
@@ -223,12 +254,12 @@ export class RunnerScene extends Phaser.Scene {
       }
     }
     for (const coin of this.model.coins) {
-      if (coin.x < -30 || coin.x > width + 30) continue;
+      if (coin.x < this.model.viewportLeft - 30 || coin.x > width + 30) continue;
       const shimmer = this.reducedMotion ? 1 : 0.9 + Math.abs(Math.sin(this.model.elapsed * 3 + coin.id)) * 0.1;
       this.show(coin.id, ATLAS_KEY, 'coin', coin.x, coin.y, 4, 0.5).setScale(shimmer);
     }
     for (const coin of this.model.levelUpCoins) {
-      if (coin.x < -30 || coin.x > width + 30) continue;
+      if (coin.x < this.model.viewportLeft - 30 || coin.x > width + 30) continue;
       const shimmer = this.reducedMotion ? 1 : 0.9 + Math.abs(Math.sin(this.model.elapsed * 3 + coin.id)) * 0.1;
       this.show(coin.id, ATLAS_KEY, 'coin', coin.x, coin.y, 4, 0.5).setScale(shimmer);
     }
@@ -240,16 +271,25 @@ export class RunnerScene extends Phaser.Scene {
 
   private drawRunner(): void {
     const model = this.model, motor = model.motor;
-    const frame = runnerFrame(model.phase === 'ready' ? 0 : model.travel, motor.grounded, motor.velocity, this.reducedMotion);
+    const gait = motor.grounded && model.phase === 'running' && !this.paused && !this.reducedMotion
+      ? runningMotion(model.elapsed, model.speed / RUNNER.baseSpeed) : undefined;
+    const frame = runnerFrame(model.phase === 'ready' ? 0 : gait?.frameTravel ?? model.travel,
+      motor.grounded, motor.velocity, this.reducedMotion);
     if (frame !== this.artFrame) {
       this.runner.setFrame(frame).setFlipX(RUNNER_ART.find((art) => art.frame === frame)?.flip ?? false); this.artFrame = frame;
     }
-    const bob = motor.grounded && model.phase === 'running' && !this.reducedMotion ? -Math.abs(Math.sin(model.travel * 0.07)) * 2 : 0;
     const crash = model.phase === 'over' ? this.hitTime : 0;
-    this.runner.setPosition(RUNNER.playerX + crash * 36, RUNNER.groundY + motor.y + bob - Math.sin(crash * Math.PI * 2) * 17)
-      .setRotation(crash ? crash * 2.4 : Phaser.Math.Clamp(motor.velocity / 7000, -0.08, 0.1)).setScale(1 + this.squash);
-    const shadow = Math.max(0.35, 1 + motor.y / 300);
-    this.shadow.setPosition(RUNNER.playerX, RUNNER.groundY + (motor.grounded ? motor.y : 0) + 4).setScale(shadow).setAlpha(shadow);
+    const [deformationX, deformationY] = this.reducedMotion ? [1, 1] : deformationAt(this.deformationKind, this.deformationAge);
+    const stretch = motor.grounded || this.reducedMotion || this.deformationAge < 0.1
+      ? 0 : Phaser.Math.Clamp(Math.abs(motor.velocity) / 1800, 0, 0.08);
+    const scaleX = (gait?.scaleX ?? 1) * deformationX - stretch * 0.55;
+    const scaleY = (gait?.scaleY ?? 1) * deformationY + stretch;
+    this.runner.setPosition(RUNNER.playerX + motor.edgeOffsetX + (gait?.offsetX ?? 0) + crash * 36,
+      RUNNER.groundY + motor.y + (gait?.offsetY ?? 0) - Math.sin(crash * Math.PI * 2) * 17)
+      .setRotation(crash ? crash * 2.4 : Phaser.Math.Clamp(motor.velocity / 7000, -0.08, 0.1)).setScale(scaleX, scaleY);
+    const shadow = Math.max(0.35, 1 + motor.y / 300) * (gait?.shadowScale ?? 1);
+    this.shadow.setPosition(RUNNER.playerX + motor.edgeOffsetX + (gait?.offsetX ?? 0),
+      RUNNER.groundY + (motor.grounded ? motor.y : 0) + 4).setScale(shadow).setAlpha(shadow * (gait?.shadowAlpha ?? 1));
   }
 
   performanceSnapshot() {

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { RunnerModel, RUNNER, speedAt } from '../src/tl002/RunnerModel.ts';
-import { RHYTHM_GATE, gateCueWindow, gateJudgement, gateProgress, gateTarget, gateWindowForMultiplier } from '../src/tl002/RunnerGate.ts';
+import { RHYTHM_GATE, gateCueLeadForMultiplier, gateCueStart, gateCueVisibleAt, gateCueWindow, gateJudgement, gateProgress, gateTarget, gateWindowForMultiplier } from '../src/tl002/RunnerGate.ts';
 
 function fixture(elapsed = 0) {
   const model = new RunnerModel(680, () => 0); model.start();
@@ -10,7 +10,8 @@ function fixture(elapsed = 0) {
   const lead = RHYTHM_GATE.leadSeconds + 0.15;
   const gate = { id: 999, x: RUNNER.playerX + RUNNER.playerWidth / 2 + model.speed * lead,
     width: RHYTHM_GATE.width, height: RHYTHM_GATE.height, arrivalAt: elapsed + lead, opened: false,
-    windowSeconds: gateWindowForMultiplier(model.speed / RUNNER.baseSpeed) };
+    windowSeconds: gateWindowForMultiplier(model.speed / RUNNER.baseSpeed),
+    cueLeadSeconds: gateCueLeadForMultiplier(model.speed / RUNNER.baseSpeed) };
   model.gates.push(gate);
   return { model, gate };
 }
@@ -31,10 +32,61 @@ test('TL002 gate windows match the playtested x1–x5 values with smooth transit
   }
 });
 
+test('TL002 the cue starts before its full bar appears, then reaches green sooner at higher speeds', () => {
+  const cases = [[1, 1], [2, 0.9], [3, 0.8], [4, 0.7], [5, 0.6]];
+  let previousDuration = Infinity;
+  for (const [multiplier, leadSeconds] of cases) {
+    const gate = { ...fixture().gate,
+      windowSeconds: gateWindowForMultiplier(multiplier),
+      cueLeadSeconds: gateCueLeadForMultiplier(multiplier) };
+    const cue = gateCueWindow(gate), greenStart = gateTarget(gate) - gate.windowSeconds / 2;
+    assert.ok(Math.abs(gateCueLeadForMultiplier(multiplier) - leadSeconds) < 1e-9);
+    assert.ok(Math.abs(greenStart - gateCueStart(gate) - leadSeconds) < 1e-9,
+      `x${multiplier} prep timer before the bar appears`);
+    const reveal = gateCueVisibleAt(gate);
+    assert.ok(Math.abs(reveal - gateCueStart(gate) - RHYTHM_GATE.cueRevealDelaySeconds) < 1e-9);
+    assert.ok(Math.abs(greenStart - reveal - (leadSeconds - RHYTHM_GATE.cueRevealDelaySeconds)) < 1e-9,
+      `x${multiplier} remaining time after the full cue appears`);
+    assert.equal(gateJudgement(gate, reveal), 'safe', `x${multiplier} cue must not reveal inside the orange danger zone`);
+    assert.ok(gateProgress(gate, reveal) > 0, `x${multiplier} marker has started moving before the bar appears`);
+    assert.ok(cue.duration < previousDuration, `x${multiplier} cue marker runs faster`);
+    assert.ok(cue.duration < 2, 'the cue-to-impact sweep is shorter than the old two-second sweep');
+    previousDuration = cue.duration;
+  }
+  for (let i = 0; i <= 1000; i++) {
+    const speed = 1 + i / 250, current = gateCueLeadForMultiplier(speed);
+    assert.ok(current <= (i ? gateCueLeadForMultiplier(speed - 0.004) : 1) + 1e-9);
+    assert.ok(current >= 0.6 && current <= 1);
+  }
+});
+
+test('TL002 green and orange gate cues both shift later by 25% of each difficulty window', () => {
+  const cases = [[1, 0.1875], [2, 0.125], [3, 0.1], [4, 0.075], [5, 0.05]];
+  for (const [multiplier, expectedDelay] of cases) {
+    const gate = { ...fixture().gate, windowSeconds: gateWindowForMultiplier(multiplier),
+      cueLeadSeconds: gateCueLeadForMultiplier(multiplier) };
+    const cue = gateCueWindow(gate), cueStart = gateCueStart(gate), duration = cue.duration;
+    const baselineTarget = gate.arrivalAt - RHYTHM_GATE.targetBeforeArrival;
+    const shift = gateTarget(gate) - baselineTarget;
+    const half = gate.windowSeconds / 2;
+    assert.ok(Math.abs(shift - expectedDelay) < 1e-9, `x${multiplier} shift`);
+    assert.ok(Math.abs(cueStart + cue.left * duration
+      - (baselineTarget - half + expectedDelay)) < 1e-9, `x${multiplier} green zone`);
+    assert.ok(Math.abs(cueStart + cue.earlyLeft * duration
+      - (baselineTarget - half - RHYTHM_GATE.earlyFailureSeconds + expectedDelay)) < 1e-9,
+    `x${multiplier} early orange zone`);
+    assert.ok(Math.abs(cueStart + cue.lateLeft * duration
+      - (baselineTarget + half + expectedDelay)) < 1e-9, `x${multiplier} late orange zone`);
+  }
+});
+
 test('TL002 every difficulty has inclusive boundaries and an exactly matching green cue interval', () => {
   for (const multiplier of [1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5]) {
     const gate = { ...fixture().gate, windowSeconds: gateWindowForMultiplier(multiplier) };
     const target = gateTarget(gate), half = gate.windowSeconds / 2;
+    assert.ok(Math.abs(target - (gate.arrivalAt - RHYTHM_GATE.targetBeforeArrival
+      + gate.windowSeconds * RHYTHM_GATE.delayFraction)) < 1e-9,
+    `timing delay scales with the x${multiplier} difficulty window`);
     const earlyStart = target - half - RHYTHM_GATE.earlyFailureSeconds;
     assert.equal(gateJudgement(gate, earlyStart - 0.001), 'safe');
     assert.equal(gateJudgement(gate, earlyStart), 'early');
@@ -42,18 +94,19 @@ test('TL002 every difficulty has inclusive boundaries and an exactly matching gr
     assert.equal(gateJudgement(gate, target - half), 'open');
     assert.equal(gateJudgement(gate, target + half), 'open');
     assert.equal(gateJudgement(gate, target + half + 0.001), 'late');
-    const cueStarts = gate.arrivalAt - RHYTHM_GATE.cueSeconds, cue = gateCueWindow(gate);
+    const cueStarts = gateCueStart(gate), cue = gateCueWindow(gate), duration = cue.duration;
     assert.equal(gateProgress(gate, cueStarts), 0); assert.equal(gateProgress(gate, gate.arrivalAt), 1);
-    assert.ok(Math.abs(cueStarts + cue.left * RHYTHM_GATE.cueSeconds - (target - half)) < 1e-9);
-    assert.ok(Math.abs(cueStarts + (cue.left + cue.width) * RHYTHM_GATE.cueSeconds - (target + half)) < 1e-9);
-    assert.ok(Math.abs(cueStarts + cue.earlyLeft * RHYTHM_GATE.cueSeconds - earlyStart) < 1e-9);
-    assert.ok(Math.abs(cue.earlyWidth * RHYTHM_GATE.cueSeconds - 0.5) < 1e-9);
+    assert.ok(Math.abs(cueStarts + cue.left * duration - (target - half)) < 1e-9);
+    assert.ok(Math.abs(cueStarts + (cue.left + cue.width) * duration - (target + half)) < 1e-9);
+    assert.ok(Math.abs(cueStarts + cue.earlyLeft * duration - earlyStart) < 1e-9);
+    assert.ok(Math.abs(cue.earlyWidth * duration - 0.5) < 1e-9);
     assert.ok(Math.abs(cue.earlyLeft + cue.earlyWidth - cue.left) < 1e-9);
     assert.ok(Math.abs(cue.lateLeft - cue.left - cue.width) < 1e-9);
     assert.ok(Math.abs(cue.lateLeft + cue.lateWidth - 1) < 1e-9);
-    assert.ok(cue.earlyLeft * RHYTHM_GATE.cueSeconds >= 0.425 - 1e-9, 'safe jumping is available after the cue first appears');
-    assert.ok(target - half - cueStarts >= 0.8 - 1e-9, 'advance warning remains available');
-    assert.ok(gate.arrivalAt - (target + half) >= 0.2 - 1e-9, 'opening can finish before physical passage');
+    assert.ok(cue.earlyLeft * duration >= 0.1 - 1e-9, 'the full early danger zone is visible before it starts');
+    assert.ok(target - half - cueStarts >= 0.6 - 1e-9, 'advance warning remains available');
+    assert.ok(gate.arrivalAt - (target + half) >= 0.1 - 1e-9,
+      'even at x1 the delayed window ends before physical passage');
   }
 });
 
@@ -69,12 +122,14 @@ test('TL002 ordinary input jumps before the cue; input in the half-second early 
 test('TL002 the visible gray lead-in allows jumps without failing or opening the gate', () => {
   for (const fps of [20, 30, 60, 120]) for (const elapsed of [0, 45, 75, 105, 135, 165, 195, 225, 300]) {
     const { model, gate } = fixture(elapsed);
-    until(model, gate.arrivalAt - RHYTHM_GATE.cueSeconds + 0.02, fps);
+    until(model, gateCueStart(gate) + 0.02, fps);
     assert.equal(model.activeGate, gate); assert.equal(gateJudgement(gate, model.elapsed), 'safe');
     model.jump(); model.advance(1 / fps);
     assert.equal(model.phase, 'running'); assert.equal(model.gateFailure, undefined);
     assert.equal(model.jumps, 1); assert.equal(gate.opened, false);
     until(model, gateTarget(gate), fps); model.jump();
+    assert.equal(model.phase, 'running'); assert.equal(gate.opened, false); assert.equal(gate.pendingOpen, true);
+    until(model, gate.arrivalAt + 0.1, fps);
     assert.equal(model.phase, 'running'); assert.equal(gate.opened, true);
   }
 });
@@ -95,12 +150,15 @@ test('TL002 early failure freezes the run across all speed tiers and restart cle
   }
 });
 
-test('TL002 correctly timed input opens once, consumes no jump, and permits passage at x1 and x5', () => {
+test('TL002 correctly timed input queues the opening until door contact and permits passage at x1 and x5', () => {
   for (const fps of [20, 30, 60, 120]) for (const elapsed of [0, 300]) {
     const { model, gate } = fixture(elapsed);
     until(model, gateTarget(gate), fps);
-    model.jump(); assert.equal(gate.opened, true); assert.equal(model.gatesOpened, 1);
+    model.jump(); assert.equal(gate.pendingOpen, true); assert.equal(gate.opened, false); assert.equal(model.gatesOpened, 0);
     assert.equal(model.jumps, 0); assert.equal(model.motor.jumpsUsed, 0);
+    until(model, gate.arrivalAt + 0.1, fps);
+    assert.equal(model.phase, 'running'); assert.equal(gate.opened, true); assert.equal(model.gatesOpened, 1);
+    assert.ok(gate.openedAt >= gate.arrivalAt - 1e-8 && gate.openedAt <= gate.arrivalAt + RUNNER.fixedStep + 1e-8);
     until(model, gate.arrivalAt + 0.7, fps);
     assert.equal(model.phase, 'running'); assert.equal(model.activeGate, undefined);
     assert.ok(gate.x + gate.width < RUNNER.playerX - RUNNER.playerWidth / 2);
@@ -163,7 +221,9 @@ test('TL002 clearing input for pause preserves the exact window and discards buf
   // Paused/countdown presentation does not call advance; wall time is irrelevant.
   model.clearInput(); assert.equal(model.elapsed, frozenTime); assert.equal(gateJudgement(gate, model.elapsed), 'open');
   model.jump(); model.advance(RUNNER.fixedStep);
-  assert.equal(gate.opened, true); assert.equal(model.jumps, 0);
+  assert.equal(gate.pendingOpen, true); assert.equal(gate.opened, false); assert.equal(model.jumps, 0);
+  until(model, gate.arrivalAt + 0.1);
+  assert.equal(gate.opened, true); assert.equal(model.gatesOpened, 1);
 });
 
 test('TL002 generation reserves a separate road, full cue and recovery at every capped speed', () => {
@@ -178,13 +238,45 @@ test('TL002 generation reserves a separate road, full cue and recovery at every 
     assert.ok(gate.arrivalAt - model.elapsed >= RHYTHM_GATE.leadSeconds - 1e-9);
     assert.equal(model.obstacles.length + model.platforms.length, 0);
     until(model, gateTarget(gate)); model.jump();
-    until(model, gate.arrivalAt);
-    assert.equal(model.phase, 'running');
+    assert.equal(gate.pendingOpen, true); assert.equal(gate.opened, false);
+    // The cue predicts first contact; fixed-step collision resolves on the
+    // following tick when the door actually overlaps the runner.
+    until(model, gate.arrivalAt + RUNNER.fixedStep * 2);
+    assert.equal(model.phase, 'running'); assert.equal(gate.opened, true);
     const right = RUNNER.playerX + RUNNER.playerWidth / 2;
-    assert.ok(gate.x <= right + 0.1 && gate.x >= right - model.speed * RUNNER.fixedStep - 0.1,
+    assert.ok(gate.x <= right + 0.1 && gate.x >= right - model.speed * RUNNER.fixedStep * 3 - 0.1,
       `opening aligns with physical arrival during speed ramps: width=${width}, t=${elapsed}, x=${gate.x}`);
     until(model, gate.arrivalAt + 0.2);
     assert.equal(model.obstacles.length + model.platforms.length, 0, 'no competing jump while opening/passing');
+  }
+});
+
+test('TL002 every x1–x5 gate shows the full cue and reaches green before physical contact', () => {
+  const cases = [[1, 12, 30], [2, 65, 90], [3, 125, 150], [4, 185, 210], [5, 245, 270]];
+  for (const [multiplier, elapsed, nextUpgrade] of cases) {
+    const model = new RunnerModel(680, () => 0); model.start();
+    model.elapsed = elapsed - RUNNER.fixedStep;
+    model.nextChallengeAt = elapsed; model.nextSpeedUpgradeAt = nextUpgrade;
+    model.advance(RUNNER.fixedStep);
+    const gate = model.gates[0]; assert.ok(gate, `x${multiplier} gate spawned`);
+    assert.equal(model.speed, RUNNER.baseSpeed * multiplier);
+    const cueVisibleAt = gateCueVisibleAt(gate);
+    const greenStartsAt = gateTarget(gate) - gate.windowSeconds / 2;
+    assert.ok(cueVisibleAt < greenStartsAt, `x${multiplier} full bar appears before the green window`);
+    assert.ok(greenStartsAt < gate.arrivalAt, `x${multiplier} green arrives before physical contact`);
+    assert.ok(gate.arrivalAt - cueVisibleAt >= 1.2 - 1e-9,
+      `x${multiplier} has enough time to see the cue before contact`);
+
+    until(model, cueVisibleAt);
+    assert.equal(model.phase, 'running', `x${multiplier} has not collided before the cue appears`);
+    assert.equal(model.activeGate, gate, `x${multiplier} cue is attached to the approaching gate`);
+    assert.equal(gateJudgement(gate, model.elapsed), 'safe');
+    until(model, greenStartsAt);
+    assert.equal(gateJudgement(gate, model.elapsed), 'open', `x${multiplier} reaches its visible green zone`);
+    model.jump(); assert.equal(gate.pendingOpen, true);
+    until(model, gate.arrivalAt + 0.1);
+    assert.equal(model.phase, 'running', `x${multiplier} opens before contact`);
+    assert.equal(gate.opened, true); assert.equal(model.gatesOpened, 1);
   }
 });
 
@@ -199,7 +291,9 @@ test('TL002 a generated gate keeps its timing and cue width while the world spee
   assert.equal(gate.windowSeconds, lockedWindow); assert.deepEqual(gateCueWindow(gate), lockedCue);
   model.clearInput();
   assert.equal(gate.windowSeconds, lockedWindow);
-  model.jump(); assert.equal(gate.opened, true); assert.equal(model.phase, 'running');
+  model.jump(); assert.equal(gate.pendingOpen, true); assert.equal(gate.opened, false); assert.equal(model.phase, 'running');
+  until(model, gate.arrivalAt + 0.1);
+  assert.equal(gate.opened, true); assert.equal(model.gatesOpened, 1);
 });
 
 test('TL002 door generation waits for previous obstacle/platform and avoids LEVEL UP cues', () => {
@@ -225,5 +319,5 @@ test('TL002 a selected door reserves its turn on a wide screen until the runner 
   assert.equal(model.phase, 'running'); assert.equal(model.motor.grounded, true);
   assert.equal(model.gates.length, 1, 'ordinary challenges do not starve a pending door');
   assert.equal(model.obstacles.length, 0);
-  assert.ok(model.gates[0].arrivalAt - model.elapsed > RHYTHM_GATE.cueSeconds);
+  assert.ok(gateCueStart(model.gates[0]) > model.elapsed);
 });

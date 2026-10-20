@@ -1,13 +1,17 @@
 import { BASE_SPEED, MAX_SPEED_MULTIPLIER, SPEED_RAMP_MAX_SECONDS, SPEED_RAMP_MIN_SECONDS, SPEED_STEP_SECONDS, speedMultiplierAt, scoreMultiplier, runnerScore } from './RunnerScore.ts';
-import { RHYTHM_GATE, gateJudgement, gateWindowForMultiplier } from './RunnerGate.ts';
+import { RHYTHM_GATE, gateCueLeadForMultiplier, gateCueStart, gateJudgement, gateWindowForMultiplier } from './RunnerGate.ts';
 import type { RhythmGate } from './RunnerGate.ts';
 
 /** Logical pixels and seconds. Phaser only presents this fixed-step simulation. */
 export const RUNNER = Object.freeze({
   worldWidth: 960, height: 540, groundY: 410, playerX: 150, playerWidth: 44, playerHeight: 30,
   obstacleEntryMargin: 36,
-  baseSpeed: BASE_SPEED, maxSpeed: BASE_SPEED * MAX_SPEED_MULTIPLIER, jumpVelocity: -710, doubleJumpVelocity: -680,
-  gravity: 2200, fallMultiplier: 1.75, jumpBuffer: 0.12, coyoteTime: 0.09,
+  baseSpeed: BASE_SPEED, maxSpeed: BASE_SPEED * MAX_SPEED_MULTIPLIER, jumpVelocity: -640, doubleJumpVelocity: -730,
+  gravity: 2200, fallMultiplier: 1.75, fallMultiplierSpeedIncrease: 0.0625,
+  postHangGravitySpeedIncrease: 0.04, apexHangGravityMultiplier: 0, apexVelocity: 80,
+  apexHangDuration: 0.08, apexHangSpeedReduction: 0.25,
+  jumpHoldDuration: 10 / 120, doubleJumpHoldDuration: 0, jumpHoldGravityMultiplier: 0.5,
+  jumpBuffer: 0.12, coyoteTime: 0.09, platformEdgeGap: 10, platformEdgeInset: 4,
   fixedStep: 1 / 120, distanceScale: 0.05,
   coinRadius: 70, maxCoins: 64,
 });
@@ -79,8 +83,18 @@ export class JumpMotor {
   jumpsUsed = 0;
   private buffer = 0;
   private coyote: number = RUNNER.coyoteTime;
-  press(): void { this.buffer = RUNNER.jumpBuffer; }
-  clearInput(): void { this.buffer = 0; }
+  private jumpHeld = false;
+  private holdRemaining = 0;
+  private apexHangRemaining = 0;
+  private apexHangTriggered = false;
+  private releasedBeforeTakeoff = false;
+  edgeOffsetX = 0;
+  press(): void { this.buffer = RUNNER.jumpBuffer; this.jumpHeld = true; this.releasedBeforeTakeoff = false; }
+  release(): void {
+    if (this.buffer > 0) this.releasedBeforeTakeoff = true;
+    this.jumpHeld = false; this.holdRemaining = 0;
+  }
+  clearInput(): void { this.buffer = 0; this.releasedBeforeTakeoff = false; this.release(); }
 
   private consumeJump(): boolean {
     if (this.buffer <= 0) return false;
@@ -88,12 +102,18 @@ export class JumpMotor {
     if (!firstJump && this.jumpsUsed >= 2) return false;
     this.jumpsUsed = firstJump ? 1 : this.jumpsUsed + 1;
     this.velocity = firstJump ? RUNNER.jumpVelocity : RUNNER.doubleJumpVelocity;
+    this.holdRemaining = firstJump ? RUNNER.jumpHoldDuration : RUNNER.doubleJumpHoldDuration;
+    this.apexHangRemaining = 0; this.apexHangTriggered = false;
+    if (this.releasedBeforeTakeoff) {
+      this.holdRemaining = 0; this.releasedBeforeTakeoff = false;
+    }
     this.grounded = false; this.coyote = 0; this.buffer = 0;
     return true;
   }
 
   /** One-way platforms only catch downward crossings from above their top. */
-  step(dt: number, supportY: number | null = 0): { jumped: boolean; landed: boolean } {
+  step(dt: number, supportY: number | null = 0, speedMultiplier = 1): { jumped: boolean; landed: boolean } {
+    const difficulty = clampValue(speedMultiplier, 1, MAX_SPEED_MULTIPLIER) - 1;
     this.buffer = Math.max(0, this.buffer - dt);
     if (this.grounded && (supportY === null || Math.abs(this.y - supportY) > 0.01)) this.grounded = false;
     this.coyote = this.grounded ? RUNNER.coyoteTime : Math.max(0, this.coyote - dt);
@@ -103,7 +123,27 @@ export class JumpMotor {
     let landed = false;
     if (!this.grounded) {
       const previousY = this.y;
-      this.velocity += RUNNER.gravity * (this.velocity > 0 ? RUNNER.fallMultiplier : 1) * dt;
+      let gravityScale = 1;
+      if (this.velocity > 0) {
+        gravityScale = RUNNER.fallMultiplier + difficulty * RUNNER.fallMultiplierSpeedIncrease;
+        this.apexHangRemaining = 0;
+      } else {
+        if (!this.apexHangTriggered && this.velocity > -RUNNER.apexVelocity) {
+          this.apexHangTriggered = true;
+          this.apexHangRemaining = RUNNER.apexHangDuration
+            * Math.max(0, 1 - difficulty * RUNNER.apexHangSpeedReduction);
+        }
+        if (this.apexHangRemaining > 0) {
+          gravityScale = RUNNER.apexHangGravityMultiplier;
+          this.apexHangRemaining = Math.max(0, this.apexHangRemaining - dt);
+        } else if (this.jumpHeld && this.holdRemaining > 0) {
+          gravityScale = RUNNER.jumpHoldGravityMultiplier;
+          this.holdRemaining = Math.max(0, this.holdRemaining - dt);
+        } else if (this.apexHangTriggered) {
+          gravityScale = 1 + difficulty * RUNNER.postHangGravitySpeedIncrease;
+        }
+      }
+      this.velocity += RUNNER.gravity * gravityScale * dt;
       this.y += this.velocity * dt;
       if (supportY !== null && previousY <= supportY + 0.01 && this.y >= supportY && this.velocity >= 0) {
         this.y = supportY; this.velocity = 0; this.grounded = true; this.jumpsUsed = 0;
@@ -144,6 +184,7 @@ export class RunnerModel {
   private nextGateOpportunityAt: number = RHYTHM_GATE.firstAfter;
   private readonly speedRamps: number[] = [];
   viewportWidth: number;
+  viewportLeft = 0;
   private readonly random: () => number;
   constructor(viewportWidth = RUNNER.worldWidth, random: () => number = Math.random) {
     this.viewportWidth = viewportWidth; this.random = random;
@@ -152,13 +193,13 @@ export class RunnerModel {
   get multiplier(): number { return scoreMultiplier(this.speed); }
   get score(): number { return runnerScore(this.distance, this.coinsCollected, this.multiplier); }
   get activeGate(): RhythmGate | undefined {
-    return this.gates.find((gate) => !gate.opened && this.elapsed >= gate.arrivalAt - RHYTHM_GATE.cueSeconds - 1e-9);
+    return this.gates.find((gate) => !gate.opened && this.elapsed >= gateCueStart(gate) - 1e-9);
   }
   reset(): void {
     this.phase = 'ready'; this.motor = new JumpMotor();
     this.speedRamps.length = 0;
     for (let i = 0; i < 8; i++) this.speedRamps.push(SPEED_RAMP_MIN_SECONDS + this.random() * (SPEED_RAMP_MAX_SECONDS - SPEED_RAMP_MIN_SECONDS));
-    this.elapsed = 0; this.travel = 0; this.speed = RUNNER.baseSpeed;
+    this.elapsed = 0; this.travel = 0; this.speed = this.speedAt(0);
     this.obstacles.length = 0; this.platforms.length = 0; this.gates.length = 0; this.coins.length = 0; this.levelUpCoins.length = 0; this.pickups.length = 0;
     this.gateFailure = undefined; this.gatesOpened = 0;
     this.gatePending = false; this.nextGateOpportunityAt = RHYTHM_GATE.firstAfter;
@@ -172,19 +213,23 @@ export class RunnerModel {
     this.reset(); this.phase = 'running';
     this.coinLine(RUNNER.playerX + 180, 5, RUNNER.groundY - 34, 45);
   }
+  private speedAt(seconds: number): number {
+    return BASE_SPEED * speedMultiplierAt(seconds, this.speedRamps);
+  }
   /** One input: jumping normally, timing the door while its cue is active. */
   jump(): void {
     if (this.phase !== 'running') return;
     const gate = this.activeGate;
     if (!gate) { this.motor.press(); return; }
-    if (gate.pendingFailure) { this.motor.clearInput(); return; }
+    if (gate.pendingFailure || gate.pendingOpen) { this.motor.clearInput(); return; }
     const judgement = gateJudgement(gate, this.elapsed);
     if (judgement === 'safe') { this.motor.press(); return; }
     this.motor.clearInput();
     if (judgement === 'early') { this.failGate('early'); return; }
     if (judgement === 'late') { gate.pendingFailure = 'late'; return; }
-    gate.opened = true; gate.openedAt = this.elapsed; this.gatesOpened++;
+    gate.pendingOpen = true;
   }
+  releaseJump(): void { this.motor.release(); }
   private failGate(reason: 'early' | 'late' | 'missed'): void {
     this.gateFailure = reason; this.collision = 'gate'; this.phase = 'over'; this.clearInput();
   }
@@ -204,7 +249,7 @@ export class RunnerModel {
   }
   private spawnPattern(x: number): boolean {
     // A door gets its own stretch of road, after the previous jump/landing.
-    // At x5 it can start off-screen; its HUD cue still has the full timing window.
+    // At x5 it can start off-screen; cue timing is sampled when the door is spawned.
     const left = RUNNER.playerX - RUNNER.playerWidth / 2;
     const clearRoad = this.motor.grounded && this.motor.y === 0
       && !this.obstacles.some((item) => item.x + item.width > left - 32)
@@ -224,11 +269,12 @@ export class RunnerModel {
         let travel = 0;
         for (let time = 0; time < lead; time += RUNNER.fixedStep) {
           const step = Math.min(RUNNER.fixedStep, lead - time);
-          travel += BASE_SPEED * speedMultiplierAt(this.elapsed + time + step, this.speedRamps) * step;
+          travel += this.speedAt(this.elapsed + time + step) * step;
         }
         this.gates.push({ id: this.nextId++, x: right + travel, width: RHYTHM_GATE.width,
           height: RHYTHM_GATE.height, arrivalAt, opened: false,
-          windowSeconds: gateWindowForMultiplier(this.speed / RUNNER.baseSpeed) });
+          windowSeconds: gateWindowForMultiplier(this.speed / RUNNER.baseSpeed),
+          cueLeadSeconds: gateCueLeadForMultiplier(this.speed / RUNNER.baseSpeed) });
         this.previousChallenge = 'gate';
         this.gatePending = false; this.nextGateOpportunityAt = this.elapsed + 12;
         this.nextChallengeAt = Math.max(this.nextChallengeAt, arrivalAt);
@@ -259,7 +305,7 @@ export class RunnerModel {
   }
 
   private step(dt: number): void {
-    this.elapsed += dt; this.speed = BASE_SPEED * speedMultiplierAt(this.elapsed, this.speedRamps);
+    this.elapsed += dt; this.speed = this.speedAt(this.elapsed);
     const movement = this.speed * dt; this.travel += movement;
     for (const obstacle of this.obstacles) obstacle.x -= movement;
     for (const platform of this.platforms) platform.x -= movement;
@@ -300,26 +346,54 @@ export class RunnerModel {
       }
       this.nextChallengeAt += sampleChallengeInterval(this.nextChallengeAt, this.random);
     }
-    this.compact(this.obstacles, (item) => item.x + item.width > -60);
-    this.compact(this.platforms, (item) => item.x + item.width > -60);
-    this.compact(this.gates, (item) => item.x + item.width > -60);
-    this.compact(this.levelUpCoins, (coin) => coin.x > -30);
-    const left = RUNNER.playerX - RUNNER.playerWidth / 2, right = RUNNER.playerX + RUNNER.playerWidth / 2;
+    const objectCullLeft = this.viewportLeft - 60;
+    const coinCullLeft = this.viewportLeft - 30;
+    this.compact(this.obstacles, (item) => item.x + item.width > objectCullLeft);
+    this.compact(this.platforms, (item) => item.x + item.width > objectCullLeft);
+    this.compact(this.gates, (item) => item.x + item.width > objectCullLeft);
+    this.compact(this.levelUpCoins, (coin) => coin.x > coinCullLeft);
+    let playerX = RUNNER.playerX + this.motor.edgeOffsetX;
+    let left = playerX - RUNNER.playerWidth / 2, right = playerX + RUNNER.playerWidth / 2;
     const gate = this.activeGate;
-    if (gate && !gate.pendingFailure && gateJudgement(gate, this.elapsed) === 'late') gate.pendingFailure = 'missed';
+    if (gate && !gate.pendingFailure && !gate.pendingOpen && gateJudgement(gate, this.elapsed) === 'late') gate.pendingFailure = 'missed';
     let supportY = 0;
     for (const platform of this.platforms) {
       const top = -platform.height;
-      if (right > platform.x + 3 && left < platform.x + platform.width - 3
-        && this.motor.y <= top + 0.01 && top < supportY) supportY = top;
+      let overlaps = right > platform.x && left < platform.x + platform.width;
+      if (!overlaps && !this.motor.grounded && this.motor.velocity >= 0
+        && this.motor.y >= top - 12 && this.motor.y <= top + 0.01) {
+        let correction = 0;
+        if (platform.x >= right && platform.x - right <= RUNNER.platformEdgeGap) {
+          correction = platform.x + RUNNER.platformEdgeInset - right;
+        } else if (left >= platform.x + platform.width
+          && left - (platform.x + platform.width) <= RUNNER.platformEdgeGap) {
+          correction = platform.x + platform.width - RUNNER.platformEdgeInset - left;
+        }
+        const maxCorrection = RUNNER.platformEdgeGap + RUNNER.platformEdgeInset;
+        correction = clampValue(this.motor.edgeOffsetX + correction, -maxCorrection, maxCorrection) - this.motor.edgeOffsetX;
+        if (correction !== 0) {
+          this.motor.edgeOffsetX += correction;
+          playerX += correction; left += correction; right += correction;
+          overlaps = right > platform.x && left < platform.x + platform.width;
+        }
+      }
+      if (overlaps && this.motor.y <= top + 0.01 && top < supportY) supportY = top;
     }
-    const motion = this.motor.step(dt, supportY);
+    const motion = this.motor.step(dt, supportY, this.speed / RUNNER.baseSpeed);
+    if (motion.landed && supportY === 0) this.motor.edgeOffsetX = 0;
     if (motion.jumped) this.jumps++;
     if (motion.landed) { this.landings++; if (this.motor.y < -1) this.platformLandings++; }
     const feet = RUNNER.groundY + this.motor.y;
+    playerX = RUNNER.playerX + this.motor.edgeOffsetX;
+    left = playerX - RUNNER.playerWidth / 2; right = playerX + RUNNER.playerWidth / 2;
     for (const door of this.gates) {
       if (!door.opened && right > door.x && left < door.x + door.width
         && feet > RUNNER.groundY - door.height && feet - RUNNER.playerHeight < RUNNER.groundY) {
+        if (door.pendingOpen) {
+          door.opened = true; door.openedAt = this.elapsed;
+          if (door.pendingOpen) this.gatesOpened++;
+          continue;
+        }
         this.failGate(door.pendingFailure ?? 'missed'); return;
       }
     }
@@ -330,13 +404,13 @@ export class RunnerModel {
       }
     }
     if (this.phase !== 'running') return;
-    this.collectCoins(this.coins, feet);
-    this.collectCoins(this.levelUpCoins, feet);
+    this.collectCoins(this.coins, feet, playerX);
+    this.collectCoins(this.levelUpCoins, feet, playerX);
   }
-  private collectCoins(coins: Coin[], feet: number): void {
+  private collectCoins(coins: Coin[], feet: number, playerX: number): void {
     this.compact(coins, (coin) => {
-      if (coin.x < -30) return false;
-      const dx = coin.x - RUNNER.playerX, dy = coin.y - (feet - 32);
+      if (coin.x < this.viewportLeft - 30) return false;
+      const dx = coin.x - playerX, dy = coin.y - (feet - 32);
       if (dx * dx + dy * dy > RUNNER.coinRadius ** 2) return true;
       this.coinsCollected += coin.value;
       if (this.pickups.length < RUNNER.maxCoins) this.pickups.push({ ...coin, serial: this.coinsCollected });
@@ -349,4 +423,8 @@ export class RunnerModel {
     for (let read = 0; read < items.length; read++) if (keep(items[read])) items[write++] = items[read];
     items.length = write;
   }
+}
+
+function clampValue(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
 }
