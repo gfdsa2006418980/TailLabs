@@ -1,2 +1,4 @@
 * text=auto eol=lf
 *.cmd text eol=crlf
+# Preserve the verbatim spec's intentional Markdown hard line breaks.
+docs/TL003-v0.4.md whitespace=-blank-at-eol

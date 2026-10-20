@@ -1,0 +1,16 @@
+<!doctype html>
+<html lang="zh-Hant"><meta charset="utf-8"><title>TL003 viewport preview</title>
+<style>body{margin:0;background:#101b13;color:#ddd;font:11px system-ui}header{padding:6px;display:flex;justify-content:center;gap:6px}button{font:11px system-ui;background:#263725;color:#d7dfc5;border:1px solid #8b9e7444;padding:4px 8px;cursor:pointer}section{position:relative;margin:0 auto}section[hidden]{display:none}iframe{border:0;display:block;transform-origin:top left}details{position:fixed;left:0;bottom:0;max-height:200px;overflow:auto;background:#111;max-width:100vw;font-size:9px}pre{white-space:pre-wrap}</style>
+<header><button data-view="phone320">320×568</button><button data-view="phone390">390×844</button><button data-view="landscape">768×376</button><button data-view="desktop">1280×900</button></header>
+<section id="phone320" hidden><iframe title="320×568" src="/" width="320" height="568"></iframe></section>
+<section id="phone390"><iframe title="390×844" src="/" width="390" height="844"></iframe></section>
+<section id="landscape" hidden><iframe title="768×376" src="/" width="768" height="376"></iframe></section>
+<section id="desktop" hidden><iframe title="1280×900" src="/" width="1280" height="900"></iframe></section>
+<details><summary>Geometry report</summary><pre id="measurements"></pre></details>
+<script type="module">
+// Local-only QA page; Vite production input contains index.html only.
+function fit(){for(const s of document.querySelectorAll('section')){const f=s.querySelector('iframe'),scale=Math.min(1,(innerHeight-39)/Number(f.height),(innerWidth-20)/Number(f.width));s.style.width=(Number(f.width)*scale)+'px';s.style.height=(Number(f.height)*scale)+'px';f.style.transform='scale('+scale+')';}}
+document.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>{document.querySelectorAll('section').forEach(s=>s.hidden=s.id!==b.dataset.view);fit();report();});
+function report(){const measurements=[...document.querySelectorAll('iframe')].map(f=>{const d=f.contentDocument;if(!d?.querySelector('.command'))return{viewport:[Number(f.width),Number(f.height)],loading:true};const rect=n=>{const r=n.getBoundingClientRect();return{x:r.x,y:r.y,width:r.width,height:r.height}};return{viewport:[Number(f.width),Number(f.height)],page:[d.documentElement.scrollWidth,d.documentElement.scrollHeight],boxes:[...d.querySelectorAll('.masthead,.telemetry,.battle-wrap,.squad,.support,footer')].map(n=>({class:n.className,...rect(n)})),buttons:[...d.querySelectorAll('.squad button,.support button')].map(n=>({id:n.id,...rect(n)})),modal:{title:d.querySelector('#modal-title')?.textContent,scrollHeight:d.querySelector('dialog').scrollHeight,clientHeight:d.querySelector('dialog').clientHeight}}});document.querySelector('#measurements').textContent=JSON.stringify(measurements,null,2);}
+window.addEventListener('load',()=>{fit();report()});window.addEventListener('resize',fit);setInterval(report,1000);
+</script></html>
