@@ -34,6 +34,15 @@ button:focus-visible, canvas:focus-visible { outline: 3px solid var(--accent-pin
 canvas { display: block; touch-action: none; }
 .loading { position: absolute; inset: 0; display: grid; place-items: center; background: #f4f2e9; color: var(--muted); font-size: 14px; }
 
+.password-gate { position: fixed; z-index: 10; inset: 0; display: grid; place-items: center; padding: calc(var(--safe-top) + 24px) calc(var(--safe-right) + 20px) calc(var(--safe-bottom) + 24px) calc(var(--safe-left) + 20px); background: #f4f2e9; }
+.password-card { display: grid; justify-items: center; gap: 13px; width: min(340px, 100%); padding: 28px 26px; border: 1px solid var(--line); border-radius: 20px; background: #faf5f3; color: var(--ink); text-align: center; box-shadow: 0 12px 36px #33262912; }
+.password-card .panel-art { width: 82px; height: 82px; margin: -3px 0 0; }
+.password-card h1 { margin: -3px 0 0; font-size: 23px; font-weight: 650; line-height: 1.35; }
+.password-card label { margin-top: 2px; color: var(--muted); font-size: 13px; }
+.password-card input { width: 100%; min-height: 48px; padding: 9px 14px; border: 1px solid var(--line); border-radius: 9px; outline: 0; background: #fffefb; color: var(--ink); font: inherit; font-size: 18px; letter-spacing: .35em; text-align: center; }
+.password-card input:focus-visible { border-color: var(--accent-pink); box-shadow: 0 0 0 3px #bd828a26; }
+.password-card > .button { width: 100%; margin-top: 2px; }
+
 .hud { position: absolute; inset: calc(var(--safe-top) + 16px) calc(var(--safe-right) + 16px) auto calc(var(--safe-left) + 16px); display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; pointer-events: none; z-index: 3; }
 .game-metrics { display: flex; align-items: center; gap: 8px; min-width: 0; padding: 6px 10px; border: 1px solid var(--line); border-radius: 14px; background: #faf5f3eb; box-shadow: 0 3px 12px #3326290a; -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); }
 .metric { display: inline-flex; align-items: center; gap: 5px; min-height: 24px; padding: 2px 4px; border-radius: 0; background: transparent; white-space: nowrap; }
