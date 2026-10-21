@@ -1,4 +1,5 @@
 import './style.css';
+import './generated/sprites.css';
 import { Battlefield } from './Battlefield.ts';
 import type { Aim } from './Battlefield.ts';
 import { MERCENARIES, MERC_KINDS } from './Content.ts';
@@ -22,14 +23,17 @@ const icon = (name: string) => {
   };
   return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true">${paths[name] ?? paths.cross}</svg>`;
 };
+/** A frame of the pixel sprite sheet as an inline icon; size = screen pixels per art pixel. */
+const px = (name: string, size = 2) => `<i class="px-icon" data-icon="${name}" style="--px:${size}px" aria-hidden="true"></i>`;
+const ELEMENT_ICON: Record<string, string> = { kinetic: 'icon_el_kinetic', fire: 'icon_el_fire', bio: 'icon_el_bio', electric: 'icon_el_electric' };
 document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
 <main class="command" aria-labelledby="game-title">
-  <header class="masthead"><div class="brand"><span class="brand-mark">T<span>l</span></span><div><span class="eyebrow">TAIL LABS / EXPERIMENT 003</span><h1 id="game-title">無盡防線<span>THE LAST LINE</span></h1></div></div><div class="header-actions"><span class="live-label"><i></i> 西側防衛區</span><div class="volume-control"><button id="mute" class="quiet-button" aria-label="音效開關" aria-pressed="false"></button><input id="volume" type="range" min="0" max="100" step="5" aria-label="音效音量"></div><button id="pause" class="quiet-button" aria-label="暫停遊戲" disabled>Ⅱ</button></div></header>
+  <header class="masthead"><div class="brand"><span class="brand-mark">T<span>l</span></span><div><span class="eyebrow">TAIL LABS · TL003</span><h1 id="game-title">無盡防線<span>THE LAST LINE</span></h1></div></div><div class="header-actions"><span class="live-label"><i></i> 西側防衛區</span><div class="volume-control"><button id="mute" class="quiet-button" aria-label="音效開關" aria-pressed="false"></button><input id="volume" type="range" min="0" max="100" step="5" aria-label="音效音量"></div><button id="pause" class="quiet-button" aria-label="暫停遊戲" disabled>Ⅱ</button></div></header>
   <section class="telemetry" aria-label="本局狀態">
-    <div class="wall-metric">${icon('shield')}<div><span class="label">拒馬完整度</span><strong id="wall-value">65 <small>/ 65</small></strong><div class="wall-track"><i id="wall-fill"></i></div></div></div>
-    <div><span class="label">戰場資金</span><strong class="money"><span class="currency">¤</span> <span id="money">0</span></strong></div>
-    <div><span class="label">屍潮 <span class="desktop-word">WAVE</span></span><strong id="wave">01 <small>/ 40</small></strong></div>
-    <div><span class="label">堅守時間</span><strong id="time">00:00</strong></div>
+    <div class="wall-metric">${px('icon_fortify')}<div><span class="label">拒馬</span><strong id="wall-value">65 <small>/ 65</small></strong><div class="wall-track"><i id="wall-fill"></i></div></div></div>
+    <div class="money-metric">${px('icon_money', 3)}<div><span class="label">資金</span><strong class="money"><span id="money">0</span></strong></div></div>
+    <div class="wave-metric">${px('icon_wave')}<div><span class="label">屍潮</span><strong id="wave">01 <small>/ 40</small></strong></div></div>
+    <div class="time-metric">${px('icon_time')}<div><span class="label">堅守</span><strong id="time">00:00</strong></div></div>
     <div class="kill-metric"><span class="label">擊殺</span><strong id="kills">0</strong></div>
   </section>
   <section class="battle-wrap" aria-label="直式防守戰場">
@@ -39,10 +43,10 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
     <div class="battle-bottom"><span>敵軍由前方逼近 ↓</span><span>拒馬 ╱ 傭兵陣地</span></div>
   </section>
   <section class="tactics" aria-label="戰術經驗"><div><span class="eyebrow">戰術等級 <b id="level">01</b></span><span id="xp-label">0 / 3 XP</span></div><div class="xp-track"><i id="xp-fill"></i></div><span class="tactics-hint">擊殺取得經驗 · 升級三選一</span></section>
-  <section class="squad-section" aria-label="傭兵與主動技能"><div class="section-heading"><h2>防守小隊 <span id="squad-count">1 / 3</span></h2><span>自動射擊 <b>·</b> 手動軍火</span></div><div class="squad">${MERC_KINDS.map((kind, index) => {
-    const m = MERCENARIES[kind]; return `<article class="merc-card" data-kind="${kind}" style="--merc-color:${m.color}"><div class="merc-heading"><span class="unit-number">0${index + 1}</span><div><h3>${m.name} <span id="level-${kind}">Lv.1</span></h3><small>${m.role}</small></div><span class="unit-state" id="state-${kind}">待招募</span></div><div class="merc-actions"><button class="purchase" id="buy-${kind}"></button><button class="skill" id="skill-${kind}" aria-label="${m.skill}，按住拖曳至戰場" disabled>${icon(kind === 'rifle' ? 'grenade' : kind === 'flame' ? 'flame' : 'bolt')}<span><b>${m.skill}</b><small id="cooldown-${kind}">尚未招募</small></span><span class="key">${index + 1}</span></button></div></article>`;
+  <section class="squad-section" aria-label="傭兵與主動技能"><div class="section-heading"><h2>防守小隊 <span id="squad-count">1 / 3</span></h2><span>自動射擊 · 按住技能拖到戰場</span></div><div class="squad">${MERC_KINDS.map((kind, index) => {
+    const m = MERCENARIES[kind]; return `<article class="merc-card" data-kind="${kind}" style="--merc-color:${m.color}"><div class="merc-heading"><span class="portrait">${px('icon_merc_' + kind, 2)}<span class="unit-number">${index + 1}</span></span><div><h3>${m.name} <span id="level-${kind}">Lv.1</span></h3><small>${m.role}</small></div><span class="unit-state" id="state-${kind}">待招募</span></div><div class="merc-actions"><button class="purchase" id="buy-${kind}">${px('icon_money', 1)}<span id="buy-label-${kind}"></span></button><button class="skill" id="skill-${kind}" aria-label="${m.skill}，按住拖曳至戰場" disabled><span class="skill-icon">${px('icon_skill_' + kind, 2)}</span><span><b>${m.skill}</b><small id="cooldown-${kind}">尚未招募</small></span><span class="key">${index + 1}</span></button></div></article>`;
   }).join('')}</div></section>
-  <section class="support" aria-label="防守投資與屬性"><div class="wall-actions"><button id="repair">${icon('cross')} 修復 <span id="repair-cost">¤6</span></button><button id="fortify">${icon('shield')} 補強 <span id="fortify-cost">¤10</span></button></div><div class="elements"><span title="動能：直接傷害" class="kinetic">動能 <b id="tag-kinetic">0</b></span><span title="火焰：持續傷害" class="fire">火焰 <b id="tag-fire">0</b></span><span title="生化：降低敵人防禦" class="bio">生化 <b id="tag-bio">0</b></span><span title="電能：提高敵人受到的傷害" class="electric">電能 <b id="tag-electric">0</b></span></div></section>
+  <section class="support" aria-label="防守投資與屬性"><div class="wall-actions"><button id="repair">${px('icon_repair')}<span class="action-name">修復</span><span id="repair-cost">¤6</span></button><button id="fortify">${px('icon_fortify')}<span class="action-name">補強</span><span id="fortify-cost">¤10</span></button></div><div class="elements"><span title="動能：直接傷害" class="kinetic">${px(ELEMENT_ICON.kinetic!)}<span class="element-name">動能</span><b id="tag-kinetic">0</b></span><span title="火焰：持續傷害" class="fire">${px(ELEMENT_ICON.fire!)}<span class="element-name">火焰</span><b id="tag-fire">0</b></span><span title="生化：降低敵人防禦" class="bio">${px(ELEMENT_ICON.bio!)}<span class="element-name">生化</span><b id="tag-bio">0</b></span><span title="電能：提高敵人受到的傷害" class="electric">${px(ELEMENT_ICON.electric!)}<span class="element-name">電能</span><b id="tag-electric">0</b></span></div></section>
   <footer><span id="build-summary">尚未取得戰術強化</span><span>TL003 <i>·</i> 垂直切片 v0.1</span></footer>
   <p id="announcement" class="sr-only" aria-live="polite"></p>
 </main>
@@ -83,18 +87,18 @@ function syncPhase() {
   if (run.phase === 'victory') audio.play('victory');
   text('announcement', run.phase === 'choice' ? '戰術升級，請選擇一張強化。' : run.phase === 'over' ? '防線失守，本局結束。' : run.phase === 'running' ? '防守開始。' : '');
   if (run.phase === 'ready') {
-    showModal(`<div class="modal-kicker">TAIL LABS / TL003</div><div class="hero-emblem">${icon('shield')}</div><h2 id="modal-title">從一條破爛防線開始。</h2><p>傭兵自動開火，你決定如何守得更久。</p><div class="briefing"><span><b>01</b> 擊殺賺錢，招募最多 3 名傭兵</span><span><b>02</b> 累積經驗，三選一建立屬性戰術</span><span><b>03</b> 拖曳軍火至戰場，放手施放</span><span><b>04</b> 每 2 分鐘屍王帶隊衝鋒，用手榴彈擊退</span></div>${deploymentSummary(meta.effects)}<button id="start" class="primary">部署防線 <span>→</span></button><button id="open-talents" class="camp-button">天賦星盤 <span>${formatNumber(meta.value.TalentPoints)} 點可用 ↗</span></button><p class="fine-print">新兵首局約可堅守 2～3 分鐘，第一隻屍王在 02:00 出現。<br>本局進度不保存；重新整理會放棄本局。</p><div class="meta-strip">最高通關 Wave <b>${meta.value.HighestClearedWave}</b></div>`);
+    showModal(`<div class="modal-kicker">部署簡報</div><div class="hero-art">${px('zombie_walker_0', 3)}${px('merc_rifle', 4)}${px('zombie_runner_1', 3)}</div><h2 id="modal-title">從一條破爛防線開始。</h2><p>傭兵自動開火，你決定如何守得更久。</p><div class="briefing"><span><b>01</b> 擊殺賺錢，招募最多 3 名傭兵</span><span><b>02</b> 累積經驗，三選一建立屬性戰術</span><span><b>03</b> 拖曳軍火至戰場，放手施放</span><span><b>04</b> 每 2 分鐘屍王帶隊衝鋒，用手榴彈擊退</span></div>${deploymentSummary(meta.effects)}<button id="start" class="primary">部署防線 <span>→</span></button><button id="open-talents" class="camp-button">天賦星盤 <span>${formatNumber(meta.value.TalentPoints)} 點可用 ↗</span></button><p class="fine-print">新兵首局約可堅守 2～3 分鐘，第一隻屍王在 02:00 出現。<br>本局進度不保存；重新整理會放棄本局。</p><div class="meta-strip">最高通關 Wave <b>${meta.value.HighestClearedWave}</b></div>`);
     el('start').onclick = startRun;
     el('open-talents').onclick = () => talents.open();
   } else if (run.phase === 'choice') {
-    showModal(`<div class="modal-kicker">TACTICAL UPGRADE / LV.${run.level}</div><h2 id="modal-title">選擇你的下一步。</h2><p>戰鬥已暫停。選取一項，本局持續生效，可重複堆疊。</p><div class="choice-grid">${run.choices.map((card, i) => `<button class="choice" data-card="${card.id}" style="--card-color:${card.color}"><span class="choice-category">${card.category}<small>0${i + 1}</small></span>${icon(card.id === 'burn' || card.id === 'fire' ? 'flame' : card.id === 'shock' ? 'bolt' : 'cross')}<strong>${card.name}</strong><span class="choice-description">${card.description}</span><span class="choice-pick">選取強化 ↗</span></button>`).join('')}</div>`);
+    showModal(`<div class="modal-kicker">戰術升級 · 第 ${run.level} 級</div><h2 id="modal-title">選擇一項強化</h2><p>戰鬥已暫停。選取一項，本局持續生效，可重複堆疊。</p><div class="choice-grid">${run.choices.map((card, i) => `<button class="choice" data-card="${card.id}" style="--card-color:${card.color}"><span class="choice-icon">${px('icon_card_' + card.id, 3)}</span><span class="choice-category">${card.category}<small>${i + 1}</small></span><strong>${card.name}</strong><span class="choice-description">${card.description}</span><span class="choice-pick">選擇</span></button>`).join('')}</div>`);
     dialog.querySelectorAll<HTMLButtonElement>('[data-card]').forEach(button => { button.onclick = () => { if (run.choose(button.dataset.card!)) audio.play('pick'); sync(); }; });
   } else if (run.phase === 'paused') {
-    showModal('<div class="modal-kicker">DEFENSE ON HOLD</div><h2 id="modal-title">暫停防守</h2><p>傭兵、敵人與技能冷卻均已暫停。</p><button id="resume" class="primary">返回戰場 →</button>');
+    showModal('<div class="modal-kicker">暫停</div><h2 id="modal-title">暫停防守</h2><p>傭兵、敵人與技能冷卻均已暫停。</p><button id="resume" class="primary">返回戰場 →</button>');
     el('resume').onclick = () => { run.resume(); sync(); };
   } else if (run.phase === 'over' || run.phase === 'victory') {
     meta.settle(run, run.score, run.clearedWave);
-    showModal(`<div class="modal-kicker">${run.phase === 'victory' ? '40 WAVES / MILESTONE REACHED' : 'DEFENSE REPORT / LINE LOST'}</div><h2 id="modal-title">${run.phase === 'victory' ? '守住了二十分鐘。' : '防線失守。'}</h2><p>每一次堅守，都是下一次的起點。</p><div class="result-stats"><div><span>堅守時間</span><strong>${clock(run.elapsed)}</strong></div><div><span>本局擊殺</span><strong>${run.kills}</strong></div><div><span>累計收入</span><strong>¤${formatNumber(run.totalEarnedMoney)}</strong></div></div><div class="earned"><span>獲得天賦點</span><strong>+${run.score}</strong><small>累積 ${meta.value.TalentPoints} 點 · 投資永久成長</small></div><p class="score-note">時間分 ${Math.floor(run.elapsed / 30)} + 累計收入分 ${Math.floor(Math.log10(run.totalEarnedMoney + 1))} = ${run.score}<br>已花掉的戰場資金同樣計分。</p><button id="result-talents" class="primary">投資天賦，準備下一局 <span>↗</span></button><button id="retry" class="camp-button">直接再守一次 <span>→</span></button><p class="fine-print">${meta.persistent ? '天賦點已記錄在此瀏覽器。' : '瀏覽器無法保存，天賦點暫留於此分頁。'}<br>傭兵、資金與本局強化將重新開始。</p>`);
+    showModal(`<div class="modal-kicker">${run.phase === 'victory' ? '戰報 · 守住 40 波' : '戰報 · 防線失守'}</div><h2 id="modal-title">${run.phase === 'victory' ? '守住了二十分鐘。' : '防線失守。'}</h2><p>每一次堅守，都是下一次的起點。</p><div class="result-stats"><div><span>堅守時間</span><strong>${clock(run.elapsed)}</strong></div><div><span>本局擊殺</span><strong>${run.kills}</strong></div><div><span>累計收入</span><strong>¤${formatNumber(run.totalEarnedMoney)}</strong></div></div><div class="earned"><span>獲得天賦點</span><strong>+${run.score}</strong><small>累積 ${meta.value.TalentPoints} 點 · 投資永久成長</small></div><p class="score-note">時間分 ${Math.floor(run.elapsed / 30)} + 累計收入分 ${Math.floor(Math.log10(run.totalEarnedMoney + 1))} = ${run.score}<br>已花掉的戰場資金同樣計分。</p><button id="result-talents" class="primary">投資天賦，準備下一局 <span>↗</span></button><button id="retry" class="camp-button">直接再守一次 <span>→</span></button><p class="fine-print">${meta.persistent ? '天賦點已記錄在此瀏覽器。' : '瀏覽器無法保存，天賦點暫留於此分頁。'}<br>傭兵、資金與本局強化將重新開始。</p>`);
     el('result-talents').onclick = () => talents.open();
     el('retry').onclick = reset;
   } else if (dialog.open) dialog.close();
@@ -117,7 +121,7 @@ function sync() {
     const merc = run.mercenaries.find(m => m.kind === kind), buy = el<HTMLButtonElement>(`buy-${kind}`), skill = el<HTMLButtonElement>(`skill-${kind}`);
     const cost = merc ? run.upgradeCost(kind) : run.recruitCost(kind);
     text(`level-${kind}`, `Lv.${run.levels[kind]}`); text(`state-${kind}`, merc ? '已部署' : '待招募');
-    text(`buy-${kind}`, `${merc ? '升級' : '招募'} · ¤${formatNumber(cost)}`);
+    text(`buy-label-${kind}`, `${merc ? '升級' : '招募'} ${formatNumber(cost)}`);
     buy.disabled = run.phase !== 'running' || run.money < cost || (!merc && run.mercenaries.length >= 3);
     skill.disabled = run.phase !== 'running' || !merc || merc.cooldown > 0;
     skill.classList.toggle('ready', !skill.disabled); skill.classList.toggle('aiming', !!merc && !!aim && run.mercenaries[aim.slot] === merc);

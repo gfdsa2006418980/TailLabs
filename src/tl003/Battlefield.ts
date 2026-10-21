@@ -1,4 +1,3 @@
-import './pixel.css';
 import { MERCENARIES } from './Content.ts';
 import type { MercKind } from './Content.ts';
 import { FIELD, mercPosition } from './Run.ts';
@@ -7,6 +6,7 @@ import { project, projectedCircle, unproject } from './Projection.ts';
 import type { Viewport } from './Projection.ts';
 import { burnSpeed } from './Burn.ts';
 import { ANIMS, FRAMES } from './generated/sprites.ts';
+import sheetUrl from './generated/tl003.png';
 
 export interface Aim { slot: number; x: number; y: number; valid: boolean }
 
@@ -21,7 +21,9 @@ const ENEMY_ART: Record<string, { anim: string; scale: number }> = {
   boss: { anim: 'zombie_boss', scale: 1.5 },
 };
 /** Muzzle pixel inside each mercenary sprite (sprite-local coordinates). */
-const MUZZLE: Record<MercKind, [number, number]> = { rifle: [19, 2], flame: [19, 7], tesla: [19, 4] };
+const MUZZLE: Record<MercKind, [number, number]> = { rifle: [21, 1], flame: [20, 1], tesla: [21, 2] };
+/** The right-hand slot is mirrored so every weapon points in towards the road. */
+const FLIPPED_SLOT = 2;
 const COLOR = {
   outline: '#121619', skyTop: '#a8a785', sky: '#93a27a', skyLow: '#7d8c68', haze: '#6d8160',
   field: '#2b3a31', fieldDark: '#1d2722', fieldLight: '#3b4d3f', road: '#4e4c3d', roadDark: '#3f3a2c', roadLight: '#5f5640',
@@ -60,7 +62,7 @@ export class Battlefield {
       f.globalCompositeOperation = 'source-in'; f.fillStyle = '#fff3ce'; f.fillRect(0, 0, this.sheet.width, this.sheet.height);
       this.ready = true; this.view = { width: 480, height: 0 };
     };
-    this.sheet.src = './assets/pixel/tl003.png';
+    this.sheet.src = sheetUrl;
   }
   point(clientX: number, clientY: number) {
     const rect = this.canvas.getBoundingClientRect();
@@ -89,11 +91,12 @@ export class Battlefield {
     }
   }
   /** Draws a sheet frame with its bottom-centre at (x, y), scaled and snapped to whole pixels. */
-  private sprite(name: string, x: number, y: number, scale = 1, flash = false, ctx = this.pixels) {
+  private sprite(name: string, x: number, y: number, scale = 1, flash = false, ctx = this.pixels, flip = false) {
     const f = FRAMES[name]; if (!f || !this.ready) return { left: 0, top: 0, w: 0, h: 0 };
     const w = Math.max(1, Math.round(f[2] * scale)), h = Math.max(1, Math.round(f[3] * scale));
-    const left = Math.round(x - w / 2), top = Math.round(y - h);
-    ctx.drawImage(flash ? this.flashSheet : this.sheet, f[0], f[1], f[2], f[3], left, top, w, h);
+    const left = Math.round(x - w / 2), top = Math.round(y - h), image = flash ? this.flashSheet : this.sheet;
+    if (flip) { ctx.save(); ctx.translate(left + w, top); ctx.scale(-1, 1); ctx.drawImage(image, f[0], f[1], f[2], f[3], 0, 0, w, h); ctx.restore(); }
+    else ctx.drawImage(image, f[0], f[1], f[2], f[3], left, top, w, h);
     return { left, top, w, h };
   }
   private animFrame(name: string, seconds: number, loop = true) {
@@ -213,7 +216,7 @@ export class Battlefield {
       if (!merc) { this.sprite('merc_slot', p.x, p.y, 1); continue; }
       const firing = run.events.some(e => (e.kind === 'shot' || e.kind === 'flame') && e.fromX === origin.x && e.fromY === origin.y && e.life > e.maxLife - 0.09);
       const breathe = Math.floor(t * 1.6 + i * 0.7) % 2;
-      this.sprite(`merc_${merc.kind}${firing || (merc.kind === 'tesla' && run.events.some(e => e.kind === 'laser' && e.fromX === origin.x && e.life > e.maxLife - 0.2)) ? '_fire' : ''}`, p.x, p.y + breathe, 1);
+      this.sprite(`merc_${merc.kind}${firing || (merc.kind === 'tesla' && run.events.some(e => e.kind === 'laser' && e.fromX === origin.x && e.life > e.maxLife - 0.2)) ? '_fire' : ''}`, p.x, p.y + breathe, 1, false, this.pixels, i === FLIPPED_SLOT);
     }
 
     for (const event of run.events) this.effect(run, event);
@@ -248,7 +251,7 @@ export class Battlefield {
       const slot = run.mercenaries.findIndex((_, i) => mercPosition(i).x === e.fromX && mercPosition(i).y === e.fromY);
       const merc = run.mercenaries[slot]; if (!merc) return;
       const p = this.at(e.fromX!, e.fromY!), f = FRAMES[`merc_${merc.kind}`]!, [mx, my] = MUZZLE[merc.kind];
-      const sx = Math.round(p.x - f[2] / 2) + mx, sy = Math.round(p.y - f[3]) + my;
+      const left = Math.round(p.x - f[2] / 2), sx = slot === FLIPPED_SLOT ? left + f[2] - 1 - mx : left + mx, sy = Math.round(p.y - f[3]) + my;
       const ty = end.y - 8 * end.scale / WALL_SCALE;
       if (e.kind === 'shot') {
         // A short tracer travelling from the muzzle to the target.

@@ -18,50 +18,69 @@ pal({
 });
 ramps("kdDeEfF", "kqQtTw", "kAa", "kzZy", "krRoOY", "kcCL", "kmMnN");
 
-// ---------- Mercenaries (seen from behind, facing up the road) ----------
-sprite("_merc_body", { mx: true }, `
-  ......HH
-  ....HHHH
-  ...HHHHH
-  ...HHHHH
-  ...hhhhh
-  .....aaa
-  ..UUUUBB
-  .UUUUBBB
-  .UUuBBBB
-  uUUuBbBB
-  uUUuBBBB
-  uUUuBbBB
-  aUUuBBBB
-  ..GGGGGG
-  ..PPPPPP
-  ..PPPPpP
-  ..PPPPp.
-  ..PPPPp.
-  ..PPPPp.
-  ..xxxxx.`);
+// ---------- Mercenaries (seen from behind, weapon shouldered, facing up the road) ----------
+// Body: broad shoulders, small pack, belt pouches, wide stance. Role colors come in through swap.
+sprite("_merc_body", `
+  ......hHHh......
+  .....hHHTHh.....
+  ....hHHHHHHh....
+  ....hHHHHHHh....
+  ....qqqqqqqq....
+  .....aAAAAa.....
+  ...uUUUUUUUUu...
+  ..uUUUBBBBUUUu..
+  ..uUUBBbbBBUUu..
+  ..uUUBBBBBBUUu..
+  .uUuUBBbbBBUu...
+  .uUuUBBBBBBUu...
+  .aUuUUBBBBUUu...
+  ...uUUUUUUUu....
+  ...GqGGGGGqG....
+  ...PPPPPPPPP....
+  ...PPPPpPPPP....
+  ...PPPp.pPPP....
+  ..PPPPp.pPPPP...
+  ..PPPp...pPPP...
+  ..PPPp...pPPP...
+  ..xxxx...xxxx...
+  ..xxxx...xxxx...`);
 
-const MERC = { w: 20, h: 25, outline: "k" };
-sprite("merc_rifle", MERC,
-  stamp("_merc_body", 1, 5, { swap: { H: "T", h: "t" } }),
-  line(18, 20, 18, 2, "m"), line(17, 21, 17, 15, "Q"), px(18, 1, "M"), px(17, 18, "a"));
-sprite("merc_rifle_fire", { base: "merc_rifle" },
-  px(19, 1, "Y"), px(19, 0, "O"), px(18, 0, "Y"), px(20, 1, "O"), px(20, 0, "w"));
+const MERC = { w: 24, h: 31, outline: "k" };
+// Right arm raised from the shoulder to the grip; the weapon sits in the shoulder pocket.
+const arm = (c) => { c.line(14, 17, 15, 14, "U", 2); c.px(15, 18, "u"); c.rect(15, 12, 2, 2, "a"); };
+// Assault rifle: stock in the right shoulder, barrel raised towards the road.
+const rifle = (c) => {
+  c.line(13, 17, 20, 1, "m", 2); c.line(14, 16, 20, 2, "M");
+  c.rect(15, 9, 3, 3, "m"); c.px(16, 10, "n"); c.line(17, 11, 19, 14, "m"); c.px(19, 14, "M");
+  c.line(12, 19, 13, 16, "Q", 2); c.px(20, 0, "n");
+  arm(c);
+};
+sprite("merc_rifle", MERC, stamp("_merc_body", 1, 8, { swap: { H: "T", h: "t" } }), rifle);
+sprite("merc_rifle_fire", { base: "merc_rifle" }, px(21, 0, "Y"), px(22, 0, "O"), px(21, 1, "O"), px(20, 0, "w"), px(22, 1, "o"));
 
-sprite("merc_flame", MERC,
-  stamp("_merc_body", 1, 5, { swap: { H: "o", h: "R" } }),
-  rect(7, 10, 3, 8, "o"), rect(10, 10, 3, 8, "o"), vline(9, 10, 8, "R"), vline(12, 10, 8, "R"),
-  hline(7, 10, 2, "O"), hline(10, 10, 2, "O"), rect(7, 12, 6, 1, "m"),
-  line(18, 21, 18, 7, "M"), line(17, 21, 17, 17, "m"), px(18, 6, "O"), px(17, 18, "a"));
-sprite("merc_flame_fire", { base: "merc_flame" },
-  px(19, 6, "O"), px(19, 5, "Y"), px(18, 4, "O"), px(19, 4, "Y"), px(20, 3, "o"), px(20, 5, "O"), px(19, 3, "O"));
+// Flamethrower: twin fuel tanks, hose to a wide nozzle, pilot flame lit.
+const flamer = (c) => {
+  c.rect(7, 15, 2, 8, "o"); c.rect(10, 15, 2, 8, "o"); c.vline(7, 15, 8, "O"); c.vline(10, 15, 8, "O");
+  c.hline(7, 17, 5, "m"); c.hline(7, 21, 5, "m"); c.px(8, 14, "M"); c.px(11, 14, "M");
+  c.line(12, 22, 14, 19, "m");
+  c.line(13, 17, 19, 4, "M", 2); c.line(14, 16, 19, 5, "n");
+  c.rect(18, 1, 3, 3, "m"); c.px(19, 2, "M"); c.px(20, 0, "O"); c.px(19, 0, "Y");
+  arm(c);
+};
+sprite("merc_flame", MERC, stamp("_merc_body", 1, 8, { swap: { H: "o", h: "R", B: "m", b: "m" } }), flamer);
+sprite("merc_flame_fire", { base: "merc_flame" }, (c) => { c.poly([17, 1, 20, -3, 24, -2, 22, 3], "O"); c.px(20, -1, "Y"); c.px(21, 0, "Y"); c.px(22, -1, "o"); });
 
-sprite("merc_tesla", MERC,
-  stamp("_merc_body", 1, 5, { swap: { H: "C", h: "c" } }),
-  rect(7, 10, 6, 8, "m"), hline(7, 11, 6, "C"), hline(7, 13, 6, "c"), hline(7, 15, 6, "C"), rect(9, 9, 2, 1, "L"),
-  line(18, 21, 18, 4, "M"), hline(17, 8, 3, "c"), hline(17, 11, 3, "c"), px(18, 3, "L"), px(17, 18, "a"));
-sprite("merc_tesla_fire", { base: "merc_tesla" },
-  px(18, 2, "L"), px(17, 1, "C"), px(19, 1, "C"), px(18, 0, "L"), px(16, 2, "c"), px(20, 2, "c"));
+// Tesla rifle: glowing coil pack, cable to a heavy emitter with copper coils.
+const tesla = (c) => {
+  c.rect(7, 15, 5, 8, "m"); c.hline(7, 16, 5, "C"); c.hline(7, 19, 5, "c"); c.hline(7, 22, 5, "C"); c.rect(8, 14, 3, 1, "L");
+  c.line(12, 22, 14, 19, "c");
+  c.line(13, 17, 20, 3, "M", 2); c.line(14, 16, 20, 4, "n");
+  c.px(16, 10, "o"); c.px(17, 9, "O"); c.px(18, 7, "o"); c.px(19, 6, "O");
+  c.rect(19, 0, 3, 3, "c"); c.px(20, 1, "L");
+  arm(c);
+};
+sprite("merc_tesla", MERC, stamp("_merc_body", 1, 8, { swap: { H: "C", h: "c", B: "m", b: "m" } }), tesla);
+sprite("merc_tesla_fire", { base: "merc_tesla" }, px(20, 0, "L"), px(21, 0, "C"), px(22, 1, "L"), px(19, 0, "C"), px(22, 2, "C"), px(21, 1, "w"));
 
 sprite("merc_slot", { w: 14, h: 6 }, (c) => {
   for (let x = 0; x < 14; x += 2) { c.px(x, 0, "F"); c.px(x + 1, 5, "F"); }
@@ -231,6 +250,43 @@ anim("zap", { w: 7, h: 9, frames: 3, fps: 14 }, (c) => {
   for (let i = 0; i < pts.length - 1; i++) c.line(pts[i][0], pts[i][1], pts[i + 1][0], pts[i + 1][1], i % 2 ? "C" : "L");
 });
 
+// ---------- UI icons (14×14 + outline = 16×16; shown at 2–3× in the HUD) ----------
+const IC = { w: 14, h: 14, outline: "k" };
+// Cards
+sprite("icon_card_kinetic", IC, (c) => { c.rect(5, 1, 4, 2, "T"); c.rect(4, 3, 6, 4, "T"); c.vline(5, 2, 5, "w"); c.rect(4, 7, 6, 1, "q"); c.rect(4, 8, 6, 5, "O"); c.vline(5, 8, 5, "Y"); c.vline(9, 8, 5, "o"); c.rect(4, 13, 6, 1, "q"); });
+sprite("icon_card_burn", IC, (c) => { c.poly([1, 13, 4, 4, 6, 8, 8, 2, 11, 9, 13, 13], "R"); c.poly([3, 13, 5, 7, 7, 10, 9, 5, 11, 13], "o"); c.poly([5, 13, 7, 9, 9, 13], "Y"); c.rect(9, 1, 3, 4, "T"); c.px(10, 0, "T"); c.vline(10, 1, 3, "w"); });
+sprite("icon_card_bio", IC, (c) => { c.poly([7, 0, 12, 8, 11, 12, 7, 14, 3, 12, 2, 8], "Z"); c.poly([7, 2, 10, 8, 7, 12, 4, 8], "y"); c.px(5, 7, "w"); c.px(6, 6, "w"); c.circ(9, 10, 1, "z"); });
+sprite("icon_card_shock", IC, (c) => { c.poly([8, 0, 2, 8, 6, 8, 5, 14, 12, 5, 8, 5, 10, 0], "C"); c.poly([8, 1, 4, 7, 7, 7, 6, 11, 10, 6, 7, 6], "L"); });
+sprite("icon_card_fire", IC, (c) => { c.rect(2, 3, 10, 11, "R"); c.rect(3, 4, 8, 9, "o"); c.line(3, 5, 10, 12, "R"); c.line(10, 5, 3, 12, "R"); c.rect(3, 0, 5, 2, "m"); c.rect(9, 1, 2, 2, "M"); c.vline(4, 4, 9, "O"); });
+sprite("icon_card_speed", IC, (c) => { for (const x of [1, 6]) { c.line(x, 2, x + 5, 7, "T", 2); c.line(x + 5, 7, x, 12, "T", 2); } c.line(1, 2, 6, 7, "w"); });
+sprite("icon_card_active", IC, (c) => { for (const x of [2, 6, 10]) { c.rect(x, 5, 3, 9, "R"); c.vline(x, 5, 9, "o"); } c.hline(2, 9, 11, "q"); c.line(7, 5, 9, 1, "t"); c.px(10, 0, "Y"); c.px(11, 1, "O"); c.px(9, 0, "O"); });
+sprite("icon_card_haste", IC, (c) => { c.circ(7, 8, 6, "M"); c.circ(7, 8, 5, "N"); c.rect(6, 0, 3, 2, "M"); c.line(7, 8, 7, 4, "k"); c.line(7, 8, 10, 9, "k"); c.poly([10, 1, 7, 6, 9, 6, 8, 10, 12, 4, 10, 4, 12, 1], "C"); });
+sprite("icon_card_radius", IC, (c) => { c.ring(7, 7, 6, "R"); c.ring(7, 7, 4, "o"); c.circ(7, 7, 2, "Y"); c.px(7, 0, "O"); c.px(7, 14, "O"); c.px(0, 7, "O"); c.px(14, 7, "O"); });
+sprite("icon_card_income", IC, (c) => { for (const [y, col] of [[10, "o"], [7, "O"], [4, "Y"]]) { c.ellipse(7, y, 6, 2, col); c.hline(2, y + 2, 11, "R"); } c.px(5, 3, "w"); c.px(6, 3, "w"); c.text(6, 2, "", "k"); });
+sprite("icon_card_wall", IC, (c) => { c.rect(0, 8, 14, 3, "Q"); c.hline(0, 8, 14, "t"); c.line(1, 1, 12, 13, "t", 2); c.line(12, 1, 1, 13, "t", 2); c.px(1, 1, "T"); c.px(12, 1, "T"); c.rect(9, 0, 5, 5, "y"); c.rect(11, 0, 1, 5, "k"); c.rect(9, 2, 5, 1, "k"); });
+sprite("icon_card_repair", IC, (c) => { c.line(3, 11, 9, 5, "n", 2); c.circ(10, 4, 3, "N"); c.rect(10, 1, 3, 3, "_"); c.px(11, 4, "_"); c.circ(3, 11, 2, "M"); c.px(3, 11, "k"); });
+// Skills
+sprite("icon_skill_rifle", IC, (c) => { c.circ(7, 8, 5, "f"); c.circ(6, 7, 3, "F"); c.hline(2, 8, 11, "e"); c.vline(7, 3, 11, "e"); c.rect(6, 1, 3, 2, "M"); c.line(9, 2, 12, 0, "n"); c.px(5, 6, "w"); });
+sprite("icon_skill_flame", IC, (c) => { c.rect(4, 6, 6, 8, "e"); c.rect(5, 7, 4, 6, "f"); c.rect(5, 4, 4, 2, "T"); c.rect(6, 3, 2, 1, "w"); c.poly([5, 3, 7, -1, 9, 3], "O"); c.px(7, 1, "Y"); c.rect(5, 9, 4, 2, "R"); });
+sprite("icon_skill_tesla", IC, (c) => { c.line(0, 13, 13, 0, "c", 3); c.line(0, 13, 13, 0, "C", 2); c.line(0, 13, 13, 0, "L"); c.px(12, 3, "L"); c.px(3, 12, "L"); c.px(10, 2, "C"); });
+// Mercenary portraits (helmet + face, three-quarter)
+const bust = (H, h, extra) => (c) => { c.rect(2, 9, 10, 5, "E"); c.hline(2, 9, 10, "f"); c.rect(4, 4, 6, 6, "a"); c.vline(9, 5, 5, "A"); c.px(5, 7, "k"); c.px(8, 7, "k"); c.rect(3, 1, 8, 4, H); c.hline(2, 4, 10, h); c.hline(4, 1, 5, "w"); extra(c); };
+sprite("icon_merc_rifle", IC, bust("T", "t", (c) => { c.hline(4, 5, 6, "m"); c.px(5, 5, "C"); c.px(8, 5, "C"); }));
+sprite("icon_merc_flame", IC, bust("o", "R", (c) => { c.rect(4, 7, 6, 3, "m"); c.px(6, 8, "M"); c.px(7, 8, "M"); c.px(10, 9, "m"); c.px(11, 10, "m"); }));
+sprite("icon_merc_tesla", IC, bust("C", "c", (c) => { c.vline(10, 0, 2, "M"); c.px(10, 0, "L"); c.hline(4, 6, 6, "L"); }));
+// Elements (small)
+const EL = { w: 9, h: 9, outline: "k" };
+sprite("icon_el_kinetic", EL, (c) => { c.rect(3, 0, 3, 3, "T"); c.rect(2, 3, 5, 5, "O"); c.vline(3, 3, 5, "Y"); });
+sprite("icon_el_fire", EL, (c) => { c.poly([0, 9, 4, 0, 9, 9], "o"); c.poly([2, 9, 4, 4, 7, 9], "Y"); });
+sprite("icon_el_bio", EL, (c) => { c.poly([4, 0, 8, 5, 4, 9, 0, 5], "Z"); c.px(3, 4, "w"); });
+sprite("icon_el_electric", EL, (c) => { c.poly([5, 0, 1, 5, 4, 5, 3, 9, 8, 3, 5, 3, 6, 0], "L"); });
+// HUD actions
+sprite("icon_repair", IC, (c) => { c.rect(5, 1, 4, 12, "R"); c.rect(1, 5, 12, 4, "R"); c.rect(6, 2, 2, 10, "w"); c.rect(2, 6, 10, 2, "w"); });
+sprite("icon_fortify", IC, (c) => { c.poly([7, 0, 13, 2, 12, 9, 7, 14, 2, 9, 1, 2], "t"); c.poly([7, 2, 11, 3, 10, 8, 7, 12, 4, 8, 3, 3], "T"); c.rect(6, 4, 2, 6, "Q"); c.rect(4, 6, 6, 2, "Q"); });
+sprite("icon_money", { w: 9, h: 9, outline: "k" }, (c) => { c.circ(4, 4, 4, "O"); c.circ(4, 4, 3, "Y"); c.vline(4, 2, 5, "o"); });
+sprite("icon_wave", IC, (c) => { c.circ(7, 6, 6, "w"); c.rect(4, 10, 7, 4, "w"); c.rect(3, 5, 3, 3, "k"); c.rect(8, 5, 3, 3, "k"); c.px(4, 6, "R"); c.px(9, 6, "R"); c.rect(5, 12, 1, 2, "k"); c.rect(7, 12, 1, 2, "k"); c.rect(9, 12, 1, 2, "k"); });
+sprite("icon_time", IC, (c) => { c.hline(2, 0, 10, "Q"); c.hline(2, 13, 10, "Q"); c.poly([3, 1, 11, 1, 7, 7], "N"); c.poly([3, 13, 11, 13, 7, 7], "N"); c.poly([5, 2, 9, 2, 7, 5], "T"); c.poly([4, 12, 10, 12, 7, 9], "T"); });
+
 // ---------- Field props ----------
 sprite("car_wreck", { w: 30, h: 18, outline: "k" }, (c) => {
   c.rect(1, 6, 28, 9, "e"); c.rect(5, 2, 18, 6, "E"); c.rect(7, 3, 6, 4, "D"); c.rect(15, 3, 6, 4, "D");
@@ -308,5 +364,5 @@ scene("skyline", { w: 240, h: 60 }, (c) => {
   for (const sx of [52, 171]) for (let i = 0; i < 10; i++) c.circ(sx + Math.round(Math.sin(i * 0.9) * 3) + i, 36 - i * 4, 2 + Math.floor(i / 3), i < 4 ? "e" : "f");
 });
 
-sheet("tl003", ["merc_*", "zombie_*", "barricade*", "explosion", "fire", "muzzle", "hit", "death", "zap",
+sheet("tl003", ["icon_*", "merc_*", "zombie_*", "barricade*", "explosion", "fire", "muzzle", "hit", "death", "zap",
   "car_wreck", "barrel*", "sandbags", "tire", "lamp_post", "fence_post", "debris_*", "crater", "skyline"], { pad: 1 });
