@@ -6,6 +6,7 @@ import { RunnerLeaderboard, RUNNER_BOARD_KEY } from '../src/tl002/RunnerLeaderbo
 import { RunnerCountdown } from '../src/tl002/RunnerCountdown.ts';
 import { CoinFlightPool } from '../src/tl002/CoinFlight.ts';
 import { RunnerAudio } from '../src/tl002/RunnerAudio.ts';
+import { RunnerMusic } from '../src/tl002/RunnerMusic.ts';
 
 test('TL002 score uses metres plus coins, the displayed multiplier, integer flooring and a x5 cap', () => {
   assert.equal(runnerScore(172, 25, 1.5), 295);
@@ -98,6 +99,36 @@ test('TL002 audio unlocks one context and schedules jump, impact, failure and co
   assert.deepEqual([audio.snapshot().jump, audio.snapshot().collision, audio.snapshot().failure, audio.snapshot().coin], [1, 1, 1, 1]);
   for (const oscillator of context.oscillators) oscillator.onended?.();
   assert.equal(audio.snapshot().voices, 0); audio.destroy(); assert.equal(context.state, 'closed');
+});
+test('TL002 audio unlock resumes Safari interrupted contexts after returning to the page', () => {
+  const context = fakeContext(); context.state = 'interrupted';
+  const audio = new RunnerAudio(() => context);
+  audio.unlock();
+  assert.equal(context.state, 'running');
+  audio.jump(); assert.equal(audio.snapshot().jump, 1);
+  audio.destroy();
+});
+test('TL002 music primes silently in the start gesture and uses a gain node for Safari volume control', () => {
+  const parameter = () => ({ value: 0, events: [], setTargetAtTime(value) { this.value = value; this.events.push(value); } });
+  const context = {
+    state: 'suspended', currentTime: 0, destination: {}, gains: [],
+    resume() { this.state = 'running'; return Promise.resolve(); },
+    close() { this.state = 'closed'; return Promise.resolve(); },
+    createGain() { const node = { gain: parameter(), connect() {}, disconnect() {} }; this.gains.push(node); return node; },
+    createMediaElementSource() { return { connect() {}, disconnect() {} }; },
+  };
+  const track = { loop: false, muted: false, volume: 1, paused: true, plays: 0,
+    play() { this.paused = false; this.plays++; return Promise.resolve(); }, pause() { this.paused = true; } };
+  const music = new RunnerMusic(track, true, 0.2, () => context);
+  music.unlock();
+  assert.equal(track.plays, 1); assert.equal(track.loop, true);
+  assert.equal(context.gains[0].gain.value, 0, 'the countdown pre-roll stays silent');
+  music.afterCountdown(); assert.equal(context.gains[0].gain.value, 0.2);
+  music.setVolume(0.36); assert.equal(context.gains[0].gain.value, 0.36);
+  music.setEnabled(false); assert.equal(context.gains[0].gain.value, 0);
+  music.setEnabled(true); assert.equal(context.gains[0].gain.value, 0.36);
+  track.paused = true; music.unlock(); assert.equal(track.plays, 2, 'resume retries media playback after Safari suspends the page');
+  music.destroy(); assert.equal(context.state, 'closed'); assert.equal(track.paused, true);
 });
 test('TL002 uses a louder impact at collision and the separate TL001 failure cue for result settlement', () => {
   const context = fakeContext(), audio = new RunnerAudio(() => context); audio.unlock();

@@ -1,5 +1,6 @@
 import { CoinFlightPool, CoinFlightSpace } from './CoinFlight';
 import { RUNNER } from './RunnerModel';
+import { worldCoordinateAtScale } from './RunnerDeformation';
 import type { CoinPickup, RunnerModel } from './RunnerModel';
 
 /** One bounded DOM pool, driven by Phaser's existing frame loop. Only transforms
@@ -16,6 +17,7 @@ export class CoinFlightLayer {
   private previousText = -1;
   private previousSettled = 0;
   private pulse = 0;
+  private worldScale = 1;
   private reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   constructor(private readonly root: HTMLElement, private readonly counter: HTMLElement, private readonly icon: HTMLElement,
@@ -42,14 +44,23 @@ export class CoinFlightLayer {
     this.target.x = icon.left - shell.left + icon.width / 2;
     this.target.y = icon.top - shell.top + icon.height / 2;
   }
+  setWorldScale(scale: number): void {
+    this.worldScale = Math.max(0.5, Math.min(1, scale));
+  }
+  private projectWorld(x: number, y: number, out: { x: number; y: number }): void {
+    this.space.project(
+      worldCoordinateAtScale(x, RUNNER.playerX, this.worldScale),
+      worldCoordinateAtScale(y, RUNNER.groundY, this.worldScale), out,
+    );
+  }
   private locateBody(model: RunnerModel): void {
-    this.space.project(RUNNER.playerX, RUNNER.groundY + model.motor.y - 38, this.body);
+    this.projectWorld(RUNNER.playerX, RUNNER.groundY + model.motor.y - 38, this.body);
   }
   collect(coin: CoinPickup, model: RunnerModel): void {
     this.locateBody(model);
-    this.space.project(coin.x, coin.y, this.start);
+    this.projectWorld(coin.x, coin.y, this.start);
     if (this.reduced) { this.pool.settled += coin.value; this.contacted(); }
-    else if (!this.pool.spawn(this.start, this.body, this.space.size, coin.value)) this.contacted();
+    else if (!this.pool.spawn(this.start, this.body, this.space.size * this.worldScale, coin.value)) this.contacted();
   }
   update(dt: number, model: RunnerModel): void {
     this.locateBody(model);
