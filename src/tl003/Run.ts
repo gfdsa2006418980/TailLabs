@@ -4,10 +4,12 @@ import { CARDS, ENEMIES, MERCENARIES } from './Content.ts';
 import type { EnemyKind, MercKind, UpgradeCard } from './Content.ts';
 import type { PermanentEffects } from './Talents.ts';
 import { advanceBurn, applyBurn } from './Burn.ts';
+import * as B from './Balance.ts';
+import { SPAWN_GROWTH_SPEED } from './Balance.ts';
+export { SPAWN_GROWTH_SPEED };
 
 export const FIELD = { width: 960, height: 420, wallX: 750, step: 1 / 60, waveSeconds: 30, victorySeconds: 1200 } as const;
 /** Triple the exponential growth speed, preserving the opening base cadence. */
-export const SPAWN_GROWTH_SPEED = 3;
 export function spawnIntervalAt(seconds: number) {
   return (seconds < 12 ? 3 : 1.8) / 1.1 ** (SPAWN_GROWTH_SPEED * Math.max(0, seconds) / 60);
 }
@@ -27,8 +29,11 @@ export const mercPosition = (slot: number) => ({ x: 824 + (slot === 1 ? 26 : 0),
 export class DefenseRun {
   phase: Phase = 'ready';
   elapsed = 0; money = 0; totalEarnedMoney = 0; kills = 0; xp = 0; level = 1;
-  wallHealth = 40; wallMaxHealth = 40; wallReduction = 0; wallLevel = 0;
-  haste = 0; attackSpeed = 1; skillRange = 1; choices: UpgradeCard[] = [];
+  wallHealth = B.BARRICADE_BASE_HEALTH; wallMaxHealth = B.BARRICADE_BASE_HEALTH; wallReduction = 0; wallLevel = 0;
+  /** Max HP at deployment (talents included); cards add fractions of this, so picks never compound. */
+  wallStartHealth = B.BARRICADE_BASE_HEALTH;
+  /** attackSpeed is the permanent (talent) factor; card bonuses are summed in attackSpeedBonus. */
+  haste = 0; attackSpeed = 1; attackSpeedBonus = 0; skillRange = 1; choices: UpgradeCard[] = [];
   selectedCards: UpgradeCard[] = []; modifiers: Modifier[] = [];
   enemies: Enemy[] = []; mercenaries: Mercenary[] = [];
   levels: Record<MercKind, number> = { rifle: 1, flame: 1, tesla: 1 };
@@ -39,7 +44,7 @@ export class DefenseRun {
   constructor(seed = Math.floor(Math.random() * 0xffffffff), permanent?: PermanentEffects) {
     this.seed = seed >>> 0;
     if (permanent) {
-      this.wallHealth = this.wallMaxHealth = 40 * permanent.wallHealth;
+      this.wallHealth = this.wallMaxHealth = this.wallStartHealth = B.BARRICADE_BASE_HEALTH * permanent.wallHealth;
       this.attackSpeed = permanent.attackSpeed; this.haste = permanent.haste;
       this.modifiers = permanent.modifiers.map(modifier => ({ ...modifier, tags: [...modifier.tags] }));
     }
@@ -49,17 +54,22 @@ export class DefenseRun {
   get clearedWave() { return Math.floor((this.elapsed + 1e-8) / FIELD.waveSeconds); }
   get xpNeeded() { return Math.ceil(3 * 1.6 ** (this.level - 1)); }
   get score() { return runScore(this.elapsed, this.totalEarnedMoney); }
-  start() { if (this.phase !== 'ready') return; this.mercenaries.push({ id: this.nextId++, kind: 'rifle', shotTimer: 0, cooldown: 0 }); this.phase = 'running'; }
+  start() {
+    if (this.phase !== 'ready') return;
+    // The opening squad deploys with its active skill still charging; later recruits arrive ready.
+    const cooldown = effectiveCooldown(MERCENARIES.rifle.cooldown, this.haste) * B.SKILL_START_CHARGE;
+    this.mercenaries.push({ id: this.nextId++, kind: 'rifle', shotTimer: 0, cooldown }); this.phase = 'running';
+  }
   pause() { if (this.phase === 'running') this.phase = 'paused'; }
   resume() { if (this.phase === 'paused') this.phase = 'running'; }
   continueEndless() { if (this.phase === 'victory') { this.endless = true; this.phase = 'running'; } }
-  recruitCost(kind: MercKind) { return Math.ceil(calculateValue(MERCENARIES[kind].recruit * 1.35 ** this.mercenaries.filter(m => m.kind === kind).length, ['Economy.RecruitCost'], this.modifiers)); }
-  upgradeCost(kind: MercKind) { return Math.ceil(calculateValue(5 * 1.15 ** this.levels[kind], ['Economy.UpgradeCost'], this.modifiers)); }
+  recruitCost(kind: MercKind) { return Math.ceil(calculateValue(B.RECRUIT_BASE_COST[kind] * B.RECRUIT_COST_GROWTH ** this.mercenaries.filter(m => m.kind === kind).length, ['Economy.RecruitCost'], this.modifiers)); }
+  upgradeCost(kind: MercKind) { return Math.ceil(calculateValue(B.UPGRADE_BASE_COST * B.UPGRADE_COST_GROWTH ** this.levels[kind], ['Economy.UpgradeCost'], this.modifiers)); }
   damageFor(kind: MercKind) {
     const level = this.levels[kind];
-    return MERCENARIES[kind].damage * 1.18 ** (level - 1) * (level >= 10 ? 2 : 1) * (level >= 50 ? 3 : 1);
+    return MERCENARIES[kind].damage * B.MERC_DAMAGE_PER_LEVEL ** (level - 1) * (level >= 10 ? 2 : 1) * (level >= 50 ? 3 : 1);
   }
-  intervalFor(kind: MercKind) { return MERCENARIES[kind].interval / this.attackSpeed / (this.levels[kind] >= 25 ? 1.5 : 1); }
+  intervalFor(kind: MercKind) { return MERCENARIES[kind].interval / (this.attackSpeed * (1 + this.attackSpeedBonus)) / (this.levels[kind] >= 25 ? 1.5 : 1); }
   recruit(kind: MercKind): boolean {
     const cost = this.recruitCost(kind);
     if (this.phase !== 'running' || this.mercenaries.length >= 3 || this.money < cost) return false;
@@ -70,15 +80,15 @@ export class DefenseRun {
     if (this.phase !== 'running' || !this.mercenaries.some(m => m.kind === kind) || this.money < cost) return false;
     this.money -= cost; this.levels[kind]++; return true;
   }
-  get repairCost() { return Math.ceil(6 * 1.15 ** this.wallLevel); }
-  get fortifyCost() { return Math.ceil(10 * 1.3 ** this.wallLevel); }
+  get repairCost() { return Math.ceil(B.REPAIR_BASE_COST * B.REPAIR_COST_GROWTH ** this.wallLevel); }
+  get fortifyCost() { return Math.ceil(B.FORTIFY_BASE_COST * B.FORTIFY_COST_GROWTH ** this.wallLevel); }
   repair(): boolean {
     if (this.phase !== 'running' || this.wallHealth >= this.wallMaxHealth || this.money < this.repairCost) return false;
-    this.money -= this.repairCost; this.wallHealth = Math.min(this.wallMaxHealth, this.wallHealth + calculateValue(this.wallMaxHealth * 0.4, ['Defense.Repair'], this.modifiers)); return true;
+    this.money -= this.repairCost; this.wallHealth = Math.min(this.wallMaxHealth, this.wallHealth + calculateValue(this.wallMaxHealth * B.REPAIR_FRACTION, ['Defense.Repair'], this.modifiers)); return true;
   }
   fortify(): boolean {
     if (this.phase !== 'running' || this.money < this.fortifyCost) return false;
-    this.money -= this.fortifyCost; const increase = this.wallMaxHealth * 0.35;
+    this.money -= this.fortifyCost; const increase = this.wallMaxHealth * B.FORTIFY_HEALTH_GAIN;
     this.wallMaxHealth += increase; this.wallHealth += increase; this.wallLevel++; return true;
   }
   choose(id: string): boolean {
@@ -86,10 +96,10 @@ export class DefenseRun {
     const card = this.choices.find(c => c.id === id); if (!card) return false;
     this.selectedCards.push(card);
     if (card.modifier) this.modifiers.push({ ...card.modifier });
-    if (card.effect === 'speed') this.attackSpeed *= 1.3;
+    if (card.effect === 'speed') this.attackSpeedBonus += 0.3;
     if (card.effect === 'haste') this.haste += 100;
     if (card.effect === 'radius') this.skillRange *= 1.3;
-    if (card.effect === 'wall') { const n = this.wallMaxHealth * 0.5; this.wallHealth += n; this.wallMaxHealth += n; }
+    if (card.effect === 'wall') { const n = this.wallStartHealth * 0.5; this.wallHealth += n; this.wallMaxHealth += n; }
     if (card.effect === 'repair') this.wallHealth = Math.min(this.wallMaxHealth, this.wallHealth + this.wallMaxHealth * 0.5);
     this.choices = []; this.phase = 'running'; this.checkLevel(); return true;
   }
@@ -172,10 +182,10 @@ export class DefenseRun {
       threshold += weight;
       if (roll < threshold) { kind = candidate; break; }
     }
-    const def = ENEMIES[kind], minutes = this.elapsed / 60, hp = def.hp * 1.8 ** minutes;
+    const def = ENEMIES[kind], minutes = this.elapsed / 60, hp = def.hp * B.ENEMY_HP_GROWTH_PER_MINUTE ** minutes;
     this.enemies.push({ id: this.nextId++, kind, x: -20, y: 100 + this.random() * 260, hp, maxHp: hp, defense: def.defense,
-      speed: def.speed * (0.96 + this.random() * 0.08), attack: def.attack * 1.45 ** minutes,
-      reward: def.reward * 1.9 ** minutes, xp: def.xp, burnPower: 0, burnDuration: 0, burnFlammability: 0,
+      speed: def.speed * (0.96 + this.random() * 0.08), attack: def.attack * B.ENEMY_ATTACK_GROWTH_PER_MINUTE ** minutes,
+      reward: def.reward * B.KILL_REWARD_GROWTH_PER_MINUTE ** minutes, xp: def.xp, burnPower: 0, burnDuration: 0, burnFlammability: 0,
       corrosionPower: 0, corrosionDuration: 0, shockPower: 0, shockDuration: 0, hitFlash: 0 });
   }
   advance(seconds: number) {
@@ -220,8 +230,11 @@ export class DefenseRun {
     if (this.phase !== 'running') return;
     for (const merc of this.mercenaries) {
       merc.cooldown = Math.max(0, merc.cooldown - dt); merc.shotTimer -= dt;
-      const target = this.enemies.filter(e => e.hp > 0 && e.x >= 0).sort((a, b) => b.x - a.x)[0];
-      if (merc.shotTimer > 0 || !target) continue;
+      if (merc.shotTimer > 0) continue;
+      // Closest living enemy to the wall; first in spawn order on ties. O(n), no per-frame sort.
+      let target: Enemy | undefined;
+      for (const e of this.enemies) if (e.hp > 0 && e.x >= 0 && (!target || e.x > target.x)) target = e;
+      if (!target) continue;
       const def = MERCENARIES[merc.kind], origin = mercPosition(this.mercenaries.indexOf(merc));
       if (merc.kind === 'flame') { this.hit(target, { baseDamage: 0, tags: def.tags }); this.burn(target, this.damageFor(merc.kind), 3, def.tags); }
       else {
@@ -232,7 +245,7 @@ export class DefenseRun {
       merc.shotTimer = this.intervalFor(merc.kind);
     }
     this.enemies = this.enemies.filter(e => e.hp > 0);
-    if (this.clearedWave > this.completedWaves) { this.earn(calculateValue(5 * 1.9 ** (this.elapsed / 60), ['Economy.WaveReward'], this.modifiers)); this.xp += 2; this.completedWaves = this.clearedWave; }
+    if (this.clearedWave > this.completedWaves) { this.earn(calculateValue(5 * B.WAVE_REWARD_GROWTH_PER_MINUTE ** (this.elapsed / 60), ['Economy.WaveReward'], this.modifiers)); this.xp += 2; this.completedWaves = this.clearedWave; }
     if (!this.endless && this.elapsed + 1e-8 >= FIELD.victorySeconds) { this.elapsed = FIELD.victorySeconds; this.phase = 'victory'; return; }
     this.checkLevel();
   }

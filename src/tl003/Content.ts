@@ -2,9 +2,9 @@ import type { Modifier, Tag } from './Combat.ts';
 
 export type MercKind = 'rifle' | 'flame' | 'tesla';
 export const MERCENARIES = {
-  rifle: { name: '步槍手', callSign: 'ROOK', role: '動能 · 穩定射擊', color: '#e8c58b', recruit: 12, damage: 5.2, interval: 1.25, skill: '破片手榴彈', cooldown: 30, radius: 105, tags: ['Damage.Kinetic', 'Mechanic.Projectile', 'Skill.AutoAttack', 'Weapon.Rifle', 'Mercenary.rifle'] as Tag[] },
-  flame: { name: '焚燒兵', callSign: 'EMBER', role: '火焰 · 持續燃燒', color: '#ec865a', recruit: 18, damage: 5, interval: 1.4, skill: '燃燒瓶', cooldown: 35, radius: 110, tags: ['Damage.Fire', 'Mechanic.DOT', 'Skill.AutoAttack', 'Weapon.Flamer', 'Mercenary.flame'] as Tag[] },
-  tesla: { name: '電磁兵', callSign: 'VOLT', role: '電能 · 感電增傷', color: '#83c9d4', recruit: 24, damage: 6, interval: 1.3, skill: '貫穿雷射', cooldown: 45, radius: 34, tags: ['Damage.Kinetic', 'Damage.Electric', 'Mechanic.Projectile', 'Skill.AutoAttack', 'Weapon.Tesla', 'Mercenary.tesla'] as Tag[] },
+  rifle: { name: '步槍手', callSign: 'ROOK', role: '動能 · 穩定射擊', color: '#e8c58b', damage: 5.2, interval: 1.25, skill: '破片手榴彈', cooldown: 30, radius: 105, tags: ['Damage.Kinetic', 'Mechanic.Projectile', 'Skill.AutoAttack', 'Weapon.Rifle', 'Mercenary.rifle'] as Tag[] },
+  flame: { name: '焚燒兵', callSign: 'EMBER', role: '火焰 · 持續燃燒', color: '#ec865a', damage: 5, interval: 1.4, skill: '燃燒瓶', cooldown: 35, radius: 110, tags: ['Damage.Fire', 'Mechanic.DOT', 'Skill.AutoAttack', 'Weapon.Flamer', 'Mercenary.flame'] as Tag[] },
+  tesla: { name: '電磁兵', callSign: 'VOLT', role: '電能 · 感電增傷', color: '#83c9d4', damage: 6, interval: 1.3, skill: '貫穿雷射', cooldown: 45, radius: 34, tags: ['Damage.Kinetic', 'Damage.Electric', 'Mechanic.Projectile', 'Skill.AutoAttack', 'Weapon.Tesla', 'Mercenary.tesla'] as Tag[] },
 } as const;
 export const MERC_KINDS: MercKind[] = ['rifle', 'flame', 'tesla'];
 export type EnemyKind = 'walker' | 'runner' | 'brute' | 'armored' | 'elite';
@@ -22,12 +22,12 @@ export const CARDS: readonly UpgradeCard[] = [
   { id: 'burn', name: '曳光燃燒彈', category: '火焰', description: '普攻點燃：基礎每秒 4 傷、持續 4 秒。保留最強燃燒；較弱或同強度命中續時，並疊加易燃，每層燒快 25%。', color: '#ec865a', modifier: { kind: 'Special', tags: ['Skill.AutoAttack'], rule: 'ignite', value: 4 } },
   { id: 'bio', name: '腐蝕彈藥', category: '生化', description: '普攻疊加腐蝕。敵人防禦 ÷（1 + 腐蝕強度）。', color: '#b5cc7f', modifier: { kind: 'Special', tags: ['Skill.AutoAttack'], rule: 'corrode', value: 1 } },
   { id: 'shock', name: '感電彈藥', category: '電能', description: '普攻疊加感電，提高敵人受到的所有傷害，包含燃燒。', color: '#83c9d4', modifier: { kind: 'Special', tags: ['Skill.AutoAttack'], rule: 'shock', value: 1 } },
-  { id: 'fire', name: '高濃度燃料', category: '火焰', description: '火焰持續傷害 ×1.6。', color: '#ec865a', modifier: { kind: 'More', tags: ['Damage.Fire', 'Mechanic.DOT'], value: 1.6 } },
-  { id: 'speed', name: '快速供彈', category: '傭兵', description: '全隊攻擊速度 ×1.3。', color: '#e8c58b', effect: 'speed' },
+  { id: 'fire', name: '高濃度燃料', category: '火焰', description: '火焰持續傷害 +60%，與其他火焰加成相加。', color: '#ec865a', modifier: { kind: 'Add', tags: ['Damage.Fire', 'Mechanic.DOT'], value: 0.6 } },
+  { id: 'speed', name: '快速供彈', category: '傭兵', description: '全隊攻擊速度 +30%，重複選取相加。', color: '#e8c58b', effect: 'speed' },
   { id: 'active', name: '軍用炸藥', category: '主動技能', description: '所有主動技能傷害 +60%。', color: '#e8c58b', modifier: { kind: 'Add', tags: ['Skill.Active'], value: 0.6 } },
   { id: 'haste', name: '軍火調度', category: '主動技能', description: '技能急速 +100。依等比例公式縮短冷卻。', color: '#83c9d4', effect: 'haste' },
   { id: 'radius', name: '擴散裝藥', category: '主動技能', description: '主動技能範圍 ×1.3。', color: '#ec865a', effect: 'radius' },
   { id: 'income', name: '戰地回收', category: '經濟', description: '擊殺獎金 +50%。', color: '#b5cc7f', modifier: { kind: 'Add', tags: ['Economy.KillReward'], value: 0.5 } },
-  { id: 'wall', name: '補強支架', category: '防守', description: '拒馬最大生命 +50%，並修復新增的生命。', color: '#b5cc7f', effect: 'wall' },
+  { id: 'wall', name: '補強支架', category: '防守', description: '拒馬最大生命增加開場上限的 50%，並修復新增的生命；重複選取不複利。', color: '#b5cc7f', effect: 'wall' },
   { id: 'repair', name: '緊急工兵', category: '防守', description: '修復拒馬 50% 最大生命。', color: '#b5cc7f', effect: 'repair' },
 ];

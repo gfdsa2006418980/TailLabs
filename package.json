@@ -14,6 +14,7 @@
     "test": "node --experimental-strip-types --test tests/*.test.mjs",
     "test:tl002": "node --experimental-strip-types --test tests/runner*.test.mjs",
     "test:tl003": "node --experimental-strip-types --test tests/tl003*.test.mjs",
+    "balance:tl003": "node --experimental-strip-types --no-warnings tools/tl003-balance.mjs",
     "typecheck:tl003": "tsc --noEmit -p tsconfig.tl003.json",
     "typecheck:tl002": "tsc --noEmit -p tsconfig.tl002.json",
     "prebuild": "node tools/clean-dist.mjs",

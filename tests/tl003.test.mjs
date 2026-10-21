@@ -5,6 +5,7 @@ import { DefenseRun, FIELD } from '../src/tl003/Run.ts';
 import { MERCENARIES, CARDS } from '../src/tl003/Content.ts';
 import { LocalMetaMirror, META_KEY, emptyMeta, normalizeMeta } from '../src/tl003/Meta.ts';
 import { project, unproject, projectedCircle } from '../src/tl003/Projection.ts';
+import * as B from '../src/tl003/Balance.ts';
 
 const near = (actual, expected) => assert.ok(Math.abs(actual - expected) < 1e-7, `${actual} != ${expected}`);
 const mods = [
@@ -19,7 +20,8 @@ function enemy(overrides = {}) {
     reward: 3, xp: 1, burnPower: 0, burnDuration: 0, burnFlammability: 0, corrosionPower: 0, corrosionDuration: 0,
     shockPower: 0, shockDuration: 0, hitFlash: 0, ...overrides };
 }
-function running() { const run = new DefenseRun(123); run.start(); return run; }
+// Unit tests start with the opening skill ready; the deployment charge has its own test.
+function running() { const run = new DefenseRun(123); run.start(); run.mercenaries[0].cooldown = 0; return run; }
 function choose(run, id) { run.phase = 'choice'; run.choices = [CARDS.find(c => c.id === id)]; assert.equal(run.choose(id), true); }
 function simulate(seed, active = false) {
   const run = new DefenseRun(seed); run.start();
@@ -65,28 +67,29 @@ test('TL003 ready, pause, choice and game over never advance combat or cooldowns
 });
 test('TL003 recruitment never exceeds three; duplicate type shares its level and costs 1.35^Owned', () => {
   const run = running(); run.money = 1000;
-  assert.equal(run.recruitCost('rifle'), Math.ceil(12 * 1.35));
+  assert.equal(run.recruitCost('rifle'), Math.ceil(B.RECRUIT_RIFLE_COST * 1.35));
   assert.equal(run.recruit('rifle'), true); assert.equal(run.recruit('flame'), true); assert.equal(run.recruit('tesla'), false);
   const before = run.damageFor('rifle'); run.upgrade('rifle');
-  assert.equal(run.levels.rifle, 2); near(run.damageFor('rifle'), before * 1.18);
-  assert.equal(run.upgradeCost('rifle'), Math.ceil(5 * 1.15 ** 2));
+  assert.equal(run.levels.rifle, 2); near(run.damageFor('rifle'), before * B.MERC_DAMAGE_PER_LEVEL);
+  assert.equal(run.upgradeCost('rifle'), Math.ceil(B.UPGRADE_BASE_COST * 1.15 ** 2));
   assert.equal(run.upgrade('tesla'), false);
 });
 test('TL003 milestone boosts at 10/25/50 coexist with shared levels', () => {
-  const run = running(); run.levels.rifle = 10; near(run.damageFor('rifle'), 5.2 * 1.18 ** 9 * 2);
+  const run = running(); run.levels.rifle = 10; near(run.damageFor('rifle'), 5.2 * B.MERC_DAMAGE_PER_LEVEL ** 9 * 2);
   run.levels.rifle = 25; near(run.intervalFor('rifle'), 1.25 / 1.5);
-  run.levels.rifle = 50; near(run.damageFor('rifle'), 5.2 * 1.18 ** 49 * 6);
+  run.levels.rifle = 50; near(run.damageFor('rifle'), 5.2 * B.MERC_DAMAGE_PER_LEVEL ** 49 * 6);
 });
 test('TL003 money spending does not change total earnings or score; XP cannot be spent', () => {
-  const run = running(); run.money = 20; run.totalEarnedMoney = 20; run.xp = 2;
+  const run = running(); run.money = 200; run.totalEarnedMoney = 200; run.xp = 2;
   const score = run.score; assert.equal(run.upgrade('rifle'), true);
-  assert.equal(run.totalEarnedMoney, 20); assert.equal(run.score, score); assert.equal(run.xp, 2);
+  assert.equal(run.totalEarnedMoney, 200); assert.equal(run.score, score); assert.equal(run.xp, 2);
   assert.equal(runScore(65, 999), 5);
 });
 test('TL003 repair and fortification charge funds, cap health and cannot buy at Game Over', () => {
   const run = running(); run.money = 100; run.wallHealth = 10;
-  assert.equal(run.repair(), true); near(run.wallHealth, 26); near(run.money, 94);
-  assert.equal(run.fortify(), true); near(run.wallMaxHealth, 54); near(run.wallHealth, 40); near(run.money, 84);
+  assert.equal(run.repair(), true); near(run.wallHealth, 10 + 40 * B.REPAIR_FRACTION); near(run.money, 100 - B.REPAIR_BASE_COST);
+  const gain = 40 * B.FORTIFY_HEALTH_GAIN;
+  assert.equal(run.fortify(), true); near(run.wallMaxHealth, 40 + gain); near(run.wallHealth, 10 + 40 * B.REPAIR_FRACTION + gain); near(run.money, 100 - B.REPAIR_BASE_COST - B.FORTIFY_BASE_COST);
   run.wallHealth = run.wallMaxHealth; assert.equal(run.repair(), false);
   run.phase = 'over'; assert.equal(run.fortify(), false);
 });
