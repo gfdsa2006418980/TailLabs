@@ -14,14 +14,18 @@ export const WAVE_REWARD_GROWTH_PER_MINUTE = INCOME_GROWTH_PER_MINUTE;
 export const ENEMY_HP_GROWTH_PER_MINUTE = 1.8;
 export const ENEMY_ATTACK_GROWTH_PER_MINUTE = 1.45;
 
-/** §18: cost ×1.15 per level is fixed by the spec; the damage gained per level is tuned here. */
-export const UPGRADE_BASE_COST = 80;
+/**
+ * §18: cost ×1.15 per level is fixed by the spec; the damage gained per level is tuned here.
+ * The base cost is low so the first run buys an upgrade every few kills; the boss rush, not an
+ * unaffordable shop, ends a zero-talent run.
+ */
+export const UPGRADE_BASE_COST = 10;
 export const UPGRADE_COST_GROWTH = 1.15;
 export const MERC_DAMAGE_PER_LEVEL = 1.13;
 /** Base recruit costs (not fixed by the spec). */
 export const RECRUIT_RIFLE_COST = 12;
-export const RECRUIT_FLAME_COST = 32;
-export const RECRUIT_TESLA_COST = 60;
+export const RECRUIT_FLAME_COST = 18;
+export const RECRUIT_TESLA_COST = 40;
 export const RECRUIT_BASE_COST = { rifle: RECRUIT_RIFLE_COST, flame: RECRUIT_FLAME_COST, tesla: RECRUIT_TESLA_COST } as const;
 /** §16: duplicate recruits cost ×1.35 per owned copy. */
 export const RECRUIT_COST_GROWTH = 1.35;
@@ -39,4 +43,16 @@ export const REPAIR_COST_GROWTH = 1.15;
 export const REPAIR_FRACTION = 0.4;
 
 /** Fraction of the opening rifle's skill cooldown still charging at deployment (0 = ready, 1 = full cooldown). */
-export const SKILL_START_CHARGE = 1;
+export const SKILL_START_CHARGE = 0;
+
+/**
+ * Boss rush: a boss with a pack of runners charges every BOSS_INTERVAL_SECONDS, announced
+ * BOSS_WARNING_SECONDS ahead. Its HP follows the normal enemy curve, so it is a fixed, visible
+ * check: a zero-talent squad falls to the first one, a few talent levels push past it.
+ */
+export const BOSS_FIRST_SECONDS = 120;
+export const BOSS_INTERVAL_SECONDS = 120;
+export const BOSS_WARNING_SECONDS = 10;
+export const BOSS_ESCORT = 6;
+/** Each later rush's boss HP is multiplied by this on top of the normal enemy HP curve. */
+export const BOSS_RUSH_HP_GROWTH = 1.3;

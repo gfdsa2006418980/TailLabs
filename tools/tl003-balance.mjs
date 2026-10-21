@@ -25,19 +25,22 @@ export function playRun({ seed = 1, effects, policy = 'active', build = 'kinetic
   const run = new DefenseRun(seed, effects); run.start();
   const prefs = BUILDS[build];
   const dps = [], earned = [];
+  let purchases = 0, bossesKilled = 0;
   // One extra second so floating-point step drift never stops a run just short of the victory check.
   const limit = Math.round((maxSeconds + 1) / FIELD.step);
   for (let tick = 0; tick <= limit && run.elapsed < maxSeconds + 1e-6; tick++) {
     if (run.phase === 'choice') { run.choose(prefs.find(id => run.choices.some(c => c.id === id)) ?? run.choices[0].id); tick--; continue; }
     if (run.phase !== 'running') break;
-    if (policy === 'active' && tick % reaction === 0) act(run);
+    if (policy === 'active' && tick % reaction === 0) purchases += act(run);
     const minute = Math.floor(run.elapsed / 60);
     if (dps.length === minute) { dps.push(panelDps(run)); earned.push(run.totalEarnedMoney); }
+    const boss = run.boss;
     run.advance(FIELD.step);
+    if (boss && boss.hp <= 0) bossesKilled++;
   }
   return {
     seconds: run.elapsed, kills: run.kills, earned: run.totalEarnedMoney, score: run.score, victory: run.phase === 'victory',
-    clearedWave: run.clearedWave, squad: run.mercenaries.map(m => `${m.kind}${run.levels[m.kind]}`), cards: run.selectedCards.map(c => c.id), dps, earned,
+    clearedWave: run.clearedWave, purchases, bossesKilled, squad: run.mercenaries.map(m => `${m.kind}${run.levels[m.kind]}`), cards: run.selectedCards.map(c => c.id), dps, earned,
   };
 }
 
@@ -55,16 +58,18 @@ function kindDps(run, kind, level = run.levels[kind], copies = run.mercenaries.f
 /**
  * A strong economic player: every option is valued as added DPS per money; the best one is bought,
  * or saved for when it is not yet affordable. The barricade is repaired / fortified only when threatened.
+ * Returns how many purchases it made.
  */
 function act(run) {
+  let bought = 0;
   const front = run.enemies.reduce((best, e) => (!best || e.x > best.x ? e : best), undefined);
   if (front && front.x > 0) run.mercenaries.forEach((m, slot) => { if (m.cooldown <= 0) run.cast(slot, Math.min(front.x, FIELD.wallX - 5), front.y); });
   for (let guard = 0; guard < 60; guard++) {
     const attackers = run.enemies.filter(e => e.x >= FIELD.wallX - 18).reduce((s, e) => s + e.attack, 0);
     const threatened = run.wallHealth < run.wallMaxHealth * 0.5 || (attackers > 0 && run.wallHealth < attackers * 8);
     if (threatened) {
-      if (run.wallHealth < run.wallMaxHealth * 0.6 && run.repair()) continue;
-      if (run.fortify()) continue;
+      if (run.wallHealth < run.wallMaxHealth * 0.6 && run.repair()) { bought++; continue; }
+      if (run.fortify()) { bought++; continue; }
     }
     const options = [];
     const owned = [...new Set(run.mercenaries.map(m => m.kind))];
@@ -80,7 +85,9 @@ function act(run) {
     }
     const best = options.sort((a, b) => b.value / b.cost - a.value / a.cost)[0];
     if (!best || run.money < best.cost || !best.buy()) break;
+    bought++;
   }
+  return bought;
 }
 
 /** Single-target panel DPS against a zero-defense dummy: auto attacks plus skills averaged over their cooldown. */
@@ -142,10 +149,13 @@ export function metaLoop({ runs = 60, policy = 'active', build = 'kinetic', seed
   return history;
 }
 
-export function firstRunStats(count = 128, policy = 'active', build = 'kinetic') {
-  const runs = Array.from({ length: count }, (_, i) => playRun({ seed: seedFor(i), policy, build }));
+/** maxSeconds caps rare snowballing runs so the sample stays fast; capped runs count as that long. */
+export function firstRunStats(count = 128, policy = 'active', build = 'kinetic', maxSeconds = FIELD.victorySeconds) {
+  const runs = Array.from({ length: count }, (_, i) => playRun({ seed: seedFor(i), policy, build, maxSeconds }));
   const avg = key => runs.reduce((s, r) => s + r[key], 0) / runs.length;
-  return { runs, kills: avg('kills'), seconds: avg('seconds'), minKills: Math.min(...runs.map(r => r.kills)), maxKills: Math.max(...runs.map(r => r.kills)),
+  const sorted = runs.map(r => r.seconds).sort((a, b) => a - b);
+  return { runs, kills: avg('kills'), seconds: avg('seconds'), medianSeconds: sorted[sorted.length >> 1], purchases: avg('purchases'),
+    firstBossLosses: runs.filter(r => r.seconds >= 120 && r.bossesKilled === 0).length / runs.length, minKills: Math.min(...runs.map(r => r.kills)), maxKills: Math.max(...runs.map(r => r.kills)),
     minSeconds: Math.min(...runs.map(r => r.seconds)), maxSeconds: Math.max(...runs.map(r => r.seconds)), victories: runs.filter(r => r.victory).length };
 }
 
@@ -160,7 +170,7 @@ if (import.meta.url === `file:///${process.argv[1]?.replace(/\\/g, '/')}` || pro
   const f = n => n >= 1e5 ? n.toExponential(2) : n.toFixed(n < 100 ? 1 : 0);
   for (const policy of ['passive', 'active']) for (const build of policy === 'active' ? Object.keys(BUILDS) : ['kinetic']) {
     const s = firstRunStats(128, policy, build);
-    console.log(`first run ${policy.padEnd(7)} ${build.padEnd(7)} kills avg ${s.kills.toFixed(2)} (${s.minKills}–${s.maxKills}) | ${s.seconds.toFixed(1)}s (${s.minSeconds.toFixed(1)}–${s.maxSeconds.toFixed(1)}) | victories ${s.victories}`);
+    console.log(`first run ${policy.padEnd(7)} ${build.padEnd(7)} kills avg ${s.kills.toFixed(2)} (${s.minKills}–${s.maxKills}) | ${s.seconds.toFixed(1)}s median ${s.medianSeconds.toFixed(1)}s (${s.minSeconds.toFixed(1)}–${s.maxSeconds.toFixed(1)}) | purchases ${s.purchases.toFixed(1)} | lost to first boss ${(100 * s.firstBossLosses).toFixed(0)}% | victories ${s.victories}`);
   }
   for (const level of [10, 20, 30, 40]) {
     const results = Array.from({ length: 16 }, (_, i) => playRun({ seed: seedFor(i), effects: compileTalents(treeWithLevels(level)) }));

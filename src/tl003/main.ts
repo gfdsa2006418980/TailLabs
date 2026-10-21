@@ -6,6 +6,9 @@ import { formatNumber, effectiveCooldown } from './Combat.ts';
 import { DefenseRun } from './Run.ts';
 import { LocalMetaMirror, META_KEY } from './Meta.ts';
 import { TalentScreen, deploymentSummary } from './TalentScreen.ts';
+import { DefenseAudio, loadAudioPreferences, saveAudioPreferences } from './Audio.ts';
+import type { Cue } from './Audio.ts';
+import type { VisualEvent } from './Run.ts';
 
 const icon = (name: string) => {
   const paths: Record<string, string> = {
@@ -14,12 +17,14 @@ const icon = (name: string) => {
     grenade: '<path d="m10 6 1-3h5l2 4M8 8l8-2 4 9c1 4-4 8-8 6-4-2-7-9-4-13Z"/><path d="m7 12 11-3m-9 8 11-3"/>',
     flame: '<path d="M13 2c2 7-4 7-2 12 2-1 3-3 3-5 7 6 6 13-2 13C2 22 2 13 8 8c-1 5 2 4 2 2 0-3 0-5 3-8Z"/>',
     bolt: '<path d="m14 2-9 12h7l-2 8 10-13h-7l1-7Z"/>',
+    sound: '<path d="M4 9h4l5-4v14l-5-4H4V9Z"/><path d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12"/>',
+    muted: '<path d="M4 9h4l5-4v14l-5-4H4V9Z"/><path d="m16 9 6 6m0-6-6 6"/>',
   };
   return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true">${paths[name] ?? paths.cross}</svg>`;
 };
 document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
 <main class="command" aria-labelledby="game-title">
-  <header class="masthead"><div class="brand"><span class="brand-mark">T<span>l</span></span><div><span class="eyebrow">TAIL LABS / EXPERIMENT 003</span><h1 id="game-title">無盡防線<span>THE LAST LINE</span></h1></div></div><div class="header-actions"><span class="live-label"><i></i> 西側防衛區</span><button id="pause" class="quiet-button" aria-label="暫停遊戲" disabled>Ⅱ</button></div></header>
+  <header class="masthead"><div class="brand"><span class="brand-mark">T<span>l</span></span><div><span class="eyebrow">TAIL LABS / EXPERIMENT 003</span><h1 id="game-title">無盡防線<span>THE LAST LINE</span></h1></div></div><div class="header-actions"><span class="live-label"><i></i> 西側防衛區</span><div class="volume-control"><button id="mute" class="quiet-button" aria-label="音效開關" aria-pressed="false"></button><input id="volume" type="range" min="0" max="100" step="5" aria-label="音效音量"></div><button id="pause" class="quiet-button" aria-label="暫停遊戲" disabled>Ⅱ</button></div></header>
   <section class="telemetry" aria-label="本局狀態">
     <div class="wall-metric">${icon('shield')}<div><span class="label">拒馬完整度</span><strong id="wall-value">65 <small>/ 65</small></strong><div class="wall-track"><i id="wall-fill"></i></div></div></div>
     <div><span class="label">戰場資金</span><strong class="money"><span class="currency">¤</span> <span id="money">0</span></strong></div>
@@ -30,6 +35,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
   <section class="battle-wrap" aria-label="直式防守戰場">
     <canvas id="battlefield" width="480" height="660" aria-label="喪屍由畫面上方遠處逐漸逼近下方拒馬，傭兵在下方自動射擊。選取技能後可在戰場指定目標。" tabindex="0"></canvas>
     <div class="battle-top"><span><i></i><span id="battle-status">等待部署</span></span><span id="aim-hint">拖曳技能至戰場施放</span></div>
+    <div id="boss-banner" class="boss-banner" role="status" hidden><strong id="boss-title">屍王衝鋒</strong><span id="boss-detail"></span><div class="boss-track"><i id="boss-fill"></i></div></div>
     <div class="battle-bottom"><span>敵軍由前方逼近 ↓</span><span>拒馬 ╱ 傭兵陣地</span></div>
   </section>
   <section class="tactics" aria-label="戰術經驗"><div><span class="eyebrow">戰術等級 <b id="level">01</b></span><span id="xp-label">0 / 3 XP</span></div><div class="xp-track"><i id="xp-fill"></i></div><span class="tactics-hint">擊殺取得經驗 · 升級三選一</span></section>
@@ -47,6 +53,8 @@ const text = (id: string, value: string) => { const node = el(id); if (node.text
 let storage: Storage | undefined;
 try { storage = window.localStorage; } catch { /* Memory-only fallback. */ }
 const meta = new LocalMetaMirror(storage);
+const audioPreferences = loadAudioPreferences(storage);
+const audio = new DefenseAudio(audioPreferences);
 let run = new DefenseRun(undefined, meta.effects), aim: Aim | undefined;
 const battlefield = new Battlefield(el<HTMLCanvasElement>('battlefield'));
 const dialog = el<HTMLDialogElement>('modal');
@@ -70,14 +78,17 @@ function syncPhase() {
   if (talents.active) return;
   if (displayedPhase === run.phase) return;
   displayedPhase = run.phase; aim = undefined;
+  if (run.phase === 'choice') audio.play('levelUp');
+  if (run.phase === 'over') audio.play('gameOver');
+  if (run.phase === 'victory') audio.play('victory');
   text('announcement', run.phase === 'choice' ? '戰術升級，請選擇一張強化。' : run.phase === 'over' ? '防線失守，本局結束。' : run.phase === 'running' ? '防守開始。' : '');
   if (run.phase === 'ready') {
-    showModal(`<div class="modal-kicker">TAIL LABS / TL003</div><div class="hero-emblem">${icon('shield')}</div><h2 id="modal-title">從一條破爛防線開始。</h2><p>傭兵自動開火，你決定如何守得更久。</p><div class="briefing"><span><b>01</b> 擊殺賺錢，招募最多 3 名傭兵</span><span><b>02</b> 累積經驗，三選一建立屬性戰術</span><span><b>03</b> 拖曳軍火至戰場，放手施放</span></div>${deploymentSummary(meta.effects)}<button id="start" class="primary">部署防線 <span>→</span></button><button id="open-talents" class="camp-button">天賦星盤 <span>${formatNumber(meta.value.TalentPoints)} 點可用 ↗</span></button><p class="fine-print">新兵首局預期堅守 20～40 秒。<br>本局進度不保存；重新整理會放棄本局。</p><div class="meta-strip">最高通關 Wave <b>${meta.value.HighestClearedWave}</b></div>`);
+    showModal(`<div class="modal-kicker">TAIL LABS / TL003</div><div class="hero-emblem">${icon('shield')}</div><h2 id="modal-title">從一條破爛防線開始。</h2><p>傭兵自動開火，你決定如何守得更久。</p><div class="briefing"><span><b>01</b> 擊殺賺錢，招募最多 3 名傭兵</span><span><b>02</b> 累積經驗，三選一建立屬性戰術</span><span><b>03</b> 拖曳軍火至戰場，放手施放</span><span><b>04</b> 每 2 分鐘屍王帶隊衝鋒，用手榴彈擊退</span></div>${deploymentSummary(meta.effects)}<button id="start" class="primary">部署防線 <span>→</span></button><button id="open-talents" class="camp-button">天賦星盤 <span>${formatNumber(meta.value.TalentPoints)} 點可用 ↗</span></button><p class="fine-print">新兵首局約可堅守 2～3 分鐘，第一隻屍王在 02:00 出現。<br>本局進度不保存；重新整理會放棄本局。</p><div class="meta-strip">最高通關 Wave <b>${meta.value.HighestClearedWave}</b></div>`);
     el('start').onclick = startRun;
     el('open-talents').onclick = () => talents.open();
   } else if (run.phase === 'choice') {
     showModal(`<div class="modal-kicker">TACTICAL UPGRADE / LV.${run.level}</div><h2 id="modal-title">選擇你的下一步。</h2><p>戰鬥已暫停。選取一項，本局持續生效，可重複堆疊。</p><div class="choice-grid">${run.choices.map((card, i) => `<button class="choice" data-card="${card.id}" style="--card-color:${card.color}"><span class="choice-category">${card.category}<small>0${i + 1}</small></span>${icon(card.id === 'burn' || card.id === 'fire' ? 'flame' : card.id === 'shock' ? 'bolt' : 'cross')}<strong>${card.name}</strong><span class="choice-description">${card.description}</span><span class="choice-pick">選取強化 ↗</span></button>`).join('')}</div>`);
-    dialog.querySelectorAll<HTMLButtonElement>('[data-card]').forEach(button => { button.onclick = () => { run.choose(button.dataset.card!); sync(); }; });
+    dialog.querySelectorAll<HTMLButtonElement>('[data-card]').forEach(button => { button.onclick = () => { if (run.choose(button.dataset.card!)) audio.play('pick'); sync(); }; });
   } else if (run.phase === 'paused') {
     showModal('<div class="modal-kicker">DEFENSE ON HOLD</div><h2 id="modal-title">暫停防守</h2><p>傭兵、敵人與技能冷卻均已暫停。</p><button id="resume" class="primary">返回戰場 →</button>');
     el('resume').onclick = () => { run.resume(); sync(); };
@@ -91,6 +102,7 @@ function syncPhase() {
 function sync() {
   syncPhase();
   el<HTMLButtonElement>('pause').disabled = run.phase !== 'running' && run.phase !== 'paused';
+  audio.setPaused(run.phase === 'paused');
   text('wall-value', `${Math.ceil(run.wallHealth)} / ${Math.ceil(run.wallMaxHealth)}`);
   el('wall-fill').style.width = `${100 * run.wallHealth / run.wallMaxHealth}%`;
   el('wall-fill').classList.toggle('critical', run.wallHealth / run.wallMaxHealth < 0.3);
@@ -100,6 +112,7 @@ function sync() {
   text('squad-count', `${run.mercenaries.length || 1} / 3`);
   text('battle-status', run.phase === 'ready' ? '等待部署' : run.phase === 'running' ? '防守進行中' : run.phase === 'over' ? '防線失守' : '戰鬥暫停');
   text('aim-hint', aim ? '放手施放 · 拖出戰場取消' : '拖曳技能至戰場施放');
+  syncBoss();
   for (const kind of MERC_KINDS) {
     const merc = run.mercenaries.find(m => m.kind === kind), buy = el<HTMLButtonElement>(`buy-${kind}`), skill = el<HTMLButtonElement>(`skill-${kind}`);
     const cost = merc ? run.upgradeCost(kind) : run.recruitCost(kind);
@@ -119,16 +132,31 @@ function sync() {
   for (const [id, category] of [['kinetic', '動能'], ['fire', '火焰'], ['bio', '生化'], ['electric', '電能']]) text(`tag-${id}`, run.selectedCards.filter(c => c.category === category).length.toString());
   text('build-summary', run.selectedCards.length ? run.selectedCards.map(c => c.name).join(' / ') : '尚未取得戰術強化');
 }
+let bossAnnounced = 0;
+function syncBoss() {
+  const banner = el('boss-banner'), boss = run.boss, warning = run.bossWarning;
+  const active = run.phase !== 'ready' && (boss !== undefined || warning !== undefined);
+  banner.hidden = !active; if (!active) return;
+  banner.classList.toggle('incoming', !boss);
+  if (boss) {
+    text('boss-title', '屍王來襲'); text('boss-detail', `${Math.ceil(100 * boss.hp / boss.maxHp)}%`);
+    el('boss-fill').style.width = `${Math.max(0, 100 * boss.hp / boss.maxHp)}%`;
+  } else {
+    text('boss-title', '屍王衝鋒'); text('boss-detail', `${Math.ceil(warning!)} 秒後抵達`); el('boss-fill').style.width = '100%';
+    // One screen-reader announcement per rush, not one per UI tick.
+    if (bossAnnounced !== run.nextBossAt) { bossAnnounced = run.nextBossAt; text('announcement', '屍王即將帶隊衝鋒。'); }
+  }
+}
 el('pause').onclick = () => { if (run.phase === 'paused') run.resume(); else run.pause(); sync(); };
-el('repair').onclick = () => { run.repair(); sync(); };
-el('fortify').onclick = () => { run.fortify(); sync(); };
+el('repair').onclick = () => { if (run.repair()) audio.play('buy'); sync(); };
+el('fortify').onclick = () => { if (run.fortify()) audio.play('buy'); sync(); };
 dialog.addEventListener('cancel', e => { e.preventDefault(); if (talents.active) talents.close(); else if (run.phase === 'paused') { run.resume(); sync(); } });
 window.addEventListener('storage', event => {
   if (event.key !== META_KEY && event.key !== null) return;
   meta.refresh(); if (talents.active) talents.render(); else if (run.phase === 'ready') reset();
 });
 for (const kind of MERC_KINDS) {
-  el(`buy-${kind}`).onclick = () => { if (run.mercenaries.some(m => m.kind === kind)) run.upgrade(kind); else run.recruit(kind); sync(); };
+  el(`buy-${kind}`).onclick = () => { if (run.mercenaries.some(m => m.kind === kind) ? run.upgrade(kind) : run.recruit(kind)) audio.play('buy'); sync(); };
   const button = el<HTMLButtonElement>(`skill-${kind}`); let down: { x: number; y: number; id: number } | undefined;
   button.addEventListener('pointerdown', event => {
     if (event.button !== 0 || button.disabled) return;
@@ -163,9 +191,58 @@ window.addEventListener('keydown', event => {
 });
 document.addEventListener('visibilitychange', () => { if (document.hidden) { aim = undefined; run.pause(); sync(); } previous = performance.now(); });
 window.addEventListener('blur', () => { aim = undefined; run.pause(); sync(); });
+// ---------- sound ----------
+const heard = new WeakSet<VisualEvent>();
+let heardRun: DefenseRun | undefined, lastWall = 0, wasWarning = false, lastBossId = 0;
+function cueFor(event: VisualEvent): Cue | undefined {
+  if (event.kind === 'shot') return event.color === MERCENARIES.tesla.color ? 'tesla' : 'rifle';
+  if (event.kind === 'blast') return event.color === '#e6764b' ? 'molotov' : 'grenade';
+  if (event.kind === 'flame' || event.kind === 'laser' || event.kind === 'kill') return event.kind;
+  return undefined;
+}
+/** Turns this frame's new combat events and state changes into sound cues. */
+function listen() {
+  if (heardRun !== run) { heardRun = run; lastWall = run.wallHealth; wasWarning = false; lastBossId = 0; }
+  for (const event of run.events) {
+    if (heard.has(event)) continue;
+    heard.add(event); const cue = cueFor(event); if (cue) audio.play(cue);
+  }
+  if (run.wallHealth < lastWall - 1e-6 && run.phase === 'running') audio.play('wall');
+  lastWall = run.wallHealth;
+  const warning = run.bossWarning !== undefined;
+  if (warning && !wasWarning) audio.play('bossWarning');
+  wasWarning = warning;
+  const boss = run.boss;
+  if (boss && boss.id !== lastBossId) { lastBossId = boss.id; audio.play('bossArrive'); }
+  else if (!boss && lastBossId && run.phase === 'running') { lastBossId = 0; audio.play('bossDown'); }
+}
+function syncVolume() {
+  const volume = el<HTMLInputElement>('volume'), mute = el<HTMLButtonElement>('mute');
+  volume.value = String(audioPreferences.volume);
+  volume.style.setProperty('--volume', `${audioPreferences.volume}%`);
+  const silent = audioPreferences.muted || audioPreferences.volume === 0;
+  mute.innerHTML = icon(silent ? 'muted' : 'sound'); mute.setAttribute('aria-pressed', String(audioPreferences.muted));
+  mute.title = audioPreferences.muted ? '開啟音效' : '關閉音效';
+}
+el('mute').onclick = () => {
+  audioPreferences.muted = !audioPreferences.muted;
+  if (!audioPreferences.muted && audioPreferences.volume === 0) audioPreferences.volume = 50;
+  audio.unlock(); audio.setMuted(audioPreferences.muted); audio.setVolume(audioPreferences.volume);
+  saveAudioPreferences(audioPreferences, storage); syncVolume(); audio.play('pick');
+};
+el<HTMLInputElement>('volume').addEventListener('input', event => {
+  audioPreferences.volume = Number((event.currentTarget as HTMLInputElement).value);
+  if (audioPreferences.muted && audioPreferences.volume > 0) { audioPreferences.muted = false; audio.setMuted(false); }
+  audio.unlock(); audio.setVolume(audioPreferences.volume); syncVolume();
+});
+el<HTMLInputElement>('volume').addEventListener('change', () => { saveAudioPreferences(audioPreferences, storage); audio.play('pick'); });
+// Browsers only allow audio after a user gesture; any tap or key unlocks it.
+for (const type of ['pointerdown', 'keydown'] as const) document.addEventListener(type, () => audio.unlock(), { capture: true });
+syncVolume();
+
 function frame(now: number) {
   const dt = Math.min(0.1, Math.max(0, (now - previous) / 1000)); previous = now;
-  run.advance(dt); uiClock += dt;
+  run.advance(dt); uiClock += dt; listen();
   if (uiClock >= 0.08 || displayedPhase !== run.phase) { sync(); uiClock = 0; }
   battlefield.draw(run, aim); requestAnimationFrame(frame);
 }

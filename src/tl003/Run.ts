@@ -40,7 +40,7 @@ export class DefenseRun {
   events: VisualEvent[] = []; zones: FireZone[] = [];
   endless = false;
   private seed: number; private accumulator = 0; private spawnTimer = 0;
-  private nextId = 1; private completedWaves = 0;
+  private nextId = 1; private completedWaves = 0; private bossRushes = 0;
   constructor(seed = Math.floor(Math.random() * 0xffffffff), permanent?: PermanentEffects) {
     this.seed = seed >>> 0;
     if (permanent) {
@@ -54,6 +54,11 @@ export class DefenseRun {
   get clearedWave() { return Math.floor((this.elapsed + 1e-8) / FIELD.waveSeconds); }
   get xpNeeded() { return Math.ceil(3 * 1.6 ** (this.level - 1)); }
   get score() { return runScore(this.elapsed, this.totalEarnedMoney); }
+  /** When the next boss rush charges in. */
+  get nextBossAt() { return B.BOSS_FIRST_SECONDS + this.bossRushes * B.BOSS_INTERVAL_SECONDS; }
+  /** Seconds until the next boss rush while it is being announced; undefined otherwise. */
+  get bossWarning() { const left = this.nextBossAt - this.elapsed; return left > 0 && left <= B.BOSS_WARNING_SECONDS ? left : undefined; }
+  get boss() { return this.enemies.find(e => e.kind === 'boss' && e.hp > 0); }
   start() {
     if (this.phase !== 'ready') return;
     // The opening squad deploys with its active skill still charging; later recruits arrive ready.
@@ -173,20 +178,32 @@ export class DefenseRun {
     }
     merc.cooldown = effectiveCooldown(def.cooldown, this.haste); this.enemies = this.enemies.filter(e => e.hp > 0); this.checkLevel(); return true;
   }
-  private spawn() {
-    const roll = this.random();
-    let kind: EnemyKind = 'walker', threshold = 0;
-    const roster: [EnemyKind, number, number][] = [['elite', 150, 0.07], ['armored', 75, 0.13], ['brute', 45, 0.18], ['runner', 22, 0.22]];
-    for (const [candidate, unlock, weight] of roster) {
-      if (this.elapsed < unlock) continue;
-      threshold += weight;
-      if (roll < threshold) { kind = candidate; break; }
+  private spawn(forced?: EnemyKind) {
+    let kind: EnemyKind = forced ?? 'walker';
+    if (!forced) {
+      const roll = this.random();
+      let threshold = 0;
+      const roster: [EnemyKind, number, number][] = [['elite', 150, 0.07], ['armored', 75, 0.13], ['brute', 45, 0.18], ['runner', 22, 0.22]];
+      for (const [candidate, unlock, weight] of roster) {
+        if (this.elapsed < unlock) continue;
+        threshold += weight;
+        if (roll < threshold) { kind = candidate; break; }
+      }
     }
-    const def = ENEMIES[kind], minutes = this.elapsed / 60, hp = def.hp * B.ENEMY_HP_GROWTH_PER_MINUTE ** minutes;
-    this.enemies.push({ id: this.nextId++, kind, x: -20, y: 100 + this.random() * 260, hp, maxHp: hp, defense: def.defense,
+    const def = ENEMIES[kind], minutes = this.elapsed / 60;
+    const hp = def.hp * B.ENEMY_HP_GROWTH_PER_MINUTE ** minutes * (kind === 'boss' ? B.BOSS_RUSH_HP_GROWTH ** (this.bossRushes - 1) : 1);
+    // The boss charges down the centre of the road; everyone else picks a random lane.
+    const y = kind === 'boss' ? 200 + this.random() * 50 : 100 + this.random() * 260;
+    this.enemies.push({ id: this.nextId++, kind, x: -20, y, hp, maxHp: hp, defense: def.defense,
       speed: def.speed * (0.96 + this.random() * 0.08), attack: def.attack * B.ENEMY_ATTACK_GROWTH_PER_MINUTE ** minutes,
       reward: def.reward * B.KILL_REWARD_GROWTH_PER_MINUTE ** minutes, xp: def.xp, burnPower: 0, burnDuration: 0, burnFlammability: 0,
       corrosionPower: 0, corrosionDuration: 0, shockPower: 0, shockDuration: 0, hitFlash: 0 });
+  }
+  /** A boss and its runner pack, on a fixed schedule independent of the player's power. */
+  private bossRush() {
+    this.bossRushes++;
+    this.spawn('boss');
+    for (let i = 0; i < B.BOSS_ESCORT; i++) this.spawn('runner');
   }
   advance(seconds: number) {
     if (this.phase !== 'running' || !Number.isFinite(seconds) || seconds <= 0) return;
@@ -199,6 +216,7 @@ export class DefenseRun {
     this.elapsed += dt;
     this.spawnTimer -= dt;
     while (this.spawnTimer <= 0) { this.spawn(); this.spawnTimer += spawnIntervalAt(this.elapsed); }
+    if (this.elapsed + 1e-8 >= this.nextBossAt) this.bossRush();
     for (const event of this.events) event.life -= dt;
     this.events = this.events.filter(e => e.life > 0);
     for (const zone of this.zones) {

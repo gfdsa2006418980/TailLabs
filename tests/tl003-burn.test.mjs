@@ -2,7 +2,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { advanceBurn, applyBurn, burnSpeed } from '../src/tl003/Burn.ts';
 import { DefenseRun, FIELD } from '../src/tl003/Run.ts';
-import { CARDS } from '../src/tl003/Content.ts';
+import { CARDS, MERCENARIES } from '../src/tl003/Content.ts';
+
+// Flamer auto-attack burn power and the Molotov's power (3× the flamer's damage).
+const F=MERCENARIES.flame.damage,M=3*F;
 
 const near=(a,b)=>assert.ok(Math.abs(a-b)<1e-7,`${a} != ${b}`);
 const state=()=>({burnPower:0,burnDuration:0,burnFlammability:0});
@@ -42,31 +45,31 @@ test('TL003 rejected burn values and invalid elapsed time do not corrupt an acti
   for(const dt of [0,-1,NaN,Infinity])near(advanceBurn(s,dt),0);assert.deepEqual(s,before);
 });
 test('TL003 Molotov ignites immediately and pulses once per second rather than once per frame',()=>{
-  const {run,victim}=fireRun();run.cast(1,500,220);near(victim.hp,1000);near(victim.burnPower,15);
-  run.advance(.5);near(victim.hp,992.5);near(victim.burnFlammability,0);
-  run.advance(.5);near(victim.burnFlammability,1);near(victim.burnPower,15);
+  const {run,victim}=fireRun();run.cast(1,500,220);near(victim.hp,1000);near(victim.burnPower,M);
+  run.advance(.5);near(victim.hp,1000-M*.5);near(victim.burnFlammability,0);
+  run.advance(.5);near(victim.burnFlammability,1);near(victim.burnPower,M);
   run.advance(.5);near(victim.burnFlammability,1);
 });
 test('TL003 an enemy entering a burning area ignites on contact and keeps burning after leaving',()=>{
   const {run,victim}=fireRun(target({x:650}));run.cast(1,500,220);near(victim.burnPower,0);
-  victim.x=500;run.advance(FIELD.step);near(victim.burnPower,15);near(victim.burnFlammability,0);
-  victim.x=650;const hp=victim.hp;run.advance(.5);near(victim.hp,hp-7.5);near(victim.burnFlammability,0);
+  victim.x=500;run.advance(FIELD.step);near(victim.burnPower,M);near(victim.burnFlammability,0);
+  victim.x=650;const hp=victim.hp;run.advance(.5);near(victim.hp,hp-M*.5);near(victim.burnFlammability,0);
   victim.x=500;run.advance(FIELD.step);near(victim.burnFlammability,1);
 });
 test('TL003 overlapping Molotovs share one burn instead of dealing two independent area DOTs',()=>{
   const {run,victim}=fireRun();run.cast(1,500,220);run.mercenaries[1].cooldown=0;run.cast(1,500,220);
-  near(victim.burnPower,15);near(victim.burnFlammability,1);run.advance(.5);near(victim.hp,1000-15*1.25*.5);
+  near(victim.burnPower,M);near(victim.burnFlammability,1);run.advance(.5);near(victim.hp,1000-M*1.25*.5);
 });
 test('TL003 flamer weak hits cannot overwrite a stronger Molotov and pause freezes its full state',()=>{
   const {run,victim}=fireRun();run.cast(1,500,220);run.mercenaries[1].shotTimer=0;run.advance(FIELD.step);
-  near(victim.burnPower,15);near(victim.burnFlammability,1);const before={...victim};
+  near(victim.burnPower,M);near(victim.burnFlammability,1);const before={...victim};
   run.pause();run.advance(10);assert.deepEqual(victim,before);run.resume();run.advance(.5);assert.ok(victim.hp<before.hp);
 });
 test('TL003 stronger later Fire modifiers replace a snapshot once; defense and shock stay dynamic',()=>{
-  const {run,victim}=fireRun();run.mercenaries[1].shotTimer=0;run.advance(FIELD.step);near(victim.burnPower,5);
-  run.modifiers.push(CARDS.find(c=>c.id==='fire').modifier);run.mercenaries[1].shotTimer=0;run.advance(FIELD.step);near(victim.burnPower,8);
+  const {run,victim}=fireRun();run.mercenaries[1].shotTimer=0;run.advance(FIELD.step);near(victim.burnPower,F);
+  run.modifiers.push(CARDS.find(c=>c.id==='fire').modifier);run.mercenaries[1].shotTimer=0;run.advance(FIELD.step);near(victim.burnPower,F*1.6);
   run.mercenaries.forEach(m=>m.shotTimer=100);victim.defense=100;victim.corrosionPower=1;victim.corrosionDuration=10;victim.shockPower=1;victim.shockDuration=10;
-  const hp=victim.hp;run.advance(.5);near(victim.hp,hp-8*.5/1.5*1.25);near(victim.burnPower,8);
+  const hp=victim.hp;run.advance(.5);near(victim.hp,hp-F*1.6*.5/1.5*1.25);near(victim.burnPower,F*1.6);
 });
 test('TL003 accelerated DOT death awards one bounty and one XP even inside overlapping fire',()=>{
   const {run,victim}=fireRun(target({hp:.1}));run.cast(1,500,220);run.mercenaries[1].cooldown=0;run.cast(1,500,220);

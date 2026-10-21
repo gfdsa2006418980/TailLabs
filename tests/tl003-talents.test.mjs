@@ -77,7 +77,7 @@ test('TL003 settlement awards points once and immediately permits camp investmen
 });
 test('TL003 neutral talent snapshots preserve the original first-run stats and contain no modifiers', () => {
   const effects=compileTalents(emptyTree());assert.deepEqual(effects,{modifiers:[],wallHealth:1,attackSpeed:1,haste:0});
-  const stats=deploymentStats(effects);near(stats.damage,5.2);near(stats.dps,4.16);near(stats.wallHealth,40);near(stats.income,1);near(stats.grenadeCooldown,30);
+  const stats=deploymentStats(effects);near(stats.damage,5.2);near(stats.dps,4.16);near(stats.wallHealth,40);near(stats.income,1);near(stats.grenadeCooldown,MERCENARIES.rifle.cooldown);
 });
 test('TL003 permanent damage uses multiplicative tag stages and strengthens all mercenaries and actives', () => {
   const effects=compileTalents(treeWith({mercenary_damage:2,kinetic_damage:3,active_skill_damage:1}));
@@ -91,8 +91,8 @@ test('TL003 permanent damage uses multiplicative tag stages and strengthens all 
 test('TL003 permanent Fire damage strengthens actual Burn and Molotov without double application', () => {
   const effects=compileTalents(treeWith({mercenary_damage:1,fire_dot:2,active_skill_damage:1}));const run=new DefenseRun(1,effects);run.start();run.money=100;run.recruit('flame');
   const victim={id:999,kind:'walker',x:500,y:220,hp:200,maxHp:200,defense:0,speed:0,attack:0,reward:3,xp:1,burnPower:0,burnDuration:0,burnFlammability:0,corrosionPower:0,corrosionDuration:0,shockPower:0,shockDuration:0,hitFlash:0};run.enemies=[victim];run.advance(FIELD.step);
-  near(victim.burnPower,5*1.06*1.08**2);run.mercenaries.forEach(m=>m.shotTimer=100);const hp=victim.hp;run.advance(1);near(victim.hp,hp-victim.burnPower);
-  run.cast(1,500,220);near(run.zones[0].power,15*1.06*1.08**2*1.08);
+  near(victim.burnPower,MERCENARIES.flame.damage*1.06*1.08**2);run.mercenaries.forEach(m=>m.shotTimer=100);const hp=victim.hp;run.advance(1);near(victim.hp,hp-victim.burnPower);
+  run.cast(1,500,220);near(run.zones[0].power,MERCENARIES.flame.damage*3*1.06*1.08**2*1.08);
 });
 test('TL003 permanent wall health, repair and attack speed enter the actual Run', () => {
   const effects=compileTalents(treeWith({barricade_health:2,repair_efficiency:3,attack_speed:4}));const run=new DefenseRun(1,effects);run.start();
@@ -106,7 +106,7 @@ test('TL003 permanent income multiplies real kill and completed Wave rewards and
 });
 test('TL003 permanent haste stays unbounded and matches the displayed cooldown prediction', () => {
   const effects=compileTalents(treeWith({active_skill_haste:200}));const run=new DefenseRun(1,effects);run.start();run.cast(0,500,220);
-  near(run.mercenaries[0].cooldown,30/1.06**200);near(deploymentStats(effects).grenadeCooldown,effectiveCooldown(30,run.haste));assert.ok(run.mercenaries[0].cooldown<.001);
+  near(run.mercenaries[0].cooldown,MERCENARIES.rifle.cooldown/1.06**200);near(deploymentStats(effects).grenadeCooldown,effectiveCooldown(MERCENARIES.rifle.cooldown,run.haste));assert.ok(run.mercenaries[0].cooldown<.001);
 });
 test('TL003 a run owns a snapshot; later camp changes and input-object mutation cannot change its stats', () => {
   const tree=treeWith({mercenary_damage:1,barricade_health:1}),effects=compileTalents(tree);const run=new DefenseRun(1,effects);

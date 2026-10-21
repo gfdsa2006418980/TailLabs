@@ -2,18 +2,20 @@ import type { Modifier, Tag } from './Combat.ts';
 
 export type MercKind = 'rifle' | 'flame' | 'tesla';
 export const MERCENARIES = {
-  rifle: { name: '步槍手', callSign: 'ROOK', role: '動能 · 穩定射擊', color: '#e8c58b', damage: 5.2, interval: 1.25, skill: '破片手榴彈', cooldown: 30, radius: 105, tags: ['Damage.Kinetic', 'Mechanic.Projectile', 'Skill.AutoAttack', 'Weapon.Rifle', 'Mercenary.rifle'] as Tag[] },
-  flame: { name: '焚燒兵', callSign: 'EMBER', role: '火焰 · 持續燃燒', color: '#ec865a', damage: 5, interval: 1.4, skill: '燃燒瓶', cooldown: 35, radius: 110, tags: ['Damage.Fire', 'Mechanic.DOT', 'Skill.AutoAttack', 'Weapon.Flamer', 'Mercenary.flame'] as Tag[] },
+  rifle: { name: '步槍手', callSign: 'ROOK', role: '動能 · 穩定射擊', color: '#e8c58b', damage: 5.2, interval: 1.25, skill: '破片手榴彈', cooldown: 10, radius: 105, tags: ['Damage.Kinetic', 'Mechanic.Projectile', 'Skill.AutoAttack', 'Weapon.Rifle', 'Mercenary.rifle'] as Tag[] },
+  flame: { name: '焚燒兵', callSign: 'EMBER', role: '火焰 · 持續燃燒', color: '#ec865a', damage: 3.5, interval: 1.4, skill: '燃燒瓶', cooldown: 35, radius: 110, tags: ['Damage.Fire', 'Mechanic.DOT', 'Skill.AutoAttack', 'Weapon.Flamer', 'Mercenary.flame'] as Tag[] },
   tesla: { name: '電磁兵', callSign: 'VOLT', role: '電能 · 感電增傷', color: '#83c9d4', damage: 6, interval: 1.3, skill: '貫穿雷射', cooldown: 45, radius: 34, tags: ['Damage.Kinetic', 'Damage.Electric', 'Mechanic.Projectile', 'Skill.AutoAttack', 'Weapon.Tesla', 'Mercenary.tesla'] as Tag[] },
 } as const;
 export const MERC_KINDS: MercKind[] = ['rifle', 'flame', 'tesla'];
-export type EnemyKind = 'walker' | 'runner' | 'brute' | 'armored' | 'elite';
+export type EnemyKind = 'walker' | 'runner' | 'brute' | 'armored' | 'elite' | 'boss';
 export const ENEMIES = {
   walker: { hp: 25, speed: 44, defense: 5, attack: 7, reward: 3, xp: 1, color: '#9baa78', size: 1 },
   runner: { hp: 19, speed: 66, defense: 0, attack: 5, reward: 4.5, xp: 1, color: '#c3b688', size: 0.85 },
   brute: { hp: 85, speed: 30, defense: 15, attack: 14, reward: 9, xp: 3, color: '#8b9b80', size: 1.5 },
   armored: { hp: 65, speed: 37, defense: 130, attack: 10, reward: 15, xp: 4, color: '#8d9b9c', size: 1.2 },
   elite: { hp: 260, speed: 34, defense: 70, attack: 24, reward: 60, xp: 10, color: '#cb9c77', size: 1.8 },
+  /** Only spawned by the boss rush (Balance.BOSS_*), never by the random roster. */
+  boss: { hp: 4000, speed: 30, defense: 40, attack: 60, reward: 150, xp: 12, color: '#d4735f', size: 2.4 },
 } as const;
 
 export interface UpgradeCard { id: string; name: string; category: string; description: string; color: string; modifier?: Modifier; effect?: 'speed' | 'haste' | 'radius' | 'wall' | 'repair' }

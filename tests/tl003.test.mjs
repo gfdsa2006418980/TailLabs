@@ -125,17 +125,17 @@ test('TL003 Corrosion and Shock expire independently', () => {
 });
 test('TL003 Grenade uses Kinetic + Active modifiers, AOE geometry, knockback and cooldown', () => {
   const run=running(); choose(run,'kinetic'); choose(run,'active'); const a=enemy(), b=enemy({id:10000,x:650}); run.enemies=[a,b];
-  assert.equal(run.cast(0,500,220),true); near(a.hp,200-5.2*5*(1+.45+.6)); near(b.hp,200); near(a.x,460); near(run.mercenaries[0].cooldown,30);
+  assert.equal(run.cast(0,500,220),true); near(a.hp,200-5.2*5*(1+.45+.6)); near(b.hp,200); near(a.x,460); near(run.mercenaries[0].cooldown,MERCENARIES.rifle.cooldown);
   assert.equal(run.cast(0,500,220),false);
 });
 test('TL003 invalid drag releases do not consume cooldown; haste applies to valid casts', () => {
   const run=running(); for(const [x,y] of [[-1,200],[751,200],[200,64],[200,391],[NaN,200],[200,Infinity]]) assert.equal(run.cast(0,x,y),false);
-  near(run.mercenaries[0].cooldown,0); run.haste=2900; assert.equal(run.cast(0,500,220),true); near(run.mercenaries[0].cooldown,1);
+  near(run.mercenaries[0].cooldown,0); run.haste=2900; assert.equal(run.cast(0,500,220),true); near(run.mercenaries[0].cooldown,MERCENARIES.rifle.cooldown/30);
 });
 test('TL003 Molotov deals DOT through the shared defense/shock calculator and honors Active tags', () => {
   const run=running(); run.money=100; run.recruit('flame'); choose(run,'active'); const target=enemy({defense:100,corrosionPower:1,corrosionDuration:10,shockPower:1,shockDuration:10});run.enemies=[target];
   run.mercenaries.forEach(m=>m.shotTimer=100); assert.equal(run.cast(1,500,220),true); near(target.hp,200);
-  near(target.burnPower,24); run.advance(.5); near(target.hp,200-.5*5*3*1.6/1.5*1.25); assert.equal(run.zones.length,1); run.advance(6); assert.equal(run.zones.length,0);
+  near(target.burnPower,MERCENARIES.flame.damage*3*1.6); run.advance(.5); near(target.hp,200-.5*MERCENARIES.flame.damage*3*1.6/1.5*1.25); assert.equal(run.zones.length,1); run.advance(6); assert.equal(run.zones.length,0);
 });
 test('TL003 Laser hits only enemies along the aimed direction, applies Shock and pierces', () => {
   const run=running(); run.money=100; run.recruit('tesla'); const a=enemy({x:500,y:222}), b=enemy({id:10000,x:350,y:222}), c=enemy({id:10001,x:500,y:350}); run.enemies=[a,b,c];
@@ -144,7 +144,7 @@ test('TL003 Laser hits only enemies along the aimed direction, applies Shock and
 test('TL003 all three mercenary types can be deployed, with one independent skill each', () => {
   const run=running(); run.money=100;run.recruit('flame');run.recruit('tesla');assert.equal(run.mercenaries.length,3);
   assert.equal(run.cast(0,400,200),true);near(run.mercenaries[1].cooldown,0);assert.equal(run.cast(1,400,200),true);assert.equal(run.cast(2,400,200),true);
-  assert.deepEqual(run.mercenaries.map(m=>m.cooldown),[30,35,45]);
+  assert.deepEqual(run.mercenaries.map(m=>m.cooldown),[MERCENARIES.rifle.cooldown,35,45]);
 });
 test('TL003 wave rewards occur only after a full 30 seconds and 20 minutes ends in victory', () => {
   const run=running();run.wallHealth=1e100;run.elapsed=29.98;run.mercenaries[0].shotTimer=100;run.advance(.016667);assert.equal(run.clearedWave,0);
