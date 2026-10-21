@@ -4,7 +4,9 @@
   "version": "0.3.3",
   "description": "TailLabs — TL001 蛇貂堆疊 / TL002 蛇貂逃家了 / TL003 無盡防線 Web prototypes",
   "type": "module",
-  "engines": { "node": ">=22.12.0" },
+  "engines": {
+    "node": ">=22.12.0"
+  },
   "scripts": {
     "assets:tl001": "node tools/build-tl001-art.mjs && node tools/build-magic-circle.mjs && node tools/build-tutorial.mjs",
     "dev": "vite --host 0.0.0.0 --port 5173 --strictPort",
@@ -23,8 +25,15 @@
     "preview:tl003": "vite preview --config vite.tl003.config.ts",
     "build:tl002": "npm run typecheck:tl002 && vite build --config vite.tl002.config.ts",
     "preview": "vite preview --host 0.0.0.0 --port 4173 --strictPort",
-    "preview:tl002": "vite preview --config vite.tl002.config.ts"
+    "preview:tl002": "vite preview --config vite.tl002.config.ts",
+    "art:tl003": "node --no-warnings tools/build-tl003-art.mjs"
   },
-  "dependencies": { "phaser": "3.90.0" },
-  "devDependencies": { "typescript": "7.0.2", "vite": "8.3.4" }
+  "dependencies": {
+    "phaser": "3.90.0"
+  },
+  "devDependencies": {
+    "pxl-pixelart": "github:crsolver/claude-pxl#21fee41f7ecce00bc868d7567f24ffd0f3acc8fa",
+    "typescript": "7.0.2",
+    "vite": "8.3.4"
+  }
 }

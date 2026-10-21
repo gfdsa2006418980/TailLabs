@@ -9,3 +9,4 @@ Thumbs.db
 .env.*
 !.env.example
 /work/
+/art/tl003/out/
