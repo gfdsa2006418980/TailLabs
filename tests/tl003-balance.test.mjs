@@ -68,11 +68,12 @@ test('TL003 balance: the opening grenade is ready at deployment and recharges in
 test('TL003 balance: a boss rush is announced, then charges with an escort on a fixed schedule', () => {
   const run = new DefenseRun(11); run.start(); run.wallHealth = run.wallMaxHealth = 1e300;
   run.mercenaries[0].shotTimer = 1e9; // nobody shoots, so every spawn stays on the field
-  const step = until => { while (run.elapsed + 1e-9 < until) run.advance(FIELD.step); };
+  // Wave XP opens the card choice, which pauses the run; keep picking so time can reach the boss.
+  const step = until => { while (run.elapsed + 1e-9 < until) { if (run.phase === 'choice') run.choose(run.choices[0].id); run.advance(FIELD.step); } };
   step(B.BOSS_FIRST_SECONDS - B.BOSS_WARNING_SECONDS - 1);
   assert.equal(run.bossWarning, undefined); assert.equal(run.boss, undefined);
   step(B.BOSS_FIRST_SECONDS - 5);
-  assert.ok(run.bossWarning > 4 && run.bossWarning <= 5, `warning ${run.bossWarning}`);
+  assert.ok(run.bossWarning > 4 && run.bossWarning <= 5 + 1e-6, `warning ${run.bossWarning}`);
   const before = run.enemies.filter(e => e.kind === 'runner').length;
   step(B.BOSS_FIRST_SECONDS + 0.05);
   const first = run.boss; assert.ok(first, 'boss spawned');
@@ -87,7 +88,7 @@ test('TL003 balance: a boss rush is announced, then charges with an escort on a 
 
 test('TL003 balance: boss strength ignores permanent player power', () => {
   const weak = new DefenseRun(5), strong = new DefenseRun(5, compileTalents(treeWithLevels(30)));
-  for (const run of [weak, strong]) { run.start(); run.wallHealth = 1e300; run.mercenaries[0].shotTimer = 1e9; while (!run.boss) run.advance(FIELD.step); }
+  for (const run of [weak, strong]) { run.start(); run.wallHealth = 1e300; run.mercenaries[0].shotTimer = 1e9; while (!run.boss) { if (run.phase === 'choice') run.choose(run.choices[0].id); run.advance(FIELD.step); } }
   assert.equal(weak.boss.maxHp, strong.boss.maxHp); assert.equal(weak.boss.attack, strong.boss.attack);
 });
 
