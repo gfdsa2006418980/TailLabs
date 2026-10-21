@@ -1,3 +1,5 @@
+import { canBreakthrough, compileTalents, isRevealed, talentById, talentCost } from './Talents.ts';
+
 /** Cloudflare boundary: this DTO can never contain a Run. No cloud service is required to play. */
 export interface TalentTree {
   tier: number; maxNodeLevel: number; nodes: Record<string, number>;
@@ -31,6 +33,7 @@ export function normalizeMeta(value: unknown): MetaSave {
 export class LocalMetaMirror {
   value: MetaSave;
   persistent = true;
+  inRun = false;
   private storage?: Pick<Storage, 'getItem' | 'setItem'>;
   private settled = new WeakSet<object>();
   constructor(storage?: Pick<Storage, 'getItem' | 'setItem'>) {
@@ -39,12 +42,48 @@ export class LocalMetaMirror {
     catch { this.persistent = false; }
     if (!storage) this.persistent = false;
   }
+  get tree(): TalentTree { return JSON.parse(this.value.TalentTreeJson) as TalentTree; }
+  get effects() { return compileTalents(this.tree); }
+  refresh() {
+    if (!this.storage || !this.persistent) return;
+    try { this.value = normalizeMeta(JSON.parse(this.storage.getItem(META_KEY) ?? 'null')); }
+    catch { this.persistent = false; }
+  }
+  private persist(value: MetaSave) {
+    this.value = normalizeMeta(value);
+    try { this.storage?.setItem(META_KEY, JSON.stringify(this.value)); }
+    catch { this.persistent = false; }
+  }
+  beginRun() {
+    if (this.inRun) return false;
+    this.refresh(); this.inRun = true; return true;
+  }
+  buyTalent(id: string): { ok: boolean; message: string } {
+    if (this.inRun) return { ok: false, message: '請在本局結束後投資天賦。' };
+    this.refresh();
+    const node = talentById(id), tree = this.tree;
+    if (!node || !isRevealed(tree, node.id)) return { ok: false, message: '先對相鄰節點投入第 1 點，即可探索這個位置。' };
+    const level = tree.nodes[node.id] ?? 0;
+    if (level >= tree.maxNodeLevel) return { ok: false, message: '此節點已達本階上限，突破後可繼續提升。' };
+    const cost = talentCost(level);
+    if (this.value.TalentPoints < cost) return { ok: false, message: '天賦點不足，再守一局取得更多點數。' };
+    tree.nodes[node.id] = level + 1;
+    this.persist({ ...this.value, TalentPoints: this.value.TalentPoints - cost, TalentTreeJson: JSON.stringify(tree) });
+    return { ok: true, message: `${node.name}提升至 Lv.${level + 1}。${level === 0 ? '相鄰節點已揭露。' : '成長將在下一局生效。'}` };
+  }
+  breakthrough(): { ok: boolean; message: string } {
+    if (this.inRun) return { ok: false, message: '請在本局結束後突破星盤。' };
+    this.refresh(); const tree = this.tree;
+    if (!canBreakthrough(tree)) return { ok: false, message: `任一節點達到 Lv.${tree.maxNodeLevel} 後即可突破。` };
+    tree.tier++; tree.maxNodeLevel += 10;
+    this.persist({ ...this.value, TalentTreeJson: JSON.stringify(tree) });
+    return { ok: true, message: `星盤突破至第 ${tree.tier} 階，節點上限 Lv.${tree.maxNodeLevel}。既有等級完整保留。` };
+  }
   settle(run: object, points: number, clearedWave: number): boolean {
     if (this.settled.has(run)) return false;
     this.settled.add(run);
-    this.value = normalizeMeta({ ...this.value, TalentPoints: this.value.TalentPoints + nonnegativeInt(points), HighestClearedWave: Math.max(this.value.HighestClearedWave, nonnegativeInt(clearedWave)) });
-    try { this.storage?.setItem(META_KEY, JSON.stringify(this.value)); }
-    catch { this.persistent = false; }
+    this.inRun = false; this.refresh();
+    this.persist({ ...this.value, TalentPoints: this.value.TalentPoints + nonnegativeInt(points), HighestClearedWave: Math.max(this.value.HighestClearedWave, nonnegativeInt(clearedWave)) });
     return true;
   }
 }

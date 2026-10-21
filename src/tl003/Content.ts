@@ -19,7 +19,7 @@ export const ENEMIES = {
 export interface UpgradeCard { id: string; name: string; category: string; description: string; color: string; modifier?: Modifier; effect?: 'speed' | 'haste' | 'radius' | 'wall' | 'repair' }
 export const CARDS: readonly UpgradeCard[] = [
   { id: 'kinetic', name: '重型彈頭', category: '動能', description: '所有動能傷害 +45%，包含手榴彈。', color: '#e8c58b', modifier: { kind: 'Add', tags: ['Damage.Kinetic'], value: 0.45 } },
-  { id: 'burn', name: '曳光燃燒彈', category: '火焰', description: '普攻附加可累積的燃燒，每秒造成 4 點基礎傷害，持續 4 秒。', color: '#ec865a', modifier: { kind: 'Special', tags: ['Skill.AutoAttack'], rule: 'ignite', value: 4 } },
+  { id: 'burn', name: '曳光燃燒彈', category: '火焰', description: '普攻點燃：基礎每秒 4 傷、持續 4 秒。保留最強燃燒；較弱或同強度命中續時，並疊加易燃，每層燒快 25%。', color: '#ec865a', modifier: { kind: 'Special', tags: ['Skill.AutoAttack'], rule: 'ignite', value: 4 } },
   { id: 'bio', name: '腐蝕彈藥', category: '生化', description: '普攻疊加腐蝕。敵人防禦 ÷（1 + 腐蝕強度）。', color: '#b5cc7f', modifier: { kind: 'Special', tags: ['Skill.AutoAttack'], rule: 'corrode', value: 1 } },
   { id: 'shock', name: '感電彈藥', category: '電能', description: '普攻疊加感電，提高敵人受到的所有傷害，包含燃燒。', color: '#83c9d4', modifier: { kind: 'Special', tags: ['Skill.AutoAttack'], rule: 'shock', value: 1 } },
   { id: 'fire', name: '高濃度燃料', category: '火焰', description: '火焰持續傷害 ×1.6。', color: '#ec865a', modifier: { kind: 'More', tags: ['Damage.Fire', 'Mechanic.DOT'], value: 1.6 } },

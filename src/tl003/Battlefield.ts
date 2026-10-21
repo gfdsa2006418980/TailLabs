@@ -3,6 +3,7 @@ import { mercPosition } from './Run.ts';
 import type { DefenseRun } from './Run.ts';
 import { project, projectedCircle, unproject } from './Projection.ts';
 import type { Viewport } from './Projection.ts';
+import { burnSpeed } from './Burn.ts';
 
 export interface Aim { slot: number; x: number; y: number; valid: boolean }
 export class Battlefield {
@@ -100,6 +101,10 @@ export class Battlefield {
       let sx=-10;
       for(const [active,color]of[[enemy.burnDuration>0,'#ffac68'],[enemy.corrosionPower>0,'#cae786'],[enemy.shockPower>0,'#9be9ef']]as const){
         if(active){c.fillStyle=color;c.fillRect(sx,-54,5,4);sx+=8;}
+      }
+      if(enemy.burnDuration>0&&enemy.burnFlammability>0){
+        c.fillStyle='#ffbc7d';c.font='9px monospace';c.textAlign='center';
+        c.fillText(`×${burnSpeed(enemy).toFixed(2)}`,0,-59);c.textAlign='left';
       }
       c.restore();
     }

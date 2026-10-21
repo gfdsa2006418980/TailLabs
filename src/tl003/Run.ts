@@ -2,17 +2,24 @@ import { calculateDamage, calculateValue, effectiveCooldown, runScore } from './
 import type { DamageInstance, Modifier, Tag } from './Combat.ts';
 import { CARDS, ENEMIES, MERCENARIES } from './Content.ts';
 import type { EnemyKind, MercKind, UpgradeCard } from './Content.ts';
+import type { PermanentEffects } from './Talents.ts';
+import { advanceBurn, applyBurn } from './Burn.ts';
 
 export const FIELD = { width: 960, height: 420, wallX: 750, step: 1 / 60, waveSeconds: 30, victorySeconds: 1200 } as const;
+/** Triple the exponential growth speed, preserving the opening base cadence. */
+export const SPAWN_GROWTH_SPEED = 3;
+export function spawnIntervalAt(seconds: number) {
+  return (seconds < 12 ? 3 : 1.8) / 1.1 ** (SPAWN_GROWTH_SPEED * Math.max(0, seconds) / 60);
+}
 export type Phase = 'ready' | 'running' | 'choice' | 'paused' | 'over' | 'victory';
 export interface Enemy {
   id: number; kind: EnemyKind; x: number; y: number; hp: number; maxHp: number; defense: number;
-  speed: number; attack: number; reward: number; xp: number; burnPower: number; burnDuration: number;
+  speed: number; attack: number; reward: number; xp: number; burnPower: number; burnDuration: number; burnFlammability: number;
   corrosionPower: number; corrosionDuration: number; shockPower: number; shockDuration: number; hitFlash: number;
 }
 export interface Mercenary { id: number; kind: MercKind; shotTimer: number; cooldown: number }
 export interface VisualEvent { kind: 'shot' | 'flame' | 'laser' | 'blast' | 'hit' | 'kill'; x: number; y: number; fromX?: number; fromY?: number; color: string; life: number; maxLife: number; radius: number }
-export interface FireZone { x: number; y: number; radius: number; remaining: number; power: number }
+export interface FireZone { x: number; y: number; radius: number; remaining: number; power: number; pulseTimer: number; contacts: Set<number> }
 const mercY = (slot: number) => 130 + slot * 92;
 export const mercPosition = (slot: number) => ({ x: 824 + (slot === 1 ? 26 : 0), y: mercY(slot) });
 
@@ -29,7 +36,14 @@ export class DefenseRun {
   endless = false;
   private seed: number; private accumulator = 0; private spawnTimer = 0;
   private nextId = 1; private completedWaves = 0;
-  constructor(seed = Math.floor(Math.random() * 0xffffffff)) { this.seed = seed >>> 0; }
+  constructor(seed = Math.floor(Math.random() * 0xffffffff), permanent?: PermanentEffects) {
+    this.seed = seed >>> 0;
+    if (permanent) {
+      this.wallHealth = this.wallMaxHealth = 40 * permanent.wallHealth;
+      this.attackSpeed = permanent.attackSpeed; this.haste = permanent.haste;
+      this.modifiers = permanent.modifiers.map(modifier => ({ ...modifier, tags: [...modifier.tags] }));
+    }
+  }
   private random() { this.seed = (Math.imul(this.seed, 1664525) + 1013904223) >>> 0; return this.seed / 0x100000000; }
   get wave() { return !this.endless && this.elapsed >= FIELD.victorySeconds ? 40 : Math.floor(this.elapsed / FIELD.waveSeconds) + 1; }
   get clearedWave() { return Math.floor((this.elapsed + 1e-8) / FIELD.waveSeconds); }
@@ -93,7 +107,17 @@ export class DefenseRun {
   }
   private burn(enemy: Enemy, power: number, duration: number, sourceTags: readonly Tag[]) {
     const tags: Tag[] = [...sourceTags.filter(t => !t.startsWith('Damage.') && t !== 'Mechanic.Projectile'), 'Damage.Fire', 'Mechanic.DOT', 'Status.Burning'];
-    enemy.burnPower += calculateValue(power, tags, this.modifiers); enemy.burnDuration = Math.max(enemy.burnDuration, duration);
+    applyBurn(enemy, calculateValue(power, tags, this.modifiers), duration);
+  }
+  private igniteZone(zone: FireZone, pulse: boolean) {
+    const contacts = new Set<number>();
+    for (const enemy of this.enemies) {
+      if (enemy.hp <= 0 || Math.hypot(enemy.x - zone.x, enemy.y - zone.y) > zone.radius) continue;
+      contacts.add(enemy.id);
+      // First contact is immediate; remaining inside reapplies at 1 Hz, never once per frame.
+      if (pulse || !zone.contacts.has(enemy.id)) applyBurn(enemy, zone.power, 3);
+    }
+    zone.contacts = contacts;
   }
   private hit(enemy: Enemy, hit: DamageInstance) {
     if (enemy.hp <= 0) return;
@@ -123,7 +147,8 @@ export class DefenseRun {
       this.visual('blast', x, y, '#f8b968', radius);
     } else if (merc.kind === 'flame') {
       const tags: Tag[] = ['Damage.Fire', 'Mechanic.AOE', 'Mechanic.DOT', 'Skill.Active', 'Mercenary.flame'];
-      this.zones.push({ x, y, radius, remaining: 6, power: calculateValue(base * 3, tags, this.modifiers) });
+      const zone: FireZone = { x, y, radius, remaining: 6, power: calculateValue(base * 3, tags, this.modifiers), pulseTimer: 1, contacts: new Set() };
+      this.igniteZone(zone, false); this.zones.push(zone);
       this.visual('blast', x, y, '#e6764b', radius);
     } else {
       const dx = x - origin.x, dy = y - origin.y, length = Math.hypot(dx, dy), ux = dx / length, uy = dy / length;
@@ -150,7 +175,7 @@ export class DefenseRun {
     const def = ENEMIES[kind], minutes = this.elapsed / 60, hp = def.hp * 1.8 ** minutes;
     this.enemies.push({ id: this.nextId++, kind, x: -20, y: 100 + this.random() * 260, hp, maxHp: hp, defense: def.defense,
       speed: def.speed * (0.96 + this.random() * 0.08), attack: def.attack * 1.45 ** minutes,
-      reward: def.reward * 1.9 ** minutes, xp: def.xp, burnPower: 0, burnDuration: 0,
+      reward: def.reward * 1.9 ** minutes, xp: def.xp, burnPower: 0, burnDuration: 0, burnFlammability: 0,
       corrosionPower: 0, corrosionDuration: 0, shockPower: 0, shockDuration: 0, hitFlash: 0 });
   }
   advance(seconds: number) {
@@ -163,11 +188,18 @@ export class DefenseRun {
   private step(dt: number) {
     this.elapsed += dt;
     this.spawnTimer -= dt;
-    if (this.spawnTimer <= 0) { this.spawn(); this.spawnTimer += (this.elapsed < 12 ? 3 : 1.8) / 1.1 ** (this.elapsed / 60); }
+    while (this.spawnTimer <= 0) { this.spawn(); this.spawnTimer += spawnIntervalAt(this.elapsed); }
     for (const event of this.events) event.life -= dt;
     this.events = this.events.filter(e => e.life > 0);
-    for (const zone of this.zones) zone.remaining -= dt;
-    this.zones = this.zones.filter(z => z.remaining > 0);
+    for (const zone of this.zones) {
+      zone.remaining -= dt;
+      if (zone.remaining <= 1e-9) continue;
+      zone.pulseTimer -= dt;
+      const pulse = zone.pulseTimer <= 1e-9;
+      if (pulse) zone.pulseTimer += 1;
+      this.igniteZone(zone, pulse);
+    }
+    this.zones = this.zones.filter(z => z.remaining > 1e-9);
     for (const enemy of this.enemies) {
       if (enemy.hp <= 0) continue;
       enemy.hitFlash = Math.max(0, enemy.hitFlash - dt);
@@ -175,11 +207,8 @@ export class DefenseRun {
       enemy.shockDuration = Math.max(0, enemy.shockDuration - dt);
       if (!enemy.corrosionDuration) enemy.corrosionPower = 0;
       if (!enemy.shockDuration) enemy.shockPower = 0;
-      // Each enemy owns one aggregate burn, never a growing array of effect instances.
-      let dot = 0;
-      if (enemy.burnDuration > 0) { dot += enemy.burnPower * Math.min(dt, enemy.burnDuration); enemy.burnDuration = Math.max(0, enemy.burnDuration - dt); }
-      if (!enemy.burnDuration) enemy.burnPower = 0;
-      for (const zone of this.zones) if (Math.hypot(enemy.x - zone.x, enemy.y - zone.y) <= zone.radius) dot += zone.power * dt;
+      // All fire sources share the strongest burn; flammability changes its clock, not its base power.
+      const dot = advanceBurn(enemy, dt);
       if (dot) {
         enemy.hp -= calculateDamage({ baseDamage: dot, tags: ['Damage.Fire', 'Mechanic.DOT', 'Status.Burning'] }, enemy).final;
         if (enemy.hp <= 0) { this.kill(enemy); continue; }

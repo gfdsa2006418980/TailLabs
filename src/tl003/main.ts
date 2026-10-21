@@ -4,7 +4,8 @@ import type { Aim } from './Battlefield.ts';
 import { MERCENARIES, MERC_KINDS } from './Content.ts';
 import { formatNumber, effectiveCooldown } from './Combat.ts';
 import { DefenseRun } from './Run.ts';
-import { LocalMetaMirror } from './Meta.ts';
+import { LocalMetaMirror, META_KEY } from './Meta.ts';
+import { TalentScreen, deploymentSummary } from './TalentScreen.ts';
 
 const icon = (name: string) => {
   const paths: Record<string, string> = {
@@ -46,24 +47,34 @@ const text = (id: string, value: string) => { const node = el(id); if (node.text
 let storage: Storage | undefined;
 try { storage = window.localStorage; } catch { /* Memory-only fallback. */ }
 const meta = new LocalMetaMirror(storage);
-let run = new DefenseRun(), aim: Aim | undefined;
+let run = new DefenseRun(undefined, meta.effects), aim: Aim | undefined;
 const battlefield = new Battlefield(el<HTMLCanvasElement>('battlefield'));
 const dialog = el<HTMLDialogElement>('modal');
+const talents = new TalentScreen(dialog, meta, {
+  close: () => { if (run.phase === 'ready') run = new DefenseRun(undefined, meta.effects); displayedPhase = ''; sync(); },
+  deploy: () => startRun(),
+});
 let displayedPhase = '', previous = performance.now(), uiClock = 0;
 const clock = (seconds: number) => `${Math.floor(seconds / 60).toString().padStart(2, '0')}:${Math.floor(seconds % 60).toString().padStart(2, '0')}`;
-function reset() { aim = undefined; run = new DefenseRun(); displayedPhase = ''; sync(); }
+function reset() { meta.refresh(); aim = undefined; run = new DefenseRun(undefined, meta.effects); displayedPhase = ''; sync(); }
+function startRun() {
+  if (!meta.beginRun()) return;
+  aim = undefined; run = new DefenseRun(undefined, meta.effects); run.start(); displayedPhase = ''; sync();
+}
 
 function showModal(content: string) {
   el('modal-content').innerHTML = content; if (!dialog.open) dialog.showModal();
   dialog.querySelector<HTMLButtonElement>('button')?.focus();
 }
 function syncPhase() {
+  if (talents.active) return;
   if (displayedPhase === run.phase) return;
   displayedPhase = run.phase; aim = undefined;
   text('announcement', run.phase === 'choice' ? '戰術升級，請選擇一張強化。' : run.phase === 'over' ? '防線失守，本局結束。' : run.phase === 'running' ? '防守開始。' : '');
   if (run.phase === 'ready') {
-    showModal(`<div class="modal-kicker">TAIL LABS / TL003</div><div class="hero-emblem">${icon('shield')}</div><h2 id="modal-title">從一條破爛防線開始。</h2><p>傭兵自動開火，你決定如何守得更久。</p><div class="briefing"><span><b>01</b> 擊殺賺錢，招募最多 3 名傭兵</span><span><b>02</b> 累積經驗，三選一建立屬性戰術</span><span><b>03</b> 拖曳軍火至戰場，放手施放</span></div><button id="start" class="primary">部署防線 <span>→</span></button><p class="fine-print">第一場預期只能守住 20～40 秒。<br>本局進度不保存；重新整理會放棄本局。</p><div class="meta-strip">天賦點 <b>${formatNumber(meta.value.TalentPoints)}</b><span>最高通關 Wave <b>${meta.value.HighestClearedWave}</b></span></div>`);
-    el('start').onclick = () => { run.start(); sync(); };
+    showModal(`<div class="modal-kicker">TAIL LABS / TL003</div><div class="hero-emblem">${icon('shield')}</div><h2 id="modal-title">從一條破爛防線開始。</h2><p>傭兵自動開火，你決定如何守得更久。</p><div class="briefing"><span><b>01</b> 擊殺賺錢，招募最多 3 名傭兵</span><span><b>02</b> 累積經驗，三選一建立屬性戰術</span><span><b>03</b> 拖曳軍火至戰場，放手施放</span></div>${deploymentSummary(meta.effects)}<button id="start" class="primary">部署防線 <span>→</span></button><button id="open-talents" class="camp-button">天賦星盤 <span>${formatNumber(meta.value.TalentPoints)} 點可用 ↗</span></button><p class="fine-print">新兵首局預期堅守 20～40 秒。<br>本局進度不保存；重新整理會放棄本局。</p><div class="meta-strip">最高通關 Wave <b>${meta.value.HighestClearedWave}</b></div>`);
+    el('start').onclick = startRun;
+    el('open-talents').onclick = () => talents.open();
   } else if (run.phase === 'choice') {
     showModal(`<div class="modal-kicker">TACTICAL UPGRADE / LV.${run.level}</div><h2 id="modal-title">選擇你的下一步。</h2><p>戰鬥已暫停。選取一項，本局持續生效，可重複堆疊。</p><div class="choice-grid">${run.choices.map((card, i) => `<button class="choice" data-card="${card.id}" style="--card-color:${card.color}"><span class="choice-category">${card.category}<small>0${i + 1}</small></span>${icon(card.id === 'burn' || card.id === 'fire' ? 'flame' : card.id === 'shock' ? 'bolt' : 'cross')}<strong>${card.name}</strong><span class="choice-description">${card.description}</span><span class="choice-pick">選取強化 ↗</span></button>`).join('')}</div>`);
     dialog.querySelectorAll<HTMLButtonElement>('[data-card]').forEach(button => { button.onclick = () => { run.choose(button.dataset.card!); sync(); }; });
@@ -72,7 +83,8 @@ function syncPhase() {
     el('resume').onclick = () => { run.resume(); sync(); };
   } else if (run.phase === 'over' || run.phase === 'victory') {
     meta.settle(run, run.score, run.clearedWave);
-    showModal(`<div class="modal-kicker">${run.phase === 'victory' ? '40 WAVES / MILESTONE REACHED' : 'DEFENSE REPORT / LINE LOST'}</div><h2 id="modal-title">${run.phase === 'victory' ? '守住了二十分鐘。' : '防線失守。'}</h2><p>每一次堅守，都是下一次的起點。</p><div class="result-stats"><div><span>堅守時間</span><strong>${clock(run.elapsed)}</strong></div><div><span>本局擊殺</span><strong>${run.kills}</strong></div><div><span>累計收入</span><strong>¤${formatNumber(run.totalEarnedMoney)}</strong></div></div><div class="earned"><span>獲得天賦點</span><strong>+${run.score}</strong><small>累積 ${meta.value.TalentPoints} 點 · 星盤待開放</small></div><p class="score-note">時間分 ${Math.floor(run.elapsed / 30)} + 累計收入分 ${Math.floor(Math.log10(run.totalEarnedMoney + 1))} = ${run.score}<br>已花掉的戰場資金同樣計分。</p><button id="retry" class="primary">再守一次 <span>↗</span></button><p class="fine-print">${meta.persistent ? '天賦點已記錄在此瀏覽器。' : '瀏覽器無法保存，天賦點暫留於此分頁。'}<br>傭兵、資金與本局強化將重新開始。</p>`);
+    showModal(`<div class="modal-kicker">${run.phase === 'victory' ? '40 WAVES / MILESTONE REACHED' : 'DEFENSE REPORT / LINE LOST'}</div><h2 id="modal-title">${run.phase === 'victory' ? '守住了二十分鐘。' : '防線失守。'}</h2><p>每一次堅守，都是下一次的起點。</p><div class="result-stats"><div><span>堅守時間</span><strong>${clock(run.elapsed)}</strong></div><div><span>本局擊殺</span><strong>${run.kills}</strong></div><div><span>累計收入</span><strong>¤${formatNumber(run.totalEarnedMoney)}</strong></div></div><div class="earned"><span>獲得天賦點</span><strong>+${run.score}</strong><small>累積 ${meta.value.TalentPoints} 點 · 投資永久成長</small></div><p class="score-note">時間分 ${Math.floor(run.elapsed / 30)} + 累計收入分 ${Math.floor(Math.log10(run.totalEarnedMoney + 1))} = ${run.score}<br>已花掉的戰場資金同樣計分。</p><button id="result-talents" class="primary">投資天賦，準備下一局 <span>↗</span></button><button id="retry" class="camp-button">直接再守一次 <span>→</span></button><p class="fine-print">${meta.persistent ? '天賦點已記錄在此瀏覽器。' : '瀏覽器無法保存，天賦點暫留於此分頁。'}<br>傭兵、資金與本局強化將重新開始。</p>`);
+    el('result-talents').onclick = () => talents.open();
     el('retry').onclick = reset;
   } else if (dialog.open) dialog.close();
 }
@@ -110,7 +122,11 @@ function sync() {
 el('pause').onclick = () => { if (run.phase === 'paused') run.resume(); else run.pause(); sync(); };
 el('repair').onclick = () => { run.repair(); sync(); };
 el('fortify').onclick = () => { run.fortify(); sync(); };
-dialog.addEventListener('cancel', e => { e.preventDefault(); if (run.phase === 'paused') { run.resume(); sync(); } });
+dialog.addEventListener('cancel', e => { e.preventDefault(); if (talents.active) talents.close(); else if (run.phase === 'paused') { run.resume(); sync(); } });
+window.addEventListener('storage', event => {
+  if (event.key !== META_KEY && event.key !== null) return;
+  meta.refresh(); if (talents.active) talents.render(); else if (run.phase === 'ready') reset();
+});
 for (const kind of MERC_KINDS) {
   el(`buy-${kind}`).onclick = () => { if (run.mercenaries.some(m => m.kind === kind)) run.upgrade(kind); else run.recruit(kind); sync(); };
   const button = el<HTMLButtonElement>(`skill-${kind}`); let down: { x: number; y: number; id: number } | undefined;

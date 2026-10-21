@@ -16,7 +16,7 @@ const mods = [
 ];
 function enemy(overrides = {}) {
   return { id: 9999, kind: 'walker', x: 500, y: 220, hp: 200, maxHp: 200, defense: 0, speed: 0, attack: 0,
-    reward: 3, xp: 1, burnPower: 0, burnDuration: 0, corrosionPower: 0, corrosionDuration: 0,
+    reward: 3, xp: 1, burnPower: 0, burnDuration: 0, burnFlammability: 0, corrosionPower: 0, corrosionDuration: 0,
     shockPower: 0, shockDuration: 0, hitFlash: 0, ...overrides };
 }
 function running() { const run = new DefenseRun(123); run.start(); return run; }
@@ -110,11 +110,11 @@ test('TL003 Kinetic, Burn, Corrosion and Shock upgrades affect actual live enemi
     if(id==='shock') near(target.shockPower,1);
   }
 });
-test('TL003 Burn accumulates power, refreshes duration, expires and applies Fire bonuses once', () => {
+test('TL003 equal Burn refreshes and accelerates the strongest power, applying Fire bonuses once', () => {
   const run = running(); choose(run,'burn'); choose(run,'fire'); const target = enemy(); run.enemies=[target]; run.advance(FIELD.step);
-  near(target.burnPower,6.4); run.mercenaries[0].shotTimer=0; run.advance(FIELD.step); near(target.burnPower,12.8);
-  run.mercenaries[0].shotTimer=100; const hp=target.hp; run.advance(1); near(target.hp,hp-12.8);
-  run.advance(4); near(target.burnPower,0); near(target.burnDuration,0);
+  near(target.burnPower,6.4); run.mercenaries[0].shotTimer=0; run.advance(FIELD.step); near(target.burnPower,6.4); near(target.burnFlammability,1);
+  run.mercenaries[0].shotTimer=100; const hp=target.hp; run.advance(1); near(target.hp,hp-8);
+  run.advance(4); near(target.burnPower,0); near(target.burnDuration,0); near(target.burnFlammability,0);
 });
 test('TL003 Corrosion and Shock expire independently', () => {
   const run=running(); const target=enemy({corrosionPower:2,corrosionDuration:.2,shockPower:3,shockDuration:.5}); run.enemies=[target]; run.mercenaries[0].shotTimer=100;
@@ -132,7 +132,7 @@ test('TL003 invalid drag releases do not consume cooldown; haste applies to vali
 test('TL003 Molotov deals DOT through the shared defense/shock calculator and honors Active tags', () => {
   const run=running(); run.money=100; run.recruit('flame'); choose(run,'active'); const target=enemy({defense:100,corrosionPower:1,corrosionDuration:10,shockPower:1,shockDuration:10});run.enemies=[target];
   run.mercenaries.forEach(m=>m.shotTimer=100); assert.equal(run.cast(1,500,220),true); near(target.hp,200);
-  run.advance(1); near(target.hp,200-5*3*1.6/1.5*1.25); assert.equal(run.zones.length,1); run.advance(6); assert.equal(run.zones.length,0);
+  near(target.burnPower,24); run.advance(.5); near(target.hp,200-.5*5*3*1.6/1.5*1.25); assert.equal(run.zones.length,1); run.advance(6); assert.equal(run.zones.length,0);
 });
 test('TL003 Laser hits only enemies along the aimed direction, applies Shock and pierces', () => {
   const run=running(); run.money=100; run.recruit('tesla'); const a=enemy({x:500,y:222}), b=enemy({id:10000,x:350,y:222}), c=enemy({id:10001,x:500,y:350}); run.enemies=[a,b,c];
