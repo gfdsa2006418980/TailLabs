@@ -362,7 +362,7 @@ export class BattleScene extends Phaser.Scene {
           if (event.strength >= 20) this.sparks.explode(Math.min(10, Math.round(event.strength / 6)), event.x, event.y);
           break;
         }
-        case 'cracked': this.onCracked(event.id, reduced); break;
+        case 'cracked': this.onCracked(event.id); break;
         case 'break': this.onBreak(event, reduced); break;
         case 'launch': this.rig.mode = 'follow'; this.refreshQueue(true); break;
         case 'shotEnd': {
@@ -386,25 +386,21 @@ export class BattleScene extends Phaser.Scene {
     }
   }
 
-  /** Blocks show cracks; a dazed 四十塊 blushes and wobbles. */
-  private onCracked(id: number, reduced: boolean): void {
+  /** Blocks show cracks. A 四十塊 takes damage the same way but shows no cracks (user decision). */
+  private onCracked(id: number): void {
     const piece = this.sim.pieces.get(id);
     const sprite = this.sprites.get(id);
-    if (!piece || !sprite) return;
-    if (piece.kind === 'target') {
-      sprite.setTint(0xffd2d8);
-      if (!reduced) this.tweens.add({ targets: sprite, scaleX: TARGET.scale * 1.08, scaleY: TARGET.scale * 0.92, duration: 120, yoyo: true, repeat: 2 });
-      return;
-    }
+    if (!piece || !sprite || piece.kind === 'target') return;
     sprite.setTexture(blockTexture(this, piece.material as BlockMaterial, piece.w, piece.h, true));
   }
 
   private onBreak(event: Extract<SimEvent, { type: 'break' }>, reduced: boolean): void {
     this.puffs.explode(4, event.x, event.y);
     if (event.kind === 'target') {
+      // The body stays in the simulation and flies off under physics; its sprite keeps following it, drawn in front.
       this.hooks.sfx.knockout();
       this.sparks.explode(16, event.x, event.y);
-      this.knockOut(event, reduced);
+      this.sprites.get(event.id)?.setDepth(58);
     } else {
       const material = (event.material ?? 'wood') as BlockMaterial;
       this.debris.get(material)?.explode(9, event.x, event.y);
@@ -415,27 +411,6 @@ export class BattleScene extends Phaser.Scene {
       this.slowUsedThisShot = true;
       this.slowUntil = this.time.now + FX.slowMotionMs;
     }
-  }
-
-  /** A 四十塊 gets knocked spinning out of the screen (visual only; the body is already gone from the simulation). */
-  private knockOut(event: Extract<SimEvent, { type: 'break' }>, reduced: boolean): void {
-    const flyer = this.add.image(event.x, event.y, targetKey(event.shapeId as string)).setScale(TARGET.scale).setRotation(event.angle).setDepth(58);
-    if (reduced) {
-      this.tweens.add({ targets: flyer, alpha: 0, duration: 300, onComplete: () => flyer.destroy() });
-      return;
-    }
-    const direction = Math.abs(event.vx) < 0.5 ? 1 : Math.sign(event.vx);
-    const start = { x: event.x, y: event.y, angle: event.angle };
-    this.tweens.addCounter({
-      from: 0, to: 1, duration: 1100, ease: 'Linear',
-      onUpdate: (tween) => {
-        const t = tween.getValue() ?? 0;
-        flyer.setPosition(start.x + direction * 1500 * t, start.y - 1100 * t + 500 * t * t);
-        flyer.setRotation(start.angle + direction * 14 * t);
-        flyer.setScale(TARGET.scale * (1 + 0.5 * t));
-      },
-      onComplete: () => flyer.destroy(),
-    });
   }
 
   private popup(x: number, y: number, text: string, color: number): void {

@@ -50,6 +50,22 @@ export const TARGET = {
   score: 5000,
 } as const;
 
+/**
+ * Knock-out: when a 四十塊's durability runs out (the moment a crystal used to shatter), it is kicked
+ * away from whatever hit it and keeps flying under real physics, no longer colliding, until it leaves the world.
+ */
+export const KNOCKOUT = {
+  minSpeed: 15,
+  maxSpeed: 24,
+  /** Extra kick per point of impact strength. */
+  speedPerStrength: 0.3,
+  /** The kick always has at least this upward share, so it pops up and out. */
+  minLift: 0.7,
+  spin: 0.32,
+  /** Safety net: remove a knocked-out body after this long even if it is still on screen. */
+  maxSteps: steps(5),
+} as const;
+
 export const SLING = {
   x: 420,
   y: 690,

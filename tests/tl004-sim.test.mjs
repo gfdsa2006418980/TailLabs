@@ -128,6 +128,29 @@ test('no sleeping block is left hanging after a hit', () => {
   }
 });
 
+test('a knocked-out 四十塊 flies off under physics, scored once, without touching anything', () => {
+  const sim = createSim();
+  sim.launch(...Object.values(shot(-0.45, 0.85)));
+  let ko;
+  for (let i = 0; i < 600 && !ko; i++) ko = sim.step().find((event) => event.type === 'break' && event.kind === 'target');
+  assert.ok(ko, 'the test shot should knock one out');
+  assert.equal(ko.points, 5000);
+  const piece = sim.pieces.get(ko.id);
+  assert.ok(piece, 'the body stays in the world while it flies');
+  assert.equal(piece.body.collisionFilter.mask, 0);
+  const start = { ...piece.body.position }, angle = piece.body.angle;
+  for (let i = 0; i < 20; i++) sim.step();
+  assert.ok(piece.body.position.y < start.y - 50, 'kicked upward');
+  assert.ok(Math.abs(piece.body.position.x - start.x) > 50, 'kicked sideways');
+  assert.ok(Math.abs(piece.body.angle - angle) > 1, 'spinning');
+  const scoreAfterKo = sim.score.total, left = sim.targetsLeft;
+  for (let i = 0; i < 400 && sim.pieces.has(ko.id); i++) assert.ok(!sim.step().some((event) => event.type === 'break' && event.id === ko.id), 'never scored twice');
+  assert.equal(sim.pieces.has(ko.id), false, 'removed once it leaves the world');
+  assert.ok(sim.score.total >= scoreAfterKo);
+  assert.ok(sim.targetsLeft <= left);
+  sim.destroy();
+});
+
 test('the first level stays easy: wood only, and most reasonable shots hit something', () => {
   assert.ok(testTower.blocks.every((block) => block.material === 'wood' || block.material === 'target'));
   let total = 0, hits = 0;

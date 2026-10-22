@@ -1,6 +1,6 @@
 import { MATERIALS } from '../config/Materials.ts';
 import type { MaterialId } from '../config/Materials.ts';
-import { ATTACKER, PHYSICS, SHOT, SLING, STEP_MS, TARGET, WORLD } from '../config/Tuning.ts';
+import { ATTACKER, KNOCKOUT, PHYSICS, SHOT, SLING, STEP_MS, TARGET, WORLD } from '../config/Tuning.ts';
 import { damageFrom, impactStrength } from '../rules/Damage.ts';
 import { ScoreBook, starsFor } from '../rules/Scoring.ts';
 import { validateLevel } from './Level.ts';
@@ -22,6 +22,7 @@ export interface SimBody {
   isStatic: boolean;
   isSleeping: boolean;
   bounds: { min: Point; max: Point };
+  collisionFilter: { category: number; mask: number; group: number };
 }
 
 export interface SimEngine {
@@ -52,6 +53,7 @@ export interface MatterKit {
   Body: {
     setInertia(body: SimBody, inertia: number): void;
     setVelocity(body: SimBody, velocity: Point): void;
+    setAngularVelocity(body: SimBody, velocity: number): void;
     setAngle(body: SimBody, angle: number): void;
   };
   Composite: {
@@ -83,6 +85,8 @@ export interface Piece {
   hp: number;
   maxHp: number;
   cracked: boolean;
+  /** Step at which a 四十塊 was knocked out; it then flies off without colliding. */
+  knockedOutAt?: number;
 }
 
 export type Phase = 'aiming' | 'flying' | 'won' | 'lost';
@@ -315,11 +319,16 @@ export class BattleSim {
   }
 
   private applyImpacts(events: SimEvent[]): void {
+    /** Strongest hit each 四十塊 took this step, used to aim its knock-out kick. */
+    const strongest = new Map<number, { strength: number; from: SimBody; point: Point }>();
     for (const impact of this.impacts.values()) {
       const pa = this.pieces.get(impact.a.id), pb = this.pieces.get(impact.b.id);
       for (const piece of [pa, pb]) {
-        if (!piece || piece.kind === 'attacker' || !piece.material) continue;
+        if (!piece || piece.kind === 'attacker' || !piece.material || piece.knockedOutAt !== undefined) continue;
         piece.hp -= damageFrom(impact.strength, MATERIALS[piece.material]);
+        if (piece.kind === 'target' && (strongest.get(piece.id)?.strength ?? -1) < impact.strength) {
+          strongest.set(piece.id, { strength: impact.strength, from: piece === pa ? impact.b : impact.a, point: impact.point });
+        }
         if (!piece.cracked && piece.hp > 0 && piece.hp <= piece.maxHp / 2) {
           piece.cracked = true;
           events.push({ type: 'cracked', id: piece.id });
@@ -334,20 +343,51 @@ export class BattleSim {
       }
     }
     for (const piece of [...this.pieces.values()]) {
-      if (piece.kind !== 'attacker' && piece.hp <= 0) this.removePiece(piece, events);
+      if (piece.kind === 'attacker' || piece.knockedOutAt !== undefined || piece.hp > 0) continue;
+      if (piece.kind === 'target') this.knockOut(piece, strongest.get(piece.id), events);
+      else this.removePiece(piece, events);
     }
+  }
+
+  /**
+   * A 四十塊 is out: score it now, then kick it away from what hit it (always upward) and let physics carry it
+   * off screen. It stops colliding, so the flight never disturbs the tower.
+   */
+  private knockOut(piece: Piece, hit: { strength: number; from: SimBody; point: Point } | undefined, events: SimEvent[]): void {
+    const { body } = piece;
+    piece.knockedOutAt = this.stepCount;
+    this.targetsLeft--;
+    const points = this.scoring && this.phase !== 'won' && this.phase !== 'lost' ? this.score.addBreak(MATERIALS.target.score, this.stepCount) : 0;
+    events.push({ type: 'break', id: piece.id, kind: 'target', material: 'target', shapeId: piece.shapeId, x: body.position.x, y: body.position.y, angle: body.angle, vx: body.velocity.x, points });
+    this.wakeAround(body);
+    body.collisionFilter.mask = 0;
+    for (const part of body.parts) part.collisionFilter.mask = 0;
+    this.kit.Sleeping.set(body, false);
+    const source = hit ? (hit.from.isStatic ? hit.point : hit.from.position) : { x: body.position.x - 1, y: body.position.y + 1 };
+    let dx = body.position.x - source.x, dy = body.position.y - source.y;
+    const length = Math.hypot(dx, dy) || 1;
+    dx /= length; dy /= length;
+    if (Math.abs(dx) < 0.2) dx = dx < 0 ? -0.6 : 0.6;
+    if (dy > -KNOCKOUT.minLift) dy = -KNOCKOUT.minLift;
+    const norm = Math.hypot(dx, dy);
+    const speed = Math.min(KNOCKOUT.maxSpeed, KNOCKOUT.minSpeed + (hit?.strength ?? 0) * KNOCKOUT.speedPerStrength);
+    this.kit.Body.setVelocity(body, { x: (dx / norm) * speed, y: (dy / norm) * speed });
+    this.kit.Body.setAngularVelocity(body, Math.sign(dx) * KNOCKOUT.spin);
   }
 
   private removeLost(events: SimEvent[]): void {
     for (const piece of [...this.pieces.values()]) {
       const { x, y } = piece.body.position;
-      if (y > WORLD.killY || x < WORLD.minX || x > WORLD.maxX) this.removePiece(piece, events);
+      const expired = piece.knockedOutAt !== undefined && this.stepCount - piece.knockedOutAt > KNOCKOUT.maxSteps;
+      if (expired || y > WORLD.killY || x < WORLD.minX || x > WORLD.maxX) this.removePiece(piece, events);
     }
   }
 
   private removePiece(piece: Piece, events: SimEvent[]): void {
     this.kit.Composite.remove(this.engine.world, piece.body);
     this.pieces.delete(piece.id);
+    // A knocked-out 四十塊 was already scored and no longer touches anything.
+    if (piece.knockedOutAt !== undefined) return;
     this.wakeAround(piece.body);
     if (piece.kind === 'attacker') {
       if (piece.id === this.activeAttackerId) this.activeHasImpacted = true;
@@ -365,7 +405,7 @@ export class BattleSim {
     const margin = 14;
     const { min, max } = body.bounds;
     for (const other of this.pieces.values()) {
-      if (!other.body.isSleeping) continue;
+      if (!other.body.isSleeping || other.knockedOutAt !== undefined) continue;
       const b = other.body.bounds;
       if (b.max.x < min.x - margin || b.min.x > max.x + margin || b.max.y < min.y - margin || b.min.y > max.y + margin) continue;
       this.kit.Sleeping.set(other.body, false);
@@ -384,7 +424,8 @@ export class BattleSim {
   private isQuiet(): boolean {
     for (const piece of this.pieces.values()) {
       const body = piece.body;
-      if (body.isSleeping) continue;
+      // A knocked-out 四十塊 flying away does not hold up the next shot.
+      if (body.isSleeping || piece.knockedOutAt !== undefined) continue;
       if (body.speed >= SHOT.quietSpeed || body.angularSpeed >= SHOT.quietAngularSpeed) return false;
     }
     return true;
