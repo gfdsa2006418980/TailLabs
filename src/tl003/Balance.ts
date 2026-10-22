@@ -154,3 +154,15 @@ export const cardScale = (level: number) => Math.max(CARD_SCALE_FLOOR, CARD_SCAL
 /** Synergy cards join the pool from this tactical level, evolutions from the next: payoffs for runs that last, not first-run lottery tickets. */
 export const SYNERGY_MIN_LEVEL = 10;
 export const EVOLUTION_MIN_LEVEL = 20;
+
+/**
+ * Per-build tuning (2026-10-23 auto-balance): a damage multiplier per mercenary kind (its auto attacks)
+ * and per throwable (its damage). The balance loop raises any that trail the strongest by more than 15%,
+ * 5% a round, at most +30% in all. Kept as plain objects so the balance tool can try values in-process.
+ */
+export const MERC_TUNING: Record<string, number> = {
+  rifle: 1, gunner: 1, sniper: 1, flame: 1, cryo: 1, tesla: 1, grenadier: 1, chemist: 1, engineer: 1, signal: 1,
+};
+export const SKILL_TUNING: Record<string, number> = {
+  grenade: 1, molotov: 1, laser: 1, cryobomb: 1, gas: 1, mortar: 1, emp: 1, strafe: 1, snipe: 1, minefield: 1,
+};

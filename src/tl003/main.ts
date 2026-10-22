@@ -497,10 +497,13 @@ function toggleMute() {
   saveAudioPreferences(audioPreferences, storage); syncVolume(); audio.play('pick');
 }
 el('mute').onclick = toggleMute;
-// Game speed ×1 / ×2: only battle time runs faster; camera, UI motion and coins keep real time.
-let gameSpeed = readFlag(SPEED_KEY) === '2' ? 2 : 1;
-function syncSpeed() { const b = el('speed'); b.textContent = `×${gameSpeed}`; b.setAttribute('aria-pressed', String(gameSpeed === 2)); b.classList.toggle('fast', gameSpeed === 2); }
-el('speed').onclick = () => { gameSpeed = gameSpeed === 2 ? 1 : 2; writeFlag(SPEED_KEY, String(gameSpeed)); syncSpeed(); pop(el('speed'), 1.2, 180); audio.play('pick'); };
+// Game speed: only battle time runs faster; camera, UI motion and coins keep real time.
+// Players get ×1 / ×2. ×16 is for testing only: the dev server, or the page opened with ?test.
+const TEST_MODE = import.meta.env.DEV || new URLSearchParams(location.search).has('test');
+const SPEEDS = TEST_MODE ? [1, 2, 16] : [1, 2];
+let gameSpeed = SPEEDS.includes(Number(readFlag(SPEED_KEY))) ? Number(readFlag(SPEED_KEY)) : 1;
+function syncSpeed() { const b = el('speed'); b.textContent = `×${gameSpeed}`; b.setAttribute('aria-pressed', String(gameSpeed > 1)); b.classList.toggle('fast', gameSpeed > 1); }
+el('speed').onclick = () => { gameSpeed = SPEEDS[(SPEEDS.indexOf(gameSpeed) + 1) % SPEEDS.length]!; writeFlag(SPEED_KEY, String(gameSpeed)); syncSpeed(); pop(el('speed'), 1.2, 180); audio.play('pick'); };
 syncSpeed();
 // Browsers only allow audio after a user gesture; any tap or key unlocks it.
 for (const type of ['pointerdown', 'keydown'] as const) document.addEventListener(type, () => audio.unlock(), { capture: true });

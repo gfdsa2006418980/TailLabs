@@ -181,7 +181,7 @@ export class DefenseRun {
   private get squadScale() { return this.cores.has('lonewolf') ? 4 : this.cores.has('uniform') ? 1.3 ** Math.max(0, this.mercenaries.length - 1) : 1; }
   private static levelScale(level: number, growth: number) { return growth ** (level - 1) * (level >= 10 ? 2 : 1) * (level >= 50 ? 3 : 1); }
   damageFor(kind: MercKind) {
-    return MERCENARIES[kind].damage * DefenseRun.levelScale(this.levels[kind], kind === 'flame' ? B.FLAME_DAMAGE_PER_LEVEL : B.MERC_DAMAGE_PER_LEVEL) * this.squadScale;
+    return MERCENARIES[kind].damage * DefenseRun.levelScale(this.levels[kind], kind === 'flame' ? B.FLAME_DAMAGE_PER_LEVEL : B.MERC_DAMAGE_PER_LEVEL) * this.squadScale * (B.MERC_TUNING[kind] ?? 1);
   }
   /** The squad's reference damage: a rifle shot at the highest mercenary level. Skills and spikes scale with it. */
   get skillPower() {
@@ -641,7 +641,7 @@ export class DefenseRun {
     // Core 血債血償: every cast costs a share of the barricade, but never the last point of it.
     if (this.cores.has('bloodprice')) this.wallHealth = Math.max(Math.min(1, this.wallHealth), this.wallHealth - this.wallMaxHealth * B.BLOOD_SKILL_COST);
     const def = SKILLS[skill.id], evolution = this.evolutions[skill.id];
-    const origin = mercPosition(slot), base = this.skillPower, range = this.skillRange;
+    const origin = mercPosition(slot), base = this.skillPower * (B.SKILL_TUNING[skill.id] ?? 1), range = this.skillRange;
     const weapon = `Weapon.${skill.id}` as Tag;
     switch (skill.id) {
       case 'grenade': {
