@@ -160,9 +160,11 @@ export const EVOLUTION_MIN_LEVEL = 20;
  * and per throwable (its damage). The balance loop raises any that trail the strongest by more than 15%,
  * 5% a round, at most +30% in all. Kept as plain objects so the balance tool can try values in-process.
  */
+// Result of the 2026-10-23 loop (Lv8 tree, endless up to 25 min, 3 seeds, 6 rounds). Everyone below the sniper hit the
+// +30% limit (one more 5% step would pass it), and the gap stayed: see docs/TL003-perf-balance-2026-10-23.md.
 export const MERC_TUNING: Record<string, number> = {
-  rifle: 1, gunner: 1, sniper: 1, flame: 1, cryo: 1, tesla: 1, grenadier: 1, chemist: 1, engineer: 1, signal: 1,
+  rifle: 1, gunner: 1.2155, sniper: 1, flame: 1.2763, cryo: 1.2763, tesla: 1.2763, grenadier: 1.2763, chemist: 1.2763, engineer: 1.2763, signal: 1.2763,
 };
 export const SKILL_TUNING: Record<string, number> = {
-  grenade: 1, molotov: 1, laser: 1, cryobomb: 1, gas: 1, mortar: 1, emp: 1, strafe: 1, snipe: 1, minefield: 1,
+  grenade: 1, molotov: 1, laser: 1.2763, cryobomb: 1.2763, gas: 1, mortar: 1, emp: 1.2763, strafe: 1, snipe: 1.2763, minefield: 1.2763,
 };

@@ -276,10 +276,10 @@ test('TL003 enemy difficulty is independent of permanent player progress and sup
   a.advance(FIELD.step);b.advance(FIELD.step);near(a.enemies[0].maxHp,b.enemies[0].maxHp);near(a.enemies[0].speed,b.enemies[0].speed);
   const kinds=new Set();for(let seed=1;seed<=128;seed++){const r=new DefenseRun(Math.imul(seed,2654435761));r.start();r.elapsed=180;r.advance(FIELD.step);kinds.add(r.enemies[0].kind);}assert.equal(kinds.size,6);
 });
-test('TL003 first-run baseline (no upgrades, no skills) ends within about a minute after a handful of kills', () => {
+test('TL003 first-run baseline (no upgrades, no skills) ends before the first boss after a handful of kills', () => {
   const runs=Array.from({length:128},(_,i)=>simulate(Math.imul(i+1,2654435761)));
   // Recruit cards are free since 2026-10-23, so even a no-play run fields a squad; it still never reaches the first boss.
-  assert.ok(runs.every(r=>r.phase==='over'&&r.elapsed>=20&&r.elapsed<=90), runs.map(r=>r.elapsed.toFixed(0)).join());
+  assert.ok(runs.every(r=>r.phase==='over'&&r.elapsed>=20&&r.elapsed<B.BOSS_FIRST_SECONDS), runs.map(r=>r.elapsed.toFixed(0)).join());
   const mean=runs.reduce((sum,r)=>sum+r.kills,0)/runs.length;assert.ok(mean>=4&&mean<=20,`mean kills ${mean}`);
 });
 test('TL003 aimed active skill can improve a first run without scripted death or a kill cap', () => {

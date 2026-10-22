@@ -3,10 +3,11 @@ import assert from 'node:assert/strict';
 import { advanceBurn, applyBurn, burnSpeed, MAX_FLAMMABILITY } from '../src/tl003/Burn.ts';
 import { DefenseRun, FIELD , freshStatus } from '../src/tl003/Run.ts';
 import { CARDS, MERCENARIES } from '../src/tl003/Content.ts';
+import { MERC_TUNING } from '../src/tl003/Balance.ts';
 
 // Flamer auto-attack burn power and the Molotov's power (3× the flamer's damage).
 // The flamer's own burn (F) and the Molotov's (3 × the squad's reference shot), which is stronger.
-const F=MERCENARIES.flame.damage,M=3*MERCENARIES.rifle.damage;
+const F=MERCENARIES.flame.damage*MERC_TUNING.flame,M=3*MERCENARIES.rifle.damage;
 
 const near=(a,b)=>assert.ok(Math.abs(a-b)<1e-7,`${a} != ${b}`);
 const state=()=>({burnPower:0,burnDuration:0,burnFlammability:0});
