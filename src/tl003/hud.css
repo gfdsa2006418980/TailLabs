@@ -81,12 +81,12 @@ body { background: #050607 }
 /* ---------- bottom thumb bar ---------- */
 .hud-bottom {
   position: absolute; z-index: 2; left: 0; right: 0; bottom: 0;
-  display: grid; grid-template-columns: 52px 1fr 52px; align-items: end; gap: 6px;
-  padding: 0 8px calc(var(--safe-bottom) + 10px);
+  display: grid; grid-template-columns: 56px 1fr 56px; align-items: end; gap: 6px;
+  padding: 0 8px max(calc(var(--safe-bottom) + 14px), 24px);
   background: linear-gradient(transparent, #050607b0 45%); padding-top: 26px;
 }
 .squad { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; justify-items: center }
-.unit { display: grid; justify-items: center; gap: 5px; width: 100%; max-width: 92px }
+.unit { display: grid; justify-items: center; gap: 8px; width: 100%; max-width: 96px }
 .orb {
   position: relative; width: 66px; height: 66px; padding: 0; display: grid; place-items: center;
   background: #0b0d0ee6; clip-path: polygon(8px 0, calc(100% - 8px) 0, 100% 8px, 100% calc(100% - 8px), calc(100% - 8px) 100%, 8px 100%, 0 calc(100% - 8px), 0 8px);
@@ -113,12 +113,13 @@ body { background: #050607 }
 .unit.locked .orb-portrait { opacity: .35; filter: grayscale(1) }
 .unit.locked .orb:enabled .orb-portrait { opacity: 1; filter: none; animation: recruit-bob .9s var(--ease-out) infinite alternate }
 @keyframes recruit-bob { to { transform: translateY(-3px) } }
-.chip { display: flex; align-items: center; justify-content: center; gap: 3px; width: 66px; height: 24px; padding: 0 4px; font: 700 12px/1 Consolas, monospace; color: var(--gold); background: #1d2722ee; white-space: nowrap }
+.chip { display: flex; align-items: center; justify-content: center; gap: 4px; width: 100%; max-width: 84px; height: 44px; padding: 0 4px; font: 700 15px/1 Consolas, monospace; color: var(--gold); background: #1d2722ee; white-space: nowrap }
 .chip:disabled { color: #7d8778; background: #0b0d0ecc; filter: none; box-shadow: inset 0 0 0 2px #ffffff10 }
-.chip-sign { color: var(--bone); font-size: 10px }
+.chip-sign { color: var(--bone); font-size: 12px }
+.chip .px-icon { --px: 1.5px !important }
 .chip:enabled .chip-sign { color: #bfdc8a }
-.side-action { display: grid; justify-items: center; gap: 3px; width: 52px; padding: 7px 0 5px; background: #0b0d0ee6 }
-.side-action .cost { display: flex; align-items: center; gap: 2px; font: 700 11px/1 Consolas, monospace; color: var(--gold) }
+.side-action { display: grid; justify-items: center; align-content: center; gap: 4px; width: 56px; min-height: 66px; padding: 8px 0 6px; background: #0b0d0ee6 }
+.side-action .cost { display: flex; align-items: center; gap: 2px; font: 700 13px/1 Consolas, monospace; color: var(--gold) }
 .side-action:disabled { filter: none; opacity: .55 }
 .side-action:disabled .cost { color: #7d8778 }
 
@@ -162,13 +163,15 @@ dialog[open]::backdrop { animation: fade-in .25s ease-out both }
   .side-action { width: 44px }
   .orb { width: 58px; height: 58px }
   .orb .px-icon { --px: 2.5px !important }
-  .chip { width: 58px }
+  .chip { font-size: 13px; gap: 2px }
 }
 @media (max-height: 600px) {
   .orb { width: 54px; height: 54px }
   .orb .px-icon { --px: 2px !important }
-  .chip { height: 20px }
-  .hud-bottom { padding-top: 14px }
+  .chip { height: 36px }
+  .unit { gap: 6px }
+  .side-action { min-height: 56px }
+  .hud-bottom { padding-top: 14px; padding-bottom: max(calc(var(--safe-bottom) + 10px), 16px) }
   .toast b { font-size: 34px }
 }
 html.reduce-motion *, html.reduce-motion *::before, html.reduce-motion *::after { animation-duration: .01ms !important; animation-delay: 0s !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important }
