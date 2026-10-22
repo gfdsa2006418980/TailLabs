@@ -22,6 +22,13 @@ export function formatTime(milliseconds: number): string {
 }
 interface UIActions { start: (target: number) => void; restart: () => void; pause: (paused: boolean) => void; }
 
+/** Share of a range slider that is filled, read by the theme's track gradient (--range-fill). */
+function fillRange(slider: HTMLInputElement): void {
+  const min = Number(slider.min) || 0, max = Number(slider.max) || 100, value = Number(slider.value);
+  const fill = max > min && Number.isFinite(value) ? Math.max(0, Math.min(100, ((value - min) / (max - min)) * 100)) : 0;
+  slider.style.setProperty('--range-fill', `${fill}%`);
+}
+
 export class GameUI {
   private readonly tutorial = element<HTMLDialogElement>('tutorial-dialog');
   private readonly result = element<HTMLDialogElement>('result-dialog');
@@ -90,8 +97,8 @@ export class GameUI {
       const pointer = event as MouseEvent, bounds = this.settings.getBoundingClientRect();
       if (pointer.clientX < bounds.left || pointer.clientX > bounds.right || pointer.clientY < bounds.top || pointer.clientY > bounds.bottom) this.closeSettings();
     });
-    this.listen('music-volume', 'input', (event) => audioPreferences.setVolume('music', Number((event.currentTarget as HTMLInputElement).value)));
-    this.listen('effects-volume', 'input', (event) => audioPreferences.setVolume('effects', Number((event.currentTarget as HTMLInputElement).value)));
+    this.listen('music-volume', 'input', (event) => { const slider = event.currentTarget as HTMLInputElement; fillRange(slider); audioPreferences.setVolume('music', Number(slider.value)); });
+    this.listen('effects-volume', 'input', (event) => { const slider = event.currentTarget as HTMLInputElement; fillRange(slider); audioPreferences.setVolume('effects', Number(slider.value)); });
     this.listen('music-toggle', 'click', () => audioPreferences.setMuted('music', !audioPreferences.get().musicMuted));
     this.listen('effects-toggle', 'click', () => audioPreferences.setMuted('effects', !audioPreferences.get().effectsMuted));
     document.addEventListener('click', this.onButtonClick);
@@ -156,6 +163,8 @@ export class GameUI {
     const effectsVolume = element<HTMLInputElement>('effects-volume');
     musicVolume.value = String(state.musicVolume);
     effectsVolume.value = String(state.effectsVolume);
+    fillRange(musicVolume);
+    fillRange(effectsVolume);
     const musicToggle = element<HTMLButtonElement>('music-toggle');
     musicToggle.textContent = t(state.musicMuted ? 'unmute' : 'mute');
     musicToggle.setAttribute('aria-pressed', String(state.musicMuted));

@@ -4,6 +4,7 @@ import { showStartupError } from './ui/controls';
 import { t } from './ui/i18n';
 import './style.css';
 import './ui/leaderboard.css';
+import './ui/theme.css';
 
 let game: Phaser.Game;
 try {

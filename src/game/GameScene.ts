@@ -19,7 +19,7 @@ import { PlayClock } from '../systems/PlayClock';
 import { canRescue, RescueSystem } from '../systems/RescueSystem';
 
 const INK = THEME.ink;
-const FONT = '"Segoe UI", "Microsoft JhengHei", sans-serif';
+const FONT = '"Zen Maru Gothic", "Hiragino Maru Gothic ProN", "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", sans-serif';
 
 export class GameScene extends Phaser.Scene {
   private spawner!: SpawnSystem;
@@ -580,8 +580,11 @@ export class GameScene extends Phaser.Scene {
     const previewLeft = previewRight - previewWidth;
     const previewTop = this.layout.chamberTop + 48;
     const previewCenter = previewLeft + previewWidth / 2;
-    art.fillStyle(THEME.blush, 0.7).fillRoundedRect(previewLeft, previewTop, previewWidth, previewHeight, 12);
-    this.nextLabel = label(previewCenter, previewTop + 9, t('next'), 14).setOrigin(0.5, 0).setStyle({ fontStyle: 'bold', align: 'center' });
+    // Storybook card (same look as the HUD): white fill, ink outline and a solid drop shadow.
+    art.fillStyle(THEME.ink, 1).fillRoundedRect(previewLeft, previewTop + 3, previewWidth, previewHeight, 16);
+    art.fillStyle(0xffffff, 1).fillRoundedRect(previewLeft, previewTop, previewWidth, previewHeight, 16);
+    art.lineStyle(3, THEME.ink, 1).strokeRoundedRect(previewLeft + 1.5, previewTop + 1.5, previewWidth - 3, previewHeight - 3, 15);
+    this.nextLabel = label(previewCenter, previewTop + 9, t('next'), 14, themeCss(THEME.accentDark)).setOrigin(0.5, 0).setStyle({ fontStyle: 'bold', align: 'center' });
     this.nextImage = this.add.image(previewCenter, previewTop + 58, 'serpentela-w50-01').setDisplaySize(38.25, 38.25); parent.add(this.nextImage);
     // Graphics commands otherwise rebuild and triangulate all 504 dots every frame.
     const backgroundKey = 'chamber-background-' + this.layout.width + 'x' + this.layout.height;

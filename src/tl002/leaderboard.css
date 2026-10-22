@@ -1,33 +1,37 @@
-.runner-name-form { margin: -8px 0 14px; text-align: left; }
-.runner-name-form label { display: block; margin-bottom: 6px; color: var(--muted); font-size: 11px; }
-.runner-name-row { display: flex; gap: 7px; }
+/* Name entry and leaderboard period/pages, in the storybook style of style.css. */
+.runner-name-form { margin: -4px 0 14px; text-align: left; }
+.runner-name-form label { display: block; margin-bottom: 6px; color: var(--rose-brown); font-size: 13px; font-weight: 800; }
+.runner-name-row { display: flex; gap: 8px; }
 .runner-name-row input {
-  width: 100%; min-width: 0; padding: 9px 10px;
-  border: 1px solid var(--line); border-radius: 8px;
-  background: #fffef9; color: var(--ink); font: inherit; font-size: 13px;
+  width: 100%; min-width: 0; min-height: 44px; padding: 8px 12px;
+  border: 3px solid var(--ink); border-radius: 14px;
+  background: #fff; color: var(--ink); font: inherit; font-size: 15px; font-weight: 700;
 }
+.runner-name-row input:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
 .runner-name-row button {
-  flex-shrink: 0; padding: 8px 10px;
-  border: 1px solid var(--button-rose-line, var(--line)); border-radius: 8px;
-  background: var(--button-rose-soft, #eeefe5); color: var(--button-rose, var(--ink)); font-size: 11px;
+  flex-shrink: 0; min-height: 44px; padding: 8px 14px;
+  border: 3px solid var(--ink); border-radius: 999px;
+  background: var(--paper); color: var(--ink); font-size: 14px; font-weight: 900;
+  box-shadow: 0 3px 0 var(--ink);
 }
-.runner-name-form > small { display: block; min-height: 14px; margin-top: 5px; color: var(--muted); font-size: 10px; line-height: 1.4; }
-.board-dialog .ranking-tabs { display: flex; flex-shrink: 0; gap: 6px; margin: 0 0 8px; }
+.runner-name-row button:active { transform: translateY(2px); box-shadow: 0 1px 0 var(--ink); }
+.runner-name-form > small { display: block; min-height: 14px; margin-top: 5px; color: var(--rose-brown); font-size: 12px; font-weight: 700; line-height: 1.4; }
+.board-dialog .ranking-tabs { display: flex; flex-shrink: 0; gap: 0; margin: 0 0 8px; border: 3px solid var(--ink); border-radius: 999px; background: var(--paper); overflow: hidden; }
 .board-dialog .ranking-tabs button {
-  flex: 1; min-height: 44px; padding: 8px 10px;
-  border: 1px solid var(--button-rose-line, var(--line)); border-radius: 8px;
-  background: var(--button-rose-soft, #eeefe5); color: var(--button-rose, var(--ink)); font-size: 13px;
+  flex: 1; min-height: 42px; padding: 6px 10px;
+  border: 0; border-radius: 0;
+  background: transparent; color: var(--ink); font-size: 15px; font-weight: 800;
 }
-.board-dialog .ranking-tabs button[aria-pressed="true"] {
-  background: var(--button-rose-fill, var(--ink)); color: #fffef8; font-weight: 650;
-  box-shadow: inset 0 0 0 1px var(--button-rose-line, var(--line));
-}
-.board-dialog .ranking-period-note { flex-shrink: 0; margin: 0 0 12px; color: var(--muted); font-size: 10px; line-height: 1.6; }
+.board-dialog .ranking-tabs button + button { border-left: 3px solid var(--ink); }
+.board-dialog .ranking-tabs button[aria-pressed="true"] { background: var(--rose); color: var(--cream); font-weight: 900; text-shadow: 0 1px 0 var(--rose-brown); }
+.board-dialog .ranking-period-note { flex-shrink: 0; margin: 0 0 12px; color: var(--rose-brown); font-size: 12px; font-weight: 700; line-height: 1.6; text-align: center; }
 .board-dialog .ranking-pagination { display: flex; flex-shrink: 0; align-items: center; justify-content: space-between; gap: 8px; margin-top: 14px; }
 .board-dialog .ranking-pagination button {
-  min-height: 44px; padding: 8px 12px;
-  border: 1px solid var(--button-rose-line, var(--line)); border-radius: 8px;
-  background: var(--button-rose-soft, #eeefe5); color: var(--button-rose, var(--ink)); font-size: 12px;
+  min-height: 44px; padding: 6px 16px;
+  border: 3px solid var(--ink); border-radius: 999px;
+  background: var(--paper); color: var(--ink); font-size: 14px; font-weight: 900;
+  box-shadow: 0 3px 0 var(--ink);
 }
-.board-dialog .ranking-pagination button:disabled { opacity: .4; cursor: default; }
-.board-dialog .ranking-pagination span { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.board-dialog .ranking-pagination button:active:not(:disabled) { transform: translateY(2px); box-shadow: 0 1px 0 var(--ink); }
+.board-dialog .ranking-pagination button:disabled { opacity: .35; cursor: default; box-shadow: none; }
+.board-dialog .ranking-pagination span { color: var(--rose-brown); font-size: 14px; font-weight: 800; font-variant-numeric: tabular-nums; white-space: nowrap; }
