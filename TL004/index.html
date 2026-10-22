@@ -35,20 +35,26 @@
           <button id="resume-button" class="primary-button" type="button">繼續</button>
           <button id="restart-button" class="secondary-button" type="button">重新開始 <span aria-hidden="true">↻</span></button>
           <button id="menu-select-button" class="secondary-button" type="button">選擇關卡</button>
-          <button id="partners-button" class="secondary-button" type="button">夥伴介紹</button>
+          <button id="partners-button" class="secondary-button" type="button">蛇貂好朋友介紹</button>
           <button id="sound-button" class="secondary-button" type="button" aria-pressed="false">音效:開</button>
+          <button id="credits-button" class="secondary-button" type="button">開發名單</button>
         </div>
       </section>
 
+      <section id="credits-panel" class="panel credits-panel" aria-labelledby="credits-title" hidden>
+        <h2 id="credits-title">開發名單</h2>
+        <dl id="credits-list" class="credits-list"></dl>
+        <button id="credits-back" class="primary-button" type="button">返回</button>
+      </section>
+
       <section id="partners-panel" class="panel partners-panel" aria-labelledby="partners-title" hidden>
-        <h2 id="partners-title">夥伴介紹</h2>
+        <h2 id="partners-title">蛇貂好朋友介紹</h2>
         <p class="hint">夥伴飛在空中時點一下畫面就能發動能力;撞到東西後的 1 秒內也還來得及。</p>
         <ul id="partner-list" class="partner-list"></ul>
         <button id="partners-back" class="primary-button" type="button">返回</button>
       </section>
 
       <section id="start-panel" class="panel start-panel" aria-labelledby="start-title">
-        <p class="eyebrow">TAIL LABS · TL004 · 手感原型</p>
         <h1 id="start-title">爆打四十塊</h1>
         <p class="lead">四十塊逃家了還亂跑！快來爆打他！</p>
         <button id="start-button" class="primary-button" type="button">開始 <span aria-hidden="true">→</span></button>

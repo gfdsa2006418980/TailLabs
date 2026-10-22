@@ -4,6 +4,7 @@ import attackerData from './data/attackers.generated.json';
 import levelData from './levels/levels.json';
 import { PHYSICS, VIEW } from './config/Tuning.ts';
 import { ABILITY_INFO, PARTNER_ABILITY } from './config/Abilities.ts';
+import { CREDITS, OWNERS, SISHIKUAI } from './config/Credits.ts';
 import { Sfx } from './audio/Sfx.ts';
 import { Progress } from './rules/Progress.ts';
 import type { KeyValueStore } from './rules/Progress.ts';
@@ -52,6 +53,10 @@ const partnersButton = element<HTMLButtonElement>('partners-button');
 const partnersPanel = element('partners-panel');
 const partnersBack = element<HTMLButtonElement>('partners-back');
 const partnerList = element<HTMLUListElement>('partner-list');
+const creditsButton = element<HTMLButtonElement>('credits-button');
+const creditsPanel = element('credits-panel');
+const creditsList = element<HTMLDListElement>('credits-list');
+const creditsBack = element<HTMLButtonElement>('credits-back');
 const abilityHint = element<HTMLButtonElement>('ability-hint');
 const abilityName = element('ability-name');
 
@@ -146,7 +151,10 @@ if (platform.inApp) {
   installHint.textContent = '建議用 Safari 或 Chrome 開啟:點右上角「⋯」→「用瀏覽器開啟」,畫面會更大。';
   installHint.hidden = false;
 } else if (platform.iOS && !platform.standalone) {
-  installHint.textContent = 'iPhone 去掉網址列:點 Safari 的「分享」(iOS 26 起在「⋯」裡)→「加入主畫面」,再從主畫面開啟。';
+  // Draw Safari's share button (a box with an arrow out of the top) so players can spot it.
+  const shareIcon = '<svg class="share-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'
+    + '<path d="M8.5 9.5H7a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-8a2 2 0 0 0-2-2h-1.5"/><path d="M12 2.5v12"/><path d="M8.5 6 12 2.5 15.5 6"/></svg>';
+  installHint.innerHTML = `iPhone 去掉網址列:點 Safari 的「${shareIcon}分享」(iOS 26 起在「⋯」裡)→「加入主畫面」,再從主畫面開啟。`;
   installHint.hidden = false;
 }
 
@@ -209,7 +217,7 @@ function openSelect(from: SelectReturn): void {
   renderLevelGrid();
   startPanel.hidden = true;
   menuPanel.hidden = true;
-  partnersPanel.hidden = true;
+  partnersPanel.hidden = true; creditsPanel.hidden = true;
   resultPanel.hidden = true;
   selectPanel.hidden = false;
   updatePause();
@@ -239,7 +247,7 @@ function playLevel(index: number): void {
   clearResult();
   menuOpen = false;
   menuPanel.hidden = true;
-  partnersPanel.hidden = true;
+  partnersPanel.hidden = true; creditsPanel.hidden = true;
   selectOpen = false;
   selectPanel.hidden = true;
   startPanel.hidden = true;
@@ -281,7 +289,7 @@ menuSelectButton.addEventListener('click', () => { menuOpen = false; menuPanel.h
 nextButton.addEventListener('click', () => { sfx.unlock(); scene.next(); });
 
 // Keyboard play uses Space/Enter: drop focus from HUD buttons after a click so those keys never press them again.
-for (const button of [startButton, restartButton, retryButton, nextButton, soundButton, menuButton, resumeButton, partnersButton, partnersBack, abilityHint, nextLevelButton, resultSelectButton, menuSelectButton, selectBack]) {
+for (const button of [startButton, restartButton, retryButton, nextButton, soundButton, menuButton, resumeButton, partnersButton, partnersBack, creditsButton, creditsBack, abilityHint, nextLevelButton, resultSelectButton, menuSelectButton, selectBack]) {
   button.addEventListener('click', () => button.blur());
 }
 
@@ -294,25 +302,40 @@ soundButton.addEventListener('click', () => {
 
 abilityHint.addEventListener('click', () => { sfx.unlock(); scene.useAbility(); });
 
-// Partner intro, built from the same data the game uses.
-partnerList.replaceChildren(...attackerData.definitions.map((partner) => {
-  const ability = ABILITY_INFO[PARTNER_ABILITY[partner.id]];
+// Partner intro (蛇貂好朋友介紹), built from the same data the game uses, plus 四十塊 itself at the end.
+function partnerCard(id: string, imageUrl: string, nameText: string, roleText: string, descriptionText: string): HTMLLIElement {
   const item = document.createElement('li');
   const image = document.createElement('img');
-  image.src = attackerUrl(partner.id); image.alt = ''; image.width = 64; image.height = 64;
+  image.src = imageUrl; image.alt = ''; image.width = 64; image.height = 64;
   const text = document.createElement('div');
-  const name = document.createElement('h3'); name.textContent = partner.name;
-  const abilityLine = document.createElement('p'); abilityLine.className = 'ability-name'; abilityLine.textContent = ability.name;
-  const description = document.createElement('p'); description.textContent = ability.description;
-  text.append(name, abilityLine, description);
+  const name = document.createElement('h3'); name.textContent = nameText;
+  const role = document.createElement('p'); role.className = 'ability-name'; role.textContent = roleText;
+  const description = document.createElement('p'); description.textContent = descriptionText;
+  text.append(name, role, description);
+  const owner = OWNERS[id];
+  if (owner) { const line = document.createElement('p'); line.className = 'owner'; line.textContent = `飼主:${owner}`; text.append(line); }
   item.append(image, text);
   return item;
+}
+partnerList.replaceChildren(
+  ...attackerData.definitions.map((partner) => {
+    const ability = ABILITY_INFO[PARTNER_ABILITY[partner.id]];
+    return partnerCard(partner.id, attackerUrl(partner.id), partner.name, ability.name, ability.description);
+  }),
+  partnerCard(SISHIKUAI.id, targetUrl(SISHIKUAI.art), SISHIKUAI.name, SISHIKUAI.role, SISHIKUAI.description),
+);
+
+// 開發名單.
+creditsList.replaceChildren(...CREDITS.flatMap(({ role, names }) => {
+  const term = document.createElement('dt'); term.textContent = role;
+  const detail = document.createElement('dd'); detail.textContent = names.join('、');
+  return [term, detail];
 }));
 
 function openMenu(): void {
   menuOpen = true;
   menuPanel.hidden = false;
-  partnersPanel.hidden = true;
+  partnersPanel.hidden = true; creditsPanel.hidden = true;
   menuButton.setAttribute('aria-expanded', 'true');
   updatePause();
   resumeButton.focus();
@@ -320,7 +343,7 @@ function openMenu(): void {
 function closeMenu(): void {
   menuOpen = false;
   menuPanel.hidden = true;
-  partnersPanel.hidden = true;
+  partnersPanel.hidden = true; creditsPanel.hidden = true;
   menuButton.setAttribute('aria-expanded', 'false');
   updatePause();
 }
@@ -328,7 +351,9 @@ function closeMenu(): void {
 menuButton.addEventListener('click', () => { sfx.unlock(); if (selectOpen || resultOpen) return; if (menuOpen) closeMenu(); else openMenu(); });
 resumeButton.addEventListener('click', closeMenu);
 partnersButton.addEventListener('click', () => { menuPanel.hidden = true; partnersPanel.hidden = false; partnersBack.focus(); });
-partnersBack.addEventListener('click', () => { partnersPanel.hidden = true; menuPanel.hidden = false; resumeButton.focus(); });
+creditsButton.addEventListener('click', () => { menuPanel.hidden = true; creditsPanel.hidden = false; creditsBack.focus(); });
+creditsBack.addEventListener('click', () => { creditsPanel.hidden = true; menuPanel.hidden = false; resumeButton.focus(); });
+partnersBack.addEventListener('click', () => { partnersPanel.hidden = true; creditsPanel.hidden = true; menuPanel.hidden = false; resumeButton.focus(); });
 document.addEventListener('keydown', (event) => {
   if (event.key !== 'Escape') return;
   if (selectOpen) { closeSelect(); return; }
@@ -346,7 +371,7 @@ function showResult(result: BattleResult): void {
   if (result.won) progress.submit(level.id, result.score, result.stars);
   const hasNext = levelIndex + 1 < levels.length;
   resultLevel.textContent = `第 ${levelIndex + 1} 關 · ${level.name}`;
-  resultTitle.textContent = result.won ? (hasNext ? '四十塊被打爆了！' : '四十塊全部打爆了！全破！') : '還有四十塊在外面晃...';
+  resultTitle.textContent = result.won ? (hasNext ? '四十塊被打爆了！' : '四十塊全都被打爆了，\n恭喜通關！') : '還有四十塊在外面晃...';
   resultStarsLabel.textContent = `${result.stars} 顆星`;
   const best = progress.record(level.id)?.best ?? 0;
   resultBest.textContent = result.won && result.score > previousBest && previousBest > 0 ? '新紀錄！' : best > 0 ? `最高分 ${best.toLocaleString('zh-TW')}` : '';

@@ -185,3 +185,9 @@ test('a corrupt save is kept aside and play continues', () => {
   assert.equal(store.getItem(`${PROGRESS_KEY}.broken`), '{not json');
   assert.equal(new Progress(undefined).isUnlocked(['l1'], 0), true, 'works without storage');
 });
+
+test('every partner and 四十塊 lists its owner', async () => {
+  const { OWNERS, SISHIKUAI } = await import('../src/tl004/config/Credits.ts');
+  for (const id of [...ALL_PARTNERS, SISHIKUAI.id]) assert.ok(OWNERS[id], `${id} has no owner`);
+  assert.ok(shapes.targets.has(SISHIKUAI.art), '四十塊 card art exists');
+});

@@ -177,7 +177,7 @@ export class BattleSim {
   /** Breakthrough dash in progress until this step (破竹衝刺). */
   private dashUntil = -1;
   private dashVelocity: Point | undefined;
-  /** 吉祥大翻滾 keeps rolling until this step, in this horizontal direction. */
+  /** 捲雲翻滾 keeps rolling until this step, in this horizontal direction. */
   private rollUntil = -1;
   private rollDir = 1;
   /** Body of the partner using 辣勁彈跳 this shot. */
@@ -480,7 +480,7 @@ export class BattleSim {
     return launch && length ? { x: launch.vx / length, y: launch.vy / length } : { x: 1, y: 0 };
   }
 
-  /** 吉祥大翻滾: keep spinning and pushing forward until the roll runs out. */
+  /** 捲雲翻滾: keep spinning and pushing forward until the roll runs out. */
   private driveRoll(): void {
     if (this.stepCount >= this.rollUntil || this.activeAttackerId === undefined) return;
     const roller = this.pieces.get(this.activeAttackerId);

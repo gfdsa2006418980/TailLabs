@@ -177,7 +177,7 @@ html, body {
 
 .hint { margin: 14px 0 0; font-size: 13px; line-height: 1.5; color: var(--rose-brown); }
 
-.result-panel h2 { margin: 0; font-size: clamp(26px, 6vh, 36px); font-weight: 900; }
+.result-panel h2 { margin: 0; font-size: clamp(26px, 6vh, 36px); font-weight: 900; white-space: pre-line; line-height: 1.25; }
 .stars { display: flex; justify-content: center; gap: 10px; margin: 8px 0 4px; font-size: clamp(40px, 10vh, 60px); line-height: 1; }
 .stars span { color: color-mix(in srgb, var(--ink) 18%, transparent); -webkit-text-stroke: 3px var(--ink); }
 .stars span.lit { color: var(--gold); animation: star-in 420ms cubic-bezier(.34, 1.56, .64, 1); }
@@ -372,4 +372,29 @@ html, body {
 }
 @media (max-width: 560px) {
   .level-grid { grid-template-columns: repeat(5, 1fr); }
+}
+
+/* Safari's share button, drawn in the install hint. */
+.share-icon { display: inline-block; width: 1.3em; height: 1.3em; margin: 0 2px; vertical-align: -0.3em; color: #2f7bf5; }
+
+/* ---------- Credits, partner owners ---------- */
+.credits-panel h2 { margin: 0 0 12px; font-size: 26px; font-weight: 900; }
+.credits-list {
+  display: grid;
+  grid-template-columns: auto auto;
+  justify-content: center;
+  gap: 10px 18px;
+  margin: 0 0 18px;
+  font-size: 18px;
+  text-align: left;
+}
+.credits-list dt { font-weight: 900; color: var(--rose-brown); }
+.credits-list dd { margin: 0; font-weight: 700; }
+.partner-list .owner { margin-top: 4px; font-size: 12px; color: color-mix(in srgb, var(--ink) 60%, transparent); }
+
+/* Short landscape phones: two columns of menu buttons so all of them fit. */
+@media (max-height: 480px) {
+  .menu-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .menu-actions .primary-button { grid-column: 1 / -1; justify-self: center; }
+  .menu-actions .secondary-button { min-width: 0; }
 }

@@ -24,7 +24,7 @@ export const ABILITY_INFO: Readonly<Record<AbilityId, { name: string; descriptio
   split: { name: '三張牌分身', description: '點一下分成三張,往上中下散開,一次打到更大的範圍。' },
   bounce: { name: '辣勁彈跳', description: '點一下變得超有彈性,撞到東西會大力彈開,再去撞下一個。' },
   slam: { name: '重壓下砸', description: '點一下立刻停住,變成三倍重直直砸下,壓垮正下方的東西。' },
-  roll: { name: '吉祥大翻滾', description: '點一下縮成一團往前滾,變得很重,一路把擋在前面的東西推倒。' },
+  roll: { name: '捲雲翻滾', description: '點一下小卷就捲成一團往前滾,變得很重,一路把擋在前面的東西推倒。' },
   wave: { name: '山澗激流', description: '點一下往前沖出一道激流,把前方的木板和四十塊沖走;石頭會擋住水。' },
 };
 
