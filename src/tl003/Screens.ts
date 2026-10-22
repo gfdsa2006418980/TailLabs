@@ -16,12 +16,12 @@ export const clock = (seconds: number) => `${Math.floor(seconds / 60).toString()
 /** Category → small pixel icon shown on the card's colour band. */
 const CATEGORY_ICON: Record<string, string> = {
   動能: 'icon_el_kinetic', 火焰: 'icon_el_fire', 毒素: 'icon_el_toxin', 電能: 'icon_el_electric', 冷凍: 'icon_el_cold', 爆裂: 'icon_el_blast',
-  元素: 'icon_el_fire', 物理: 'icon_el_kinetic', 招募: 'icon_merc_rifle', 技能: 'icon_skill_grenade',
-  傭兵: 'icon_merc_rifle', 主動技能: 'icon_skill_grenade', 經濟: 'icon_money', 防守: 'icon_fortify', 連動: 'icon_star', 質變: 'icon_star', 詛咒: 'icon_wave',
+  元素: 'icon_el_fire', 物理: 'icon_el_kinetic', 招募: 'icon_merc_rifle', 投擲物: 'icon_skill_grenade',
+  傭兵: 'icon_merc_rifle', 經濟: 'icon_money', 防守: 'icon_fortify', 連動: 'icon_star', 質變: 'icon_star', 詛咒: 'icon_wave',
 };
 
 export function deployScreen(effects: PermanentEffects, talentPoints: number, bestWave: number, showTips: boolean) {
-  const tips = [['icon_money', '擊殺賺錢'], ['icon_merc_cryo', '補給招募'], ['icon_skill_grenade', '拖曳技能'], ['icon_wave', '02:00 屍王']];
+  const tips = [['icon_money', '擊殺賺錢'], ['icon_merc_cryo', '補給招募'], ['icon_skill_grenade', '拖曳投擲物'], ['icon_wave', '02:00 屍王']];
   return `<div class="screen deploy-screen">
     <div class="deploy-hero" aria-hidden="true"><span class="hero-glow"></span>${px('zombie_walker_0', 3)}${px('merc_rifle', 5)}${px('zombie_runner_1', 3)}</div>
     <h2 id="modal-title" class="logo"><span>無盡防線</span><small>THE LAST LINE</small></h2>
@@ -29,7 +29,7 @@ export function deployScreen(effects: PermanentEffects, talentPoints: number, be
     ${showTips ? `<ul class="deploy-tips">${tips.map(([icon, label]) => `<li>${px(icon, 2)}<span>${label}</span></li>`).join('')}</ul>` : ''}
     <div class="screen-actions">
       <button id="start" class="primary go">部署 <span>▶</span></button>
-      <button id="open-talents" class="camp-button">${px('icon_star', 2)}<b>指揮星圖</b>${talentPoints > 0 ? `<span class="badge">${formatNumber(talentPoints)}</span>` : '<span></span>'}</button>
+      <button id="open-talents" class="camp-button">${px('icon_star', 2)}<b>指揮藍圖</b>${talentPoints > 0 ? `<span class="badge">${formatNumber(talentPoints)}</span>` : '<span></span>'}</button>
       ${bestWave > 0 ? `<p class="best">最高 <b>W${bestWave.toString().padStart(2, '0')}</b></p>` : ''}
       <button id="replay-briefing" class="briefing-button" type="button">▶ 作戰簡報</button>
     </div>
@@ -49,7 +49,7 @@ export const cardIcon = (id: string) => {
   if ((id.startsWith('merc_') || id.startsWith('skill_')) && FRAMES['icon_' + id]) return 'icon_' + id;
   return FRAMES['icon_card_' + id] ? 'icon_card_' + id : 'icon_card_' + (ICON_ALIAS[id] ?? 'kinetic');
 };
-const KIND_TAG: Record<string, string> = { synergy: '連動', evolution: '質變', curse: '詛咒', merc: '招募', skill: '技能' };
+const KIND_TAG: Record<string, string> = { synergy: '連動', evolution: '質變', curse: '詛咒', merc: '招募', skill: '主動' };
 /** `tip`: the new-player guide's note for the first pick (HTML). */
 export function choiceScreen(level: number, cards: readonly UpgradeCard[], reroll?: { cost: number; affordable: boolean }, picks = 1, tip?: string) {
   const market = cards.length > 3 || picks > 1;

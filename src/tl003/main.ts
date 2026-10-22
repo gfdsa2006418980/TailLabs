@@ -36,7 +36,7 @@ const SLOTS = [0, 1, 2] as const;
 document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
 <main class="stage" aria-labelledby="game-title">
   <h1 id="game-title" class="sr-only">無盡防線 TL003</h1>
-  <canvas id="battlefield" aria-label="喪屍由畫面上方遠處逐漸逼近下方拒馬，傭兵在下方自動射擊。選取技能後可在戰場指定目標。" tabindex="0"></canvas>
+  <canvas id="battlefield" aria-label="喪屍由畫面上方遠處逐漸逼近下方拒馬，傭兵在下方自動射擊。選取投擲物後可在戰場指定目標。" tabindex="0"></canvas>
   <header class="hud-top">
     <div class="hud-wall" aria-label="拒馬生命">${px('icon_fortify', 2)}<div class="hp-bar"><i id="wall-chip" class="hp-chip"></i><i id="wall-fill" class="hp-fill"></i><span id="wall-value">40</span></div></div>
     <div class="hud-clock" aria-label="堅守時間"><strong id="time">00:00</strong><span id="wave">W01</span></div>
@@ -49,8 +49,8 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
   <nav class="hud-bottom" aria-label="傭兵與防守">
     <button id="repair" class="side-action" aria-label="修復拒馬">${px('icon_repair', 2)}<span class="cost">${px('icon_money', 1)}<span id="repair-cost">6</span></span></button>
     <div class="squad">${SLOTS.map(slot => `<div class="unit" id="unit-${slot}" data-slot="${slot}">
-        <button class="orb" id="skill-${slot}" aria-label="技能欄 ${slot + 1}，按住拖曳至戰場" data-key="${slot + 1}">
-          <span class="orb-ring"></span><span class="orb-face">${px('icon_skill_grenade', 3)}</span><span class="orb-empty">+</span>
+        <button class="orb" id="skill-${slot}" aria-label="主動投擲物欄 ${slot + 1}，按住拖曳至戰場" data-key="${slot + 1}">
+          <span class="orb-ring"></span><span class="orb-tag" aria-hidden="true">主動</span><span class="orb-face">${px('icon_skill_grenade', 3)}</span><span class="orb-empty">+</span>
           <span class="orb-time" id="cooldown-${slot}"></span>
         </button>
         <button class="chip" id="buy-${slot}" aria-label="升級傭兵欄 ${slot + 1}"><span class="chip-merc">${px('icon_merc_rifle', 1)}<b id="level-${slot}">1</b></span>${px('icon_money', 1)}<span id="buy-label-${slot}"></span></button>
@@ -122,7 +122,7 @@ function showStory(lines: readonly string[], kicker: string, done: string, after
 }
 // ---------- level-up choice ----------
 let choiceResolving = false, legendTimer: ReturnType<typeof setTimeout> | undefined;
-const CHOICE_TIP = '<b>戰地補給：</b>每次升級從三張裡選一張。看到<b>「招募」</b>卡建議優先選：多一名傭兵就多一把槍。三格都滿之後，再挑技能和強化。';
+const CHOICE_TIP = '<b>戰地補給：</b>每次升級從三張裡選一張。看到<b>「招募」</b>卡建議優先選：多一名傭兵就多一把槍。三格都滿之後，再挑投擲物和強化。';
 function showChoice() {
   choiceResolving = false;
   const tip = coach.enabled && !coach.has('choice') ? CHOICE_TIP : undefined;
@@ -263,7 +263,7 @@ function applyUnitLook() {
     unit.classList.toggle('no-skill', !skill); unit.classList.toggle('no-merc', !merc);
     unit.querySelector('.orb-face .px-icon')!.setAttribute('data-icon', skill ? 'icon_skill_' + skill.id : 'icon_skill_grenade');
     unit.querySelector('.chip-merc .px-icon')!.setAttribute('data-icon', merc ? 'icon_merc_' + merc.kind : 'icon_merc_rifle');
-    el(`skill-${slot}`).setAttribute('aria-label', skill ? `${SKILLS[skill.id].name}，按住拖曳至戰場` : `技能欄 ${slot + 1}（空，從戰地補給取得）`);
+    el(`skill-${slot}`).setAttribute('aria-label', skill ? `${SKILLS[skill.id].name}，按住拖曳至戰場` : `主動投擲物欄 ${slot + 1}（空，從戰地補給取得）`);
     el(`buy-${slot}`).setAttribute('aria-label', merc ? `升級${MERCENARIES[merc.kind].name}` : `傭兵欄 ${slot + 1}（空，從戰地補給招募）`);
   }
 }
@@ -533,9 +533,9 @@ function guide() {
   if (coach.has('repair') && run.canFortify && visibleMoney() >= run.fortifyCost)
     offer('fortify', '右下的<b>補強</b>會提高拒馬的生命上限。<br>喪屍只會越來越多，記得持續加固。', { target: el('fortify'), act: true });
   if (coach.has('kill') && skillReady(0) && run.enemies.filter(e => e.x > 200).length >= 3)
-    offer('skill', '按住<b>技能鈕</b>拖到喪屍群上放開，就能丟出手榴彈。<br>之後的戰地補給還能換到其他技能。', { target: el('skill-0'), act: true });
+    offer('skill', '按住<b>主動投擲物</b>拖到喪屍群上放開，就能丟出手榴彈。<br>之後的戰地補給還能換到其他投擲物。', { target: el('skill-0'), act: true });
   if (run.bossWarning !== undefined)
-    offer('boss', '<b>屍王</b>要來了！它很耐打，拒馬撐不了幾秒。<br>集中火力、丟技能，必要時修補拒馬。', { target: el('boss-banner') });
+    offer('boss', '<b>屍王</b>要來了！它很耐打，拒馬撐不了幾秒。<br>集中火力、丟投擲物，必要時修補拒馬。', { target: el('boss-banner') });
 }
 function step(now: number) {
   const realDt = Math.min(0.1, Math.max(0, (now - previous) / 1000)); previous = now;

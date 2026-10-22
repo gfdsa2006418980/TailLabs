@@ -11,16 +11,25 @@ const enemy = (over = {}) => ({ id: 9000, kind: 'walker', x: 500, y: 225, hp: 1e
   burnPower: 0, burnDuration: 0, burnFlammability: 0, ...freshStatus(), hitFlash: 0, ...over });
 const levelUp = run => { run.phase = 'running'; run.xp = run.xpNeeded; run.advance(FIELD.step); assert.equal(run.phase, 'choice'); return run.choices; };
 
-test('TL003 cards: rarity scales magnitudes; legendary is reserved for evolutions', () => {
+test('TL003 cards: rarity scales magnitudes; legendary is for evolutions and the few cards marked for it', () => {
   const kinetic = cardDef('kinetic');
   // 2026-10-23: one fixed value per rarity at every tactical level (no late +1% cards).
   near(makeCard(kinetic, 'uncommon').value, kinetic.value * RARITIES.uncommon.mult);
   near(makeCard(kinetic, 'rare', 30).modifier.value, kinetic.value * RARITIES.rare.mult);
   for (const def of CARD_DEFS.filter(d => d.kind === 'normal')) near(makeCard(def, 'common', 100).value, makeCard(def, 'common', 2).value);
   near(makeCard(cardDef('kinetic'), 'common', 80).value, 0.1); near(makeCard(cardDef('crit'), 'common', 80).value, 0.03);
-  const w = rarityWeights(1); near(w.common + w.uncommon + w.rare, 100);
+  const w = rarityWeights(1); near(w.common + w.uncommon + w.rare + w.legendary, 100);
   assert.ok(rarityWeights(30).common < w.common && rarityWeights(500).common === 35, 'common share shrinks with level, floored at 35');
   assert.ok(CARD_DEFS.filter(d => d.fixedRarity === 'legendary').every(d => d.kind === 'evolution'));
+  // 2026-10-23: 穿甲彈芯 is legendary-only (+2); 爆裂彈頭 starts at rare (10%) up to legendary (20%); 緊急工兵 is gone.
+  assert.deepEqual(CARD_DEFS.filter(d => d.kind === 'normal' && d.maxRarity === 'legendary').map(d => d.id).sort(), ['blastAmmo', 'pierce']);
+  assert.equal(makeCard(cardDef('pierce'), 'legendary').short, '普攻穿透 +2');
+  near(makeCard(cardDef('blastAmmo'), 'rare').value, 0.1); near(makeCard(cardDef('blastAmmo'), 'legendary').value, 0.2);
+  assert.equal(cardDef('repair'), undefined);
+  const run = running(); take(run, 'kinetic'); const seen = new Set();
+  for (let i = 0; i < 400; i++) { for (const c of levelUp(run)) if (c.kind === 'normal') seen.add(c.id + ':' + c.rarity); run.phase = 'running'; run.choices = []; }
+  for (const key of seen) { const [id, rarity] = key.split(':'); if (id === 'pierce') assert.equal(rarity, 'legendary'); if (id === 'blastAmmo') assert.ok(rarity === 'rare' || rarity === 'legendary', key); if (rarity === 'legendary') assert.ok(id === 'pierce' || id === 'blastAmmo', key); }
+  assert.ok(seen.has('pierce:legendary') && seen.has('blastAmmo:legendary'), 'both legendary cards do show up');
 });
 
 test('TL003 cards: about 100 picks fit in a 20-minute run; synergies and evolutions are level-gated', () => {

@@ -131,9 +131,9 @@ export class TalentScreen {
     const breakthrough = canBreakthrough(tree);
     this.dialog.classList.add('talent-dialog'); this.dialog.dataset.kind = 'talents';
     this.dialog.querySelector<HTMLElement>('#modal-content')!.innerHTML = `
-      <header class="talent-heading"><button id="talent-close" class="quiet-button" aria-label="關閉指揮星圖">×</button><h2 id="modal-title">指揮星圖</h2><span class="talent-tier">T${tree.tier} · Lv ${tree.maxNodeLevel}</span><div class="talent-wallet" role="group" aria-label="可用戰功">${px('icon_star', 2)}<strong id="talent-points">${formatNumber(points)}</strong></div></header>
+      <header class="talent-heading"><button id="talent-close" class="quiet-button" aria-label="關閉指揮藍圖">×</button><h2 id="modal-title">指揮藍圖</h2><span class="talent-tier">T${tree.tier} · Lv ${tree.maxNodeLevel}</span><div class="talent-wallet" role="group" aria-label="可用戰功">${px('icon_star', 2)}<strong id="talent-points">${formatNumber(points)}</strong></div></header>
       ${this.slots(tree)}
-      <div class="star-scroll talent-scroll" aria-label="可拖曳的指揮星圖"><div class="star-map" style="width:${MAP_SIZE}px;height:${MAP_SIZE}px"><svg class="talent-links" viewBox="0 0 ${MAP_SIZE} ${MAP_SIZE}" aria-hidden="true">${lines}</svg>${TALENTS.map(n => this.nodeButton(tree, n.id)).join('')}${CORES.map(c => this.coreButton(tree, c.id)).join('')}</div></div>
+      <div class="star-scroll talent-scroll" aria-label="可拖曳的指揮藍圖"><div class="star-map" style="width:${MAP_SIZE}px;height:${MAP_SIZE}px"><svg class="talent-links" viewBox="0 0 ${MAP_SIZE} ${MAP_SIZE}" aria-hidden="true">${lines}</svg>${TALENTS.map(n => this.nodeButton(tree, n.id)).join('')}${CORES.map(c => this.coreButton(tree, c.id)).join('')}</div></div>
       ${this.inspector(tree)}
       ${breakthrough ? `<button id="talent-breakthrough" class="talent-breakthrough">晉階至第 ${tree.tier + 1} 階 <span>上限 +10${tree.tier < 3 ? '・開放核心槽' : ''} ↗</span></button>` : ''}
       <p id="talent-notice" class="talent-notice" role="status" aria-live="polite">${this.notice || (this.meta.persistent ? '' : '無法存檔。戰功只留在此分頁')}</p>

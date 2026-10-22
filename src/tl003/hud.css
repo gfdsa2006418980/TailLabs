@@ -206,3 +206,7 @@ html.reduce-motion .toast.show { animation-name: toast-fade !important; animatio
 .chip-merc b:empty { display: none }
 .unit.no-merc .chip-merc .px-icon { opacity: .2; filter: grayscale(1) }
 .unit.no-merc .chip > .px-icon { display: none }
+
+/* 2026-10-23: skills are 主動投擲物; a small tag on each orb says so. */
+.orb-tag { position: absolute; top: 2px; left: 3px; padding: 1px 3px; font: 700 9px/1 "Microsoft JhengHei", sans-serif; color: var(--ink); background: var(--merc-color); clip-path: var(--notch); pointer-events: none; z-index: 1 }
+.unit.no-skill .orb-tag { opacity: .35 }

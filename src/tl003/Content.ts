@@ -92,7 +92,8 @@ export const RARITIES: Record<Rarity, { name: string; mult: number; weight: numb
   common: { name: '普通', mult: 1, weight: 62, color: '#cfc8b0' },
   uncommon: { name: '精良', mult: 1.6, weight: 27, color: '#b583e6' },
   rare: { name: '稀有', mult: 2.5, weight: 9, color: '#ffd062' },
-  legendary: { name: '傳說', mult: 1, weight: 2, color: '#ff4a3a' },
+  /** ×5 for the few normal cards marked `maxRarity: 'legendary'`; evolutions use their own values. */
+  legendary: { name: '傳說', mult: 5, weight: 2, color: '#ff4a3a' },
 };
 export const RARITY_ORDER: readonly Rarity[] = ['common', 'uncommon', 'rare', 'legendary'];
 export type CardEffect = 'speed' | 'haste' | 'radius' | 'wall' | 'repair' | 'crit' | 'critDamage' | 'pierce' | 'reduction'
@@ -108,7 +109,8 @@ export interface CardDef {
   /** One radio line, shown in grey under the rules. */
   flavor: string;
   modifier?: { kind: 'Add' | 'More' | 'Special'; tags: Tag[]; rule?: 'ignite' | 'toxin' | 'shock' | 'chill' | 'blast' };
-  effect?: CardEffect; minRarity?: Rarity; fixedRarity?: Rarity;
+  /** Normal cards roll between minRarity (default common) and maxRarity (default rare). */
+  effect?: CardEffect; minRarity?: Rarity; maxRarity?: Rarity; fixedRarity?: Rarity;
   /** Synergy: both elements must already be in the build. */
   elements?: readonly [Element, Element];
   /** Evolution: card ids needed (repeat an id to need it twice) and the skill that changes. */
@@ -138,13 +140,13 @@ export const CARD_DEFS: readonly CardDef[] = [
     short: v => `普攻附電 ${pct(v)}`, description: v => `普攻額外造成 ${pct(v)} 電能傷害，累積感電值：越滿受傷越重，滿了麻痺 4 秒（不能啃拒馬）。`, flavor: '帶電的東西都比較好打。' },
   { id: 'chill', kind: 'normal', name: '冷凍彈藥', category: '冷凍', color: C, value: 0.15, modifier: { kind: 'Special', tags: ['Skill.AutoAttack'], rule: 'chill' },
     short: v => `普攻附凍 ${pct(v)}`, description: v => `普攻額外造成 ${pct(v)} 冷凍傷害，累積凍結值：越滿越慢，滿了冰凍 2 秒並受到最大生命 10% 的凍傷。`, flavor: '槍管都結霜了。' },
-  { id: 'blastAmmo', kind: 'normal', name: '爆裂彈頭', category: '爆裂', color: X, value: 0.2, modifier: { kind: 'Special', tags: ['Skill.AutoAttack'], rule: 'blast' },
+  { id: 'blastAmmo', kind: 'normal', name: '爆裂彈頭', category: '爆裂', color: X, value: 0.04, minRarity: 'rare', maxRarity: 'legendary', modifier: { kind: 'Special', tags: ['Skill.AutoAttack'], rule: 'blast' },
     short: v => `普攻濺射 ${pct(v)}`, description: v => `普攻命中時爆炸，對周圍敵人造成 ${pct(v)} 爆裂傷害，累積暈眩值；滿了暈眩 4 秒。`, flavor: '打一個，震一圈。' },
   { id: 'crit', kind: 'normal', name: '精準射擊', category: '動能', color: K, value: 0.03, effect: 'crit',
     short: v => `暴擊率 +${pct(v)}`, description: v => `直接傷害暴擊率 +${pct(v)}。暴擊造成 150% 傷害。`, flavor: '呼吸，瞄準，扣扳機。' },
   { id: 'critDamage', kind: 'normal', name: '要害瞄準', category: '動能', color: K, value: 0.15, effect: 'critDamage',
     short: v => `暴擊傷害 +${pct(v)}`, description: v => `暴擊傷害 +${pct(v)}。`, flavor: '打頭。永遠打頭。' },
-  { id: 'pierce', kind: 'normal', name: '穿甲彈芯', category: '動能', color: K, value: 1, effect: 'pierce', minRarity: 'rare',
+  { id: 'pierce', kind: 'normal', name: '穿甲彈芯', category: '動能', color: K, value: 0.4, effect: 'pierce', minRarity: 'legendary', maxRarity: 'legendary',
     short: v => `普攻穿透 +${Math.max(1, Math.floor(v))}`, description: v => `單發普攻命中後再打穿後方 ${Math.max(1, Math.floor(v))} 名敵人，每穿透一名傷害 −40%。`, flavor: '一發子彈，兩具屍體。' },
   { id: 'fire', kind: 'normal', name: '高濃度燃料', category: '火焰', color: F, value: 0.1, modifier: { kind: 'Add', tags: ['Damage.Fire', 'Mechanic.DOT'] },
     short: v => `燃燒傷害 +${pct(v)}`, description: v => `火焰持續傷害 +${pct(v)}，與其他火焰加成相加。`, flavor: '混了點不該混的東西。' },
@@ -174,12 +176,12 @@ export const CARD_DEFS: readonly CardDef[] = [
     short: v => `攻速 +${pct(v)}`, description: v => `全隊攻擊速度 +${pct(v)}，重複選取相加。`, flavor: '彈匣換快一點，命就長一點。' },
   { id: 'training', kind: 'normal', name: '戰鬥訓練', category: '傭兵', color: S, value: 0.08, modifier: { kind: 'Add', tags: ['Skill.AutoAttack'] },
     short: v => `普攻傷害 +${pct(v)}`, description: v => `所有傭兵的普攻傷害 +${pct(v)}。`, flavor: '練到閉著眼也能打中。' },
-  { id: 'active', kind: 'normal', name: '軍用炸藥', category: '主動技能', color: F, value: 0.12, modifier: { kind: 'Add', tags: ['Skill.Active'] },
-    short: v => `技能傷害 +${pct(v)}`, description: v => `所有主動技能傷害 +${pct(v)}。`, flavor: '比民用的多三倍火藥。' },
-  { id: 'haste', kind: 'normal', name: '軍火調度', category: '主動技能', color: E, value: 20, effect: 'haste',
-    short: v => `技能急速 +${Math.round(v)}`, description: v => `技能急速 +${Math.round(v)}，依等比例公式縮短冷卻。`, flavor: '後勤說下一批馬上到。' },
-  { id: 'radius', kind: 'normal', name: '擴散裝藥', category: '主動技能', color: F, value: 0.05, effect: 'radius',
-    short: v => `技能範圍 ×${Number((1 + v).toFixed(2))}`, description: v => `主動技能範圍 ×${Number((1 + v).toFixed(2))}。`, flavor: '炸得更開，躲得更少。' },
+  { id: 'active', kind: 'normal', name: '軍用炸藥', category: '投擲物', color: F, value: 0.12, modifier: { kind: 'Add', tags: ['Skill.Active'] },
+    short: v => `投擲傷害 +${pct(v)}`, description: v => `所有投擲物傷害 +${pct(v)}。`, flavor: '比民用的多三倍火藥。' },
+  { id: 'haste', kind: 'normal', name: '軍火調度', category: '投擲物', color: E, value: 20, effect: 'haste',
+    short: v => `投擲急速 +${Math.round(v)}`, description: v => `投擲急速 +${Math.round(v)}，依等比例公式縮短投擲物冷卻。`, flavor: '後勤說下一批馬上到。' },
+  { id: 'radius', kind: 'normal', name: '擴散裝藥', category: '投擲物', color: F, value: 0.05, effect: 'radius',
+    short: v => `投擲範圍 ×${Number((1 + v).toFixed(2))}`, description: v => `投擲物範圍 ×${Number((1 + v).toFixed(2))}。`, flavor: '炸得更開，躲得更少。' },
   { id: 'income', kind: 'normal', name: '戰地回收', category: '經濟', color: B, value: 0.1, modifier: { kind: 'Add', tags: ['Economy.KillReward'] },
     short: v => `擊殺獎金 +${pct(v)}`, description: v => `擊殺獎金 +${pct(v)}。`, flavor: '它們身上還有能用的東西。' },
   { id: 'airdrop', kind: 'normal', name: '補給空投', category: '經濟', color: B, value: 1, effect: 'airdrop',
@@ -188,8 +190,6 @@ export const CARD_DEFS: readonly CardDef[] = [
     short: v => `升級費用 −${pct(v)}`, description: v => `傭兵升級費用 ×${Number((1 - v).toFixed(2))}，可重複疊乘。`, flavor: '軍需官欠我一個人情。' },
   { id: 'wall', kind: 'normal', name: '補強支架', category: '防守', color: B, value: 0.1, effect: 'wall',
     short: v => `拒馬上限 +${pct(v)}`, description: v => `拒馬最大生命 +${pct(v)}（以目前上限計），並修復新增的生命。`, flavor: '再釘一層木板。' },
-  { id: 'repair', kind: 'normal', name: '緊急工兵', category: '防守', color: B, value: 0.25, effect: 'repair',
-    short: v => `立即修復 ${pct(v)}`, description: v => `立即修復拒馬 ${pct(v)} 最大生命。`, flavor: '工兵上前，掩護他們。' },
   { id: 'plating', kind: 'normal', name: '鋼板加固', category: '防守', color: B, value: 0.03, effect: 'reduction',
     short: v => `拒馬減傷 +${pct(v)}`, description: v => `拒馬受到的傷害 ×${Number((1 - v).toFixed(2))}，可無限疊乘，永遠不會到 0。`, flavor: '焊上去，別問哪裡拆來的。' },
   { id: 'spikes', kind: 'normal', name: '尖刺拒馬', category: '防守', color: B, value: 0.15, effect: 'thorns',
@@ -234,7 +234,7 @@ export const CARD_DEFS: readonly CardDef[] = [
   { id: 'curse_salvage', kind: 'curse', fixedRarity: 'rare', name: '腐爛補給', category: '詛咒', color: '#b23a48', value: 0.6, effect: 'curse',
     short: v => `獎金 +${pct(v)}・修復 ×0.7`, description: v => `擊殺獎金 +${pct(v)}；修復拒馬的修復量 ×0.7。`, flavor: '過期了，但還能賣。' },
   { id: 'curse_battery', kind: 'curse', fixedRarity: 'rare', name: '過載電池', category: '詛咒', color: '#b23a48', value: 0.7, effect: 'curse',
-    short: v => `技能 +${pct(v)}・冷卻 ×1.2`, description: v => `所有主動技能傷害 +${pct(v)}；技能冷卻 ×1.2。`, flavor: '電池在發燙，別抱太緊。' },
+    short: v => `投擲 +${pct(v)}・冷卻 ×1.2`, description: v => `所有投擲物傷害 +${pct(v)}；投擲物冷卻 ×1.2。`, flavor: '電池在發燙，別抱太緊。' },
   { id: 'curse_contract', kind: 'curse', fixedRarity: 'rare', name: '黑市合約', category: '詛咒', color: '#b23a48', value: 0.25, effect: 'curse',
     short: v => `升級 −${pct(v)}・受傷 ×1.15`, description: v => `傭兵升級費用 ×${Number((1 - v).toFixed(2))}；拒馬受到的傷害 ×1.15。`, flavor: '價錢很好，條款很爛。' },
   { id: 'curse_stim', kind: 'curse', fixedRarity: 'rare', name: '賭命藥劑', category: '詛咒', color: '#b23a48', value: 0.15, effect: 'curse',
@@ -247,8 +247,8 @@ export const CARD_DEFS: readonly CardDef[] = [
   }),
   ...SKILL_IDS.map((id): CardDef => {
     const s = SKILLS[id];
-    return { id: `skill_${id}`, kind: 'skill', fixedRarity: 'common', skill: id, name: s.name, category: '技能', color: s.color, value: 0, effect: 'skill',
-      short: () => `${s.elements.join('・')}・冷卻 ${s.cooldown} 秒`, description: () => `取得主動技能「${s.name}」：${s.description}佔一個技能欄位。`, flavor: s.flavor };
+    return { id: `skill_${id}`, kind: 'skill', fixedRarity: 'common', skill: id, name: s.name, category: '投擲物', color: s.color, value: 0, effect: 'skill',
+      short: () => `${s.elements.join('・')}・冷卻 ${s.cooldown} 秒`, description: () => `取得主動投擲物「${s.name}」：${s.description}佔一個投擲物欄位。`, flavor: s.flavor };
   }),
 ];
 export const cardDef = (id: string) => CARD_DEFS.find(def => def.id === id);

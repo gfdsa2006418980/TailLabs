@@ -55,16 +55,20 @@ export interface FireZone { kind?: 'fire' | 'gas'; x: number; y: number; radius:
 export interface Mine { x: number; y: number; remaining: number; damage: number }
 const mercY = (slot: number) => 130 + slot * 92;
 /** The very first choice of a run offers its mercenaries and one ammo card of an element. */
-const STARTERS = ['kinetic', 'burn', 'bio', 'shock', 'chill', 'blastAmmo'];
+const STARTERS = ['kinetic', 'burn', 'bio', 'shock', 'chill'];
 const THORN_TAGS: Tag[] = ['Damage.Kinetic', 'Damage.Physical', 'Defense.Barricade'];
 // Synergy strengths, looked up once (hot paths run per enemy per step).
 const PHOSPHORUS = cardDef('phosphorus')!.value, ACIDCORE = cardDef('acidcore')!.value, CONDUCTOR = cardDef('conductor')!.value, CHEMFIRE = cardDef('chemfire')!.value;
 const rank = (r: Rarity) => RARITY_ORDER.indexOf(r);
-/** Rarity weights: common shrinks 0.6 points per tactical level (floor 35); legendary is reserved for evolutions. */
+/**
+ * Rarity weights: common shrinks 0.6 points per tactical level (floor 35); the rest splits uncommon : rare :
+ * legendary as 27 : 9 : 2. A legendary roll only offers the few normal cards that allow it (else it falls
+ * back to rare); evolutions are legendary on their own track.
+ */
 export function rarityWeights(level: number) {
   const common = Math.max(35, RARITIES.common.weight - 0.6 * (level - 1)), rest = 100 - common;
-  const u = RARITIES.uncommon.weight, r = RARITIES.rare.weight + RARITIES.legendary.weight;
-  return { common, uncommon: rest * u / (u + r), rare: rest * r / (u + r) };
+  const u = RARITIES.uncommon.weight, r = RARITIES.rare.weight, l = RARITIES.legendary.weight;
+  return { common, uncommon: rest * u / (u + r + l), rare: rest * r / (u + r + l), legendary: rest * l / (u + r + l) };
 }
 /** Draws without rare+ before the next draw guarantees one. */
 export const PITY_DRAWS = 6;
@@ -88,8 +92,8 @@ const cellKey = (cx: number, cy: number) => (cx + 8) * 64 + (cy + 8);
 /** Card categories each tactical core leans towards (draw affinity). */
 const CORE_AFFINITY: Partial<Record<CoreId, string[]>> = {
   coldsteel: ['動能'], layers: ['火焰'], cremation: ['火焰'], agony: ['毒素', '冷凍', '電能', '爆裂'], rotation: ['元素', '物理'],
-  lonewolf: ['傭兵'], uniform: ['傭兵', '動能'], focusfire: ['傭兵'], pointblank: ['傭兵'], autofire: ['主動技能'],
-  bloodprice: ['主動技能', '防守'], plunder: ['防守'], blackmarket: ['防守'], ammoeco: ['動能', '經濟'], corpseblast: ['爆裂'], raisedead: ['毒素'],
+  lonewolf: ['傭兵'], uniform: ['傭兵', '動能'], focusfire: ['傭兵'], pointblank: ['傭兵'], autofire: ['投擲物'],
+  bloodprice: ['投擲物', '防守'], plunder: ['防守'], blackmarket: ['防守'], ammoeco: ['動能', '經濟'], corpseblast: ['爆裂'], raisedead: ['毒素'],
 };
 const nearestFirst = (list: readonly Enemy[], x: number, y: number) => [...list].sort((a, b) => (a.x - x) ** 2 + (a.y - y) ** 2 - ((b.x - x) ** 2 + (b.y - y) ** 2));
 
@@ -252,7 +256,6 @@ export class DefenseRun {
       case 'haste': this.haste += v; break;
       case 'radius': this.skillRange *= 1 + v; break;
       case 'wall': { if (!this.canFortify) break; const n = this.wallMaxHealth * v; this.wallHealth += n; this.wallMaxHealth += n; break; }
-      case 'repair': this.wallHealth = Math.min(this.wallMaxHealth, this.wallHealth + this.wallMaxHealth * v); break;
       case 'crit': this.critChance += v; break;
       case 'critDamage': this.critDamage += v; break;
       case 'pierce': this.pierce += Math.max(1, Math.floor(v)); break;
@@ -309,8 +312,9 @@ export class DefenseRun {
   }
   private rollRarity(forceRare: boolean): Rarity {
     if (forceRare) return 'rare';
-    const w = rarityWeights(this.level), u = w.uncommon * this.perm.luck, r = w.rare * this.perm.luck, roll = this.cardRandom() * (w.common + u + r);
-    return roll < w.common ? 'common' : roll < w.common + u ? 'uncommon' : 'rare';
+    const w = rarityWeights(this.level), u = w.uncommon * this.perm.luck, r = w.rare * this.perm.luck, l = w.legendary * this.perm.luck;
+    const roll = this.cardRandom() * (w.common + u + r + l);
+    return roll < w.common ? 'common' : roll < w.common + u ? 'uncommon' : roll < w.common + u + r ? 'rare' : 'legendary';
   }
   /**
    * Draw weight per card category (2026-10-23 "讓玩家玩得爽"): the build pulls its own kind of cards.
@@ -353,11 +357,14 @@ export class DefenseRun {
     while (offers.length < size) {
       const rarity = this.rollRarity(forceRare); forceRare = false;
       const allowed = (def: CardDef, r: Rarity) => !offers.some(o => o.id === def.id) && (first ? STARTERS.includes(def.id)
-        : def.kind === 'normal' ? rank(def.minRarity ?? 'common') <= rank(r)
+        // A legendary roll is only for the normal cards that can be legendary (not skills or synergies).
+        : r === 'legendary' ? def.kind === 'normal' && def.maxRarity === 'legendary'
+        : def.kind === 'normal' ? rank(def.minRarity ?? 'common') <= rank(r) && rank(r) <= rank(def.maxRarity ?? 'rare')
         : def.kind === 'skill' ? this.canLearn(def.skill!)
         : def.kind === 'synergy' ? this.level >= B.SYNERGY_MIN_LEVEL && rank(r) >= rank('rare') && !this.synergies.has(def.id) && def.elements!.every(e => owned.has(e)) : false);
-      let pool = CARD_DEFS.filter(def => allowed(def, rarity));
-      if (!pool.length) pool = CARD_DEFS.filter(def => allowed(def, 'common'));
+      let rolled = rarity, pool = CARD_DEFS.filter(def => allowed(def, rolled));
+      if (!pool.length && rolled === 'legendary') { rolled = 'rare'; pool = CARD_DEFS.filter(def => allowed(def, rolled)); }
+      if (!pool.length) { rolled = 'common'; pool = CARD_DEFS.filter(def => allowed(def, rolled)); }
       if (!pool.length) break;
       // Synergies are favoured when unlocked, skills while slots are free; every card leans towards the build
       // (affinity): the squad's and skills' elements, the equipped cores and the categories already picked.
@@ -365,7 +372,8 @@ export class DefenseRun {
       const weight = (def: CardDef) => (def.kind === 'synergy' ? 1.5 : def.kind === 'skill' ? 0.8 : 1) * (affinity.get(def.category) ?? 1) * 0.95 ** this.count(def.id);
       let roll = this.cardRandom() * pool.reduce((sum, def) => sum + weight(def), 0), pick = pool[pool.length - 1]!;
       for (const def of pool) { roll -= weight(def); if (roll <= 0) { pick = def; break; } }
-      offers.push(makeCard(pick, pick.fixedRarity ?? (rank(pick.minRarity ?? 'common') > rank(rarity) ? pick.minRarity! : rarity), this.level));
+      const lowest = pick.minRarity ?? 'common', highest = pick.maxRarity ?? 'rare';
+      offers.push(makeCard(pick, pick.fixedRarity ?? (rank(rolled) < rank(lowest) ? lowest : rank(rolled) > rank(highest) ? highest : rolled), this.level));
     }
     // Evolutions are guaranteed separately, so they do not count towards the rare-card pity.
     this.pity = offers.some(o => o.kind !== 'evolution' && rank(o.rarity ?? 'common') >= rank('rare')) ? 0 : this.pity + 1;

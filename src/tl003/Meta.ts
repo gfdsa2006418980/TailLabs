@@ -117,7 +117,7 @@ export class LocalMetaMirror {
     if (!canBreakthrough(tree)) return { ok: false, message: `任一節點達 Lv${tree.maxNodeLevel} 即可晉階。` };
     tree.tier++; tree.maxNodeLevel += 10;
     this.persist({ ...this.value, TalentTreeJson: JSON.stringify(tree) });
-    return { ok: true, message: `星圖晉階 T${tree.tier}。節點上限 Lv${tree.maxNodeLevel}，等級全數保留。` };
+    return { ok: true, message: `藍圖晉階 T${tree.tier}。節點上限 Lv${tree.maxNodeLevel}，等級全數保留。` };
   }
   settle(run: object, points: number, clearedWave: number): boolean {
     if (this.settled.has(run)) return false;

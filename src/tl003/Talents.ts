@@ -8,17 +8,17 @@ import type { TalentTree } from './Meta.ts';
  * multiplicative (`growth ^ level`), plus 16 tactical cores (0/1) at branch tips and between branches.
  * The 9 original node ids are kept so existing saves keep every level.
  */
-export const BRANCHES = ['動能', '火焰', '毒素', '電能', '傭兵', '主動技能', '拒馬', '經濟'] as const;
+export const BRANCHES = ['動能', '火焰', '毒素', '電能', '傭兵', '投擲物', '拒馬', '經濟'] as const;
 export type Branch = typeof BRANCHES[number] | '中心';
 const BRANCH_COLOR: Record<Branch, string> = {
-  中心: '#e8c58b', 動能: '#e8c58b', 火焰: '#ec865a', 毒素: '#a6c46a', 電能: '#83c9d4', 傭兵: '#d8c391', 主動技能: '#f0a35e', 拒馬: '#a9c48a', 經濟: '#e3cf8f',
+  中心: '#e8c58b', 動能: '#e8c58b', 火焰: '#ec865a', 毒素: '#a6c46a', 電能: '#83c9d4', 傭兵: '#d8c391', 投擲物: '#f0a35e', 拒馬: '#a9c48a', 經濟: '#e3cf8f',
 };
-const BRANCH_GLYPH: Record<Branch, string> = { 中心: '◆', 動能: '✦', 火焰: '♨', 毒素: '☣', 電能: 'ϟ', 傭兵: '»', 主動技能: '◎', 拒馬: '▱', 經濟: '¤' };
+const BRANCH_GLYPH: Record<Branch, string> = { 中心: '◆', 動能: '✦', 火焰: '♨', 毒素: '☣', 電能: 'ϟ', 傭兵: '»', 投擲物: '◎', 拒馬: '▱', 經濟: '¤' };
 
 interface NodeSpec { id: string; name: string; growth: number; describe: string; flavor: string }
 /** Branch order matches BRANCHES; the first node of each branch links to the hub. */
 const SPECS: Record<Branch, NodeSpec[]> = {
-  中心: [{ id: 'mercenary_damage', name: '傭兵訓練', growth: 1.06, describe: '所有傭兵的普攻與技能傷害', flavor: '基本功，練到不用想。' }],
+  中心: [{ id: 'mercenary_damage', name: '傭兵訓練', growth: 1.06, describe: '所有傭兵的普攻與投擲物傷害', flavor: '基本功，練到不用想。' }],
   動能: [
     { id: 'kinetic_damage', name: '動能專精', growth: 1.08, describe: '所有動能傷害', flavor: '火藥多放一點。' },
     { id: 'crit_rate', name: '射擊精度', growth: 1.05, describe: '暴擊率（每級 +0.5%）', flavor: '準星對齊，再扣。' },
@@ -56,10 +56,10 @@ const SPECS: Record<Branch, NodeSpec[]> = {
     { id: 'recruiter', name: '招募網路', growth: 1.03, describe: '招募費用降低', flavor: '外面還有人願意來。' },
     { id: 'veteran', name: '資深士官', growth: 1.02, describe: '升級費用降低', flavor: '老兵帶新兵。' },
   ],
-  主動技能: [
-    { id: 'active_skill_damage', name: '軍火專精', growth: 1.08, describe: '所有主動技能傷害', flavor: '炸藥，更多炸藥。' },
-    { id: 'active_skill_haste', name: '火力排程', growth: 1.06, describe: '技能冷卻效率（換算為無上限急速）', flavor: '補給線很順。' },
-    { id: 'skill_reach', name: '射程延伸', growth: 1.02, describe: '所有技能範圍', flavor: '丟得更遠，炸得更開。' },
+  投擲物: [
+    { id: 'active_skill_damage', name: '軍火專精', growth: 1.08, describe: '所有投擲物傷害', flavor: '炸藥，更多炸藥。' },
+    { id: 'active_skill_haste', name: '火力排程', growth: 1.06, describe: '投擲物冷卻效率（換算為無上限急速）', flavor: '補給線很順。' },
+    { id: 'skill_reach', name: '射程延伸', growth: 1.02, describe: '所有投擲物範圍', flavor: '丟得更遠，炸得更開。' },
     { id: 'grenade_payload', name: '破片強化', growth: 1.08, describe: '手榴彈傷害', flavor: '破片多兩倍。' },
     { id: 'molotov_payload', name: '燃料配方', growth: 1.08, describe: '燃燒瓶傷害', flavor: '瓶子裡不只是汽油。' },
     { id: 'laser_width', name: '聚焦鏡組', growth: 1.02, describe: '雷射寬度', flavor: '光束更粗了。' },
@@ -119,8 +119,8 @@ const CORE_SPECS: { at: number; between: boolean; spec: CoreSpec }[] = [
   { at: 1, between: false, spec: { id: 'layers', name: '千層烈焰', kind: '狀態', rule: '燃燒不再只取最強，改為可以疊加，最多 10 層。', price: '每層威力 ×0.35。', flavor: '一層一層燒上去。', cost: 15 } },
   { at: 2, between: false, spec: { id: 'agony', name: '痛苦精通', kind: '轉換', rule: '暴擊時，這一擊的燃燒、毒素與冷凍／感電／暈眩累積 × 暴擊傷害。', price: '暴擊不再加倍直接傷害。', flavor: '讓它們痛得久一點。', cost: 25 } },
   { at: 3, between: false, spec: { id: 'rotation', name: '元素輪替', kind: '狀態', rule: '敵人受到與上一擊「不同屬性」的傷害 ×1.6。', price: '同屬性連打 ×0.7。', flavor: '換個方式打，它就扛不住。', cost: 25 } },
-  { at: 4, between: false, spec: { id: 'lonewolf', name: '孤狼', kind: '陣容', rule: '只能部署 1 名傭兵；他的傷害 ×4、攻速 ×1.5、技能冷卻 ×0.5。', price: '另外兩個招募入口關閉。', flavor: '一個人就夠了。', cost: 40 } },
-  { at: 5, between: false, spec: { id: 'autofire', name: '自動火控', kind: '技能', rule: '技能就緒時自動朝最大的敵群施放，仍可手動拖曳。', price: '技能傷害 ×0.85。', flavor: '系統會自己找目標。', cost: 15 } },
+  { at: 4, between: false, spec: { id: 'lonewolf', name: '孤狼', kind: '陣容', rule: '只能部署 1 名傭兵；他的傷害 ×4、攻速 ×1.5、投擲物冷卻 ×0.5。', price: '另外兩個招募入口關閉。', flavor: '一個人就夠了。', cost: 40 } },
+  { at: 5, between: false, spec: { id: 'autofire', name: '自動火控', kind: '投擲', rule: '投擲物就緒時自動朝最大的敵群投出，仍可手動拖曳。', price: '投擲物傷害 ×0.85。', flavor: '系統會自己找目標。', cost: 15 } },
   { at: 6, between: false, spec: { id: 'plunder', name: '掠奪者', kind: '經濟', rule: '每次擊殺回復拒馬 1% 最大生命，補強費用 ×0.6。', price: '「修復」停用。', flavor: '拆它們的骨頭補牆。', cost: 15 } },
   { at: 7, between: false, spec: { id: 'ammoeco', name: '彈藥經濟', kind: '經濟', rule: '動能傷害 ×（1 + log₂(1 + 資金) ÷ 4）。', price: '每發動能普攻消耗當前資金 1%；資金歸零時動能傷害 ×0.5。', flavor: '錢就是子彈。', cost: 25 } },
   { at: 0, between: true, spec: { id: 'cremation', name: '焚化協議', kind: '轉換', rule: '所有直接傷害改為以 80% 威力掛上燃燒。', price: '不再造成任何直接傷害。', flavor: '全部燒掉，一個不留。', cost: 25 } },
@@ -128,7 +128,7 @@ const CORE_SPECS: { at: number; between: boolean; spec: CoreSpec }[] = [
   { at: 2, between: true, spec: { id: 'raisedead', name: '亡者徵召', kind: '連鎖', rule: '被擊殺的一般喪屍有 30% 機率變成我方屍兵，往前衝進敵群爆炸。', price: '拒馬最大生命固定為 1，無法補強。', flavor: '它們會替我們走回去。', cost: 40 } },
   { at: 3, between: true, spec: { id: 'focusfire', name: '集火射擊', kind: '連鎖', rule: '連續射擊同一目標，每發射速 +15%，最多 ×4。', price: '換目標就歸零。', flavor: '所有人，打那一隻。', cost: 15 } },
   { at: 4, between: true, spec: { id: 'uniform', name: '制式部隊', kind: '陣容', rule: '可以招募 3 名步槍手；每多一名，全隊傷害 ×1.3。', price: '只能招募步槍手。', flavor: '同一套裝備，同一套戰法。', cost: 40 } },
-  { at: 5, between: true, spec: { id: 'bloodprice', name: '血債血償', kind: '背水', rule: '拒馬生命越低，所有造成的傷害越高，最高 ×2（生命一半時 ×1.5）。', price: '每次施放技能消耗拒馬 4% 最大生命（最低留 1）。', flavor: '牆塌一寸，火力加一分。', cost: 25 } },
+  { at: 5, between: true, spec: { id: 'bloodprice', name: '血債血償', kind: '背水', rule: '拒馬生命越低，所有造成的傷害越高，最高 ×2（生命一半時 ×1.5）。', price: '每次使用投擲物消耗拒馬 4% 最大生命（最低留 1）。', flavor: '牆塌一寸，火力加一分。', cost: 25 } },
   { at: 6, between: true, spec: { id: 'pointblank', name: '探照獵殺', kind: '光照', rule: '探照燈照到的喪屍受到的傷害 ×2；光圈放大，傭兵優先射擊光圈內的目標。', price: '沒被照到的喪屍受到的傷害 ÷2。', flavor: '燈照到哪，就打哪。', cost: 15 } },
   { at: 7, between: true, spec: { id: 'blackmarket', name: '以牆為彈', kind: '火力', rule: '每名傭兵每秒額外造成拒馬當前生命 8% 的傷害（分攤到每一發普攻）。', price: '拒馬受到的傷害 ×1.3。', flavor: '牆越厚，子彈越重。', cost: 25 } },
 ];
