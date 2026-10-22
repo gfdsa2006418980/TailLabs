@@ -8,7 +8,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="爆打四十塊" />
-    <meta name="description" content="TailLabs TL004:拉開彈弓,派出五位夥伴,把躲進塔裡的四十塊全部打飛!" />
+    <meta name="description" content="TailLabs TL004:拉開彈弓,派出七位夥伴,闖過 20 關,把躲進塔裡的四十塊全部打飛!" />
     <link rel="manifest" href="./manifest.webmanifest" />
     <link rel="icon" type="image/png" href="./icons/icon-192.png" />
     <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png" />
@@ -21,6 +21,7 @@
       <div id="hud" hidden>
         <ol id="queue" class="queue" aria-label="剩餘夥伴"></ol>
         <div class="hud-right">
+          <div id="level-label" class="level-card">第 1 關</div>
           <div class="score-card"><span>分數</span><strong id="score">0</strong></div>
           <button id="menu-button" class="icon-button" type="button" aria-label="開啟選單" aria-haspopup="dialog" aria-controls="menu-panel" aria-expanded="false">☰</button>
         </div>
@@ -33,6 +34,7 @@
         <div class="menu-actions">
           <button id="resume-button" class="primary-button" type="button">繼續</button>
           <button id="restart-button" class="secondary-button" type="button">重新開始 <span aria-hidden="true">↻</span></button>
+          <button id="menu-select-button" class="secondary-button" type="button">選擇關卡</button>
           <button id="partners-button" class="secondary-button" type="button">夥伴介紹</button>
           <button id="sound-button" class="secondary-button" type="button" aria-pressed="false">音效:開</button>
         </div>
@@ -40,7 +42,7 @@
 
       <section id="partners-panel" class="panel partners-panel" aria-labelledby="partners-title" hidden>
         <h2 id="partners-title">夥伴介紹</h2>
-        <p class="hint">夥伴飛在空中、還沒撞到東西時,點一下畫面就能發動能力。</p>
+        <p class="hint">夥伴飛在空中時點一下畫面就能發動能力;撞到東西後的 1 秒內也還來得及。</p>
         <ul id="partner-list" class="partner-list"></ul>
         <button id="partners-back" class="primary-button" type="button">返回</button>
       </section>
@@ -53,12 +55,28 @@
         <p id="install-hint" class="hint" hidden></p>
       </section>
 
+      <section id="select-panel" class="panel select-panel" aria-labelledby="select-title" hidden>
+        <div class="select-head">
+          <h2 id="select-title">選擇關卡</h2>
+          <p id="select-total" class="select-total">★ 0/60</p>
+        </div>
+        <ol id="level-grid" class="level-grid"></ol>
+        <button id="select-back" class="secondary-button" type="button">返回</button>
+      </section>
+
       <section id="result-panel" class="panel result-panel" aria-labelledby="result-title" hidden>
+        <p id="result-level" class="eyebrow">第 1 關</p>
         <h2 id="result-title">四十塊被打爆了！</h2>
         <div class="stars" aria-hidden="true"><span>★</span><span>★</span><span>★</span></div>
         <p id="result-stars-label" class="sr-only"></p>
         <p class="result-score"><span>分數</span><strong id="result-score">0</strong></p>
-        <button id="retry-button" class="primary-button" type="button">再玩一次 <span aria-hidden="true">↻</span></button>
+        <p id="result-best" class="result-best"></p>
+        <div class="result-actions">
+          <button id="next-level-button" class="primary-button" type="button">下一關 <span aria-hidden="true">→</span></button>
+          <button id="retry-button" class="secondary-button" type="button">再玩一次 <span aria-hidden="true">↻</span></button>
+          <button id="result-select-button" class="secondary-button" type="button">選關</button>
+        </div>
+        <p id="result-note" class="hint" hidden>無法儲存紀錄:本次紀錄只保存在此分頁。</p>
       </section>
 
       <div id="rotate-panel" class="rotate-panel" role="alert">

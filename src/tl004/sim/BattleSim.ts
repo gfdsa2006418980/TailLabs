@@ -1,7 +1,7 @@
 import { MATERIALS } from '../config/Materials.ts';
 import type { MaterialId } from '../config/Materials.ts';
 import { ATTACKER, KNOCKOUT, PHYSICS, SHOT, SLING, STEP_MS, TARGET, WORLD } from '../config/Tuning.ts';
-import { ABILITY, PARTNER_ABILITY } from '../config/Abilities.ts';
+import { ABILITY, ABILITY_GRACE_STEPS, PARTNER_ABILITY } from '../config/Abilities.ts';
 import type { AbilityId } from '../config/Abilities.ts';
 import { damageFrom, impactStrength } from '../rules/Damage.ts';
 import { ScoreBook, starsFor } from '../rules/Scoring.ts';
@@ -103,7 +103,7 @@ export type SimEvent =
   | { type: 'cracked'; id: number }
   | { type: 'break'; id: number; kind: PieceKind; material?: MaterialId; shapeId?: string; x: number; y: number; angle: number; vx: number; points: number }
   | { type: 'launch'; shot: number; id: number }
-  | { type: 'ability'; ability: AbilityId; id: number; x: number; y: number; extraIds: number[] }
+  | { type: 'ability'; ability: AbilityId; id: number; x: number; y: number; extraIds: number[]; /** Horizontal travel direction (+1 right, -1 left). */ dir: number }
   | { type: 'shotEnd'; chainBonus: number }
   | { type: 'ready'; shot: number }
   | { type: 'bonus'; index: number; points: number }
@@ -160,6 +160,8 @@ export class BattleSim {
   activeAttackerId: number | undefined;
   /** Whether the active partner has touched anything yet. */
   activeHasImpacted = false;
+  /** Step of the active partner's first contact (the ability stays usable for a moment after it). */
+  firstImpactStep: number | undefined;
   /** Steps since the current shot was launched. */
   shotSteps = 0;
   /** The current shot's ability has been used. */
@@ -175,6 +177,9 @@ export class BattleSim {
   /** Breakthrough dash in progress until this step (破竹衝刺). */
   private dashUntil = -1;
   private dashVelocity: Point | undefined;
+  /** 吉祥大翻滾 keeps rolling until this step, in this horizontal direction. */
+  private rollUntil = -1;
+  private rollDir = 1;
   /** Body of the partner using 辣勁彈跳 this shot. */
   private bouncy: SimBody | undefined;
   private damageEnabled = false;
@@ -208,9 +213,16 @@ export class BattleSim {
   /** No skipping the last shot: a slow collapse may still knock out the final 四十塊. */
   get canSkip(): boolean { return this.phase === 'flying' && !this.isLastShot && this.shotSteps >= SHOT.skipAfterSteps; }
   get currentShapeId(): string | undefined { return this.level.shots[this.shotIndex]; }
-  /** One tap per shot, while the partner is still in the air before touching anything. */
+  /** One tap per shot: while the partner flies, or up to ABILITY_GRACE_STEPS after it first touches something. */
   get canUseAbility(): boolean {
-    return this.phase === 'flying' && !this.abilityUsed && !this.activeHasImpacted && this.activeAttackerId !== undefined && this.pieces.has(this.activeAttackerId);
+    if (this.phase !== 'flying' || this.abilityUsed || this.activeAttackerId === undefined || !this.pieces.has(this.activeAttackerId)) return false;
+    return this.firstImpactStep === undefined || this.stepCount - this.firstImpactStep <= ABILITY_GRACE_STEPS;
+  }
+  /** Share of the after-contact window left (1 while still flying free), for the HUD. */
+  get abilityWindowLeft(): number {
+    if (!this.canUseAbility) return 0;
+    if (this.firstImpactStep === undefined) return 1;
+    return Math.max(0, 1 - (this.stepCount - this.firstImpactStep) / ABILITY_GRACE_STEPS);
   }
   get currentAbility(): AbilityId | undefined {
     const id = this.phase === 'flying' ? this.level.shots[this.shotIndex] : this.currentShapeId;
@@ -235,12 +247,14 @@ export class BattleSim {
     this.abilityUsed = false;
     this.dashUntil = -1;
     this.dashVelocity = undefined;
+    this.rollUntil = -1;
     this.bouncy = undefined;
     this.phase = 'flying';
     this.shotSteps = 0;
     this.quietSteps = 0;
     this.activeAttackerId = body.id;
     this.activeHasImpacted = false;
+    this.firstImpactStep = undefined;
     this.score.beginShot(this.stepCount);
     return [{ type: 'launch', shot: this.shotIndex, id: body.id }];
   }
@@ -258,6 +272,7 @@ export class BattleSim {
     this.impacts.clear();
     const dasher = this.dashing();
     if (dasher) this.dashVelocity = { ...dasher.body.velocity };
+    this.driveRoll();
     this.kit.Engine.update(this.engine, STEP_MS);
     this.stepCount++;
     this.wakeTouchingMovers();
@@ -365,7 +380,7 @@ export class BattleSim {
         }
       }
       const attacker = [pa, pb].find((piece) => piece?.kind === 'attacker');
-      if (attacker && attacker.id === this.activeAttackerId) this.activeHasImpacted = true;
+      if (attacker && attacker.id === this.activeAttackerId) this.markImpact();
       if (dasher && attacker === dasher) {
         const other = attacker === pa ? pb : pa;
         // The dash ends on stone, the ground or a 四十塊.
@@ -409,17 +424,19 @@ export class BattleSim {
     if (launch) launch.abilityStep = this.shotSteps;
     const { body } = piece;
     const at = { x: body.position.x, y: body.position.y };
+    const heading = this.heading(body);
+    const dir = heading.x < 0 ? -1 : 1;
     const events: SimEvent[] = [];
     const extraIds: number[] = [];
     if (ability === 'firework') {
-      events.push({ type: 'ability', ability, id: piece.id, x: at.x, y: at.y, extraIds });
+      events.push({ type: 'ability', ability, id: piece.id, x: at.x, y: at.y, extraIds, dir });
       this.removePiece(piece, events);
       this.explode(at, events);
       return events;
     }
+    this.kit.Sleeping.set(body, false);
     if (ability === 'dash') {
-      const speed = Math.hypot(body.velocity.x, body.velocity.y) || 1;
-      this.kit.Body.setVelocity(body, { x: (body.velocity.x / speed) * ABILITY.dash.speed, y: (body.velocity.y / speed) * ABILITY.dash.speed });
+      this.kit.Body.setVelocity(body, { x: heading.x * ABILITY.dash.speed, y: heading.y * ABILITY.dash.speed });
       this.dashUntil = this.stepCount + ABILITY.dash.duration;
     } else if (ability === 'split') {
       extraIds.push(...this.splitCards(piece));
@@ -431,9 +448,76 @@ export class BattleSim {
       this.kit.Body.setMass(body, body.mass * ABILITY.slam.massFactor);
       this.kit.Body.setVelocity(body, { x: 0, y: ABILITY.slam.speed });
       this.kit.Body.setAngularVelocity(body, 0);
+    } else if (ability === 'roll') {
+      const { massFactor, speed, dive, duration } = ABILITY.roll;
+      this.kit.Body.setMass(body, body.mass * massFactor);
+      this.kit.Body.setVelocity(body, { x: dir * speed, y: Math.max(body.velocity.y, dive) });
+      this.rollDir = dir;
+      this.rollUntil = this.stepCount + duration;
+    } else if (ability === 'wave') {
+      this.wash(at, dir);
+      const ride = Math.max(Math.abs(body.velocity.x), ABILITY.wave.ride);
+      this.kit.Body.setVelocity(body, { x: dir * ride, y: body.velocity.y });
     }
-    events.unshift({ type: 'ability', ability, id: piece.id, x: at.x, y: at.y, extraIds });
+    events.unshift({ type: 'ability', ability, id: piece.id, x: at.x, y: at.y, extraIds, dir });
     return events;
+  }
+
+  private markImpact(): void {
+    this.activeHasImpacted = true;
+    this.firstImpactStep ??= this.stepCount;
+  }
+
+  /**
+   * Unit direction the partner is travelling. After a hit it may be nearly still or bouncing back,
+   * so fall back to the direction it was fired.
+   */
+  private heading(body: SimBody): Point {
+    const speed = Math.hypot(body.velocity.x, body.velocity.y);
+    if (speed >= 3) return { x: body.velocity.x / speed, y: body.velocity.y / speed };
+    const launch = this.launches.at(-1);
+    const length = launch ? Math.hypot(launch.vx, launch.vy) : 0;
+    return launch && length ? { x: launch.vx / length, y: launch.vy / length } : { x: 1, y: 0 };
+  }
+
+  /** 吉祥大翻滾: keep spinning and pushing forward until the roll runs out. */
+  private driveRoll(): void {
+    if (this.stepCount >= this.rollUntil || this.activeAttackerId === undefined) return;
+    const roller = this.pieces.get(this.activeAttackerId);
+    if (!roller) { this.rollUntil = -1; return; }
+    const { body } = roller;
+    const { speed, accel, spin } = ABILITY.roll;
+    if (body.isSleeping) this.kit.Sleeping.set(body, false);
+    const forward = body.velocity.x * this.rollDir;
+    if (forward < speed) this.kit.Body.setVelocity(body, { x: this.rollDir * Math.min(speed, forward + accel), y: body.velocity.y });
+    this.kit.Body.setAngularVelocity(body, this.rollDir * spin);
+  }
+
+  /**
+   * 山澗激流: a band of water ahead of the partner pushes blocks and 四十塊 forward (no direct damage:
+   * the knocks they take while tumbling do the work). Stone blocks the water for whatever is behind it.
+   */
+  private wash(at: Point, dir: number): void {
+    const w = ABILITY.wave;
+    const reached: { piece: Piece; ahead: number }[] = [];
+    for (const piece of this.pieces.values()) {
+      if (piece.kind === 'attacker' || piece.knockedOutAt !== undefined || !piece.material) continue;
+      const ahead = (piece.body.position.x - at.x) * dir;
+      const dy = piece.body.position.y - at.y;
+      if (ahead < -w.behind || ahead > w.length || dy < -w.above || dy > w.below) continue;
+      reached.push({ piece, ahead });
+    }
+    const stones = reached.filter(({ piece }) => piece.material === 'stone');
+    for (const { piece, ahead } of reached) {
+      const { body } = piece;
+      const y = body.position.y;
+      const shielded = stones.some((stone) => stone.piece !== piece && stone.ahead < ahead && stone.piece.body.bounds.min.y <= y && stone.piece.body.bounds.max.y >= y);
+      if (shielded) continue;
+      const falloff = 1 - (Math.max(0, ahead) / w.length) * (1 - w.farShare);
+      const kick = w.push * falloff * (piece.material === 'stone' ? w.stoneShare : 1);
+      this.kit.Sleeping.set(body, false);
+      this.kit.Body.setVelocity(body, { x: body.velocity.x + dir * kick, y: body.velocity.y - kick * w.lift });
+    }
   }
 
   /** 煙火爆炸: push and damage everything nearby, fading with distance. */
@@ -524,7 +608,7 @@ export class BattleSim {
     if (piece.knockedOutAt !== undefined) return;
     this.wakeAround(piece.body);
     if (piece.kind === 'attacker') {
-      if (piece.id === this.activeAttackerId) this.activeHasImpacted = true;
+      if (piece.id === this.activeAttackerId) this.markImpact();
       return;
     }
     if (piece.kind === 'target') this.targetsLeft--;

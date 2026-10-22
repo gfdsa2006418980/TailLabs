@@ -6,6 +6,20 @@ type ImpactMaterial = MaterialId | 'ground' | 'attacker';
 interface AudioSessionLike { type: string }
 
 /**
+ * Base pitch (Hz) of each partner's launch "weeeee": every partner sings its own note
+ * (heavier partners lower). Unknown ids fall back to A5.
+ */
+export const LAUNCH_PITCH: Readonly<Record<string, number>> = {
+  youfan3d: 392, // G4
+  zhaxidele: 466, // A♯4
+  zhusun: 523, // C5
+  jiangpian: 587, // D5
+  caideng: 659, // E5
+  poker: 784, // G5
+  jian: 880, // A5
+};
+
+/**
  * Synthesised sound effects (no audio files). Each sound has a minimum repeat
  * interval and the total number of live voices is capped, so big collapses never clip.
  */
@@ -103,6 +117,49 @@ export class Sfx {
     this.tone(520, 160, 0.18, 0.12, 'triangle');
   }
 
+  /**
+   * Electronic "weeeee" as a partner leaves the sling: a quick upward swoop, then a held,
+   * wobbling note that keeps rising a little and fades out. Pitch is per partner.
+   */
+  wee(partnerId: string, power: number): void {
+    if (!this.gate('wee', 150)) return;
+    const base = LAUNCH_PITCH[partnerId] ?? 880;
+    const duration = 0.55 + power * 0.4;
+    const { ctx, out, t } = this.voice(duration);
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.value = base * 4;
+    filter.Q.value = 2;
+    const vibrato = ctx.createOscillator();
+    const depth = ctx.createGain();
+    vibrato.frequency.setValueAtTime(5, t);
+    vibrato.frequency.linearRampToValueAtTime(9, t + duration);
+    depth.gain.value = base * 0.035;
+    vibrato.connect(depth);
+    for (const [type, detune, level] of [['square', 0, 0.55], ['sawtooth', 9, 0.45]] as const) {
+      const osc = ctx.createOscillator();
+      osc.type = type;
+      osc.detune.value = detune;
+      osc.frequency.setValueAtTime(base * 0.6, t);
+      osc.frequency.exponentialRampToValueAtTime(base * 1.5, t + 0.12);
+      osc.frequency.exponentialRampToValueAtTime(base * 1.7, t + duration);
+      depth.connect(osc.frequency);
+      const gain = ctx.createGain();
+      gain.gain.value = level;
+      osc.connect(gain).connect(filter);
+      osc.start(t);
+      osc.stop(t + duration + 0.02);
+    }
+    filter.connect(out);
+    const volume = 0.05 + power * 0.03;
+    out.gain.setValueAtTime(0.0001, t);
+    out.gain.exponentialRampToValueAtTime(volume, t + 0.03);
+    out.gain.setValueAtTime(volume, t + duration * 0.55);
+    out.gain.exponentialRampToValueAtTime(0.0001, t + duration);
+    vibrato.start(t);
+    vibrato.stop(t + duration + 0.02);
+  }
+
   impact(material: ImpactMaterial, strength: number): void {
     if (!this.gate(`impact-${material}`, 45)) return;
     const level = Math.min(1, strength / 45);
@@ -132,6 +189,8 @@ export class Sfx {
     else if (ability === 'dash') { this.burst('bandpass', 1800, 1, 0.3, 0.2); this.tone(300, 900, 0.25, 0.1, 'sawtooth'); }
     else if (ability === 'split') { [1200, 1500, 1800].forEach((f, i) => this.tone(f, f, 0.08, 0.08, 'square', i * 0.05)); }
     else if (ability === 'bounce') { this.tone(200, 900, 0.3, 0.14, 'sine'); }
+    else if (ability === 'roll') { this.tone(140, 70, 0.6, 0.2, 'triangle'); this.burst('lowpass', 350, 0.8, 0.6, 0.18); [392, 494, 587].forEach((f, i) => this.tone(f, f, 0.12, 0.05, 'triangle', i * 0.08)); }
+    else if (ability === 'wave') { this.burst('lowpass', 1400, 0.5, 0.7, 0.3); this.burst('bandpass', 2600, 0.9, 0.45, 0.12, 0.08); this.tone(700, 260, 0.4, 0.06, 'sine'); }
     else { this.tone(500, 90, 0.35, 0.2, 'triangle'); }
   }
 

@@ -1,0 +1,494 @@
+{
+  "version": 1,
+  "levels": [
+    {
+      "id": "m1-wood-hut",
+      "name": "木造小工坊",
+      "shots": ["caideng","zhusun","poker","jiangpian","youfan3d"],
+      "stars": {"two":35000,"three":45000},
+      "check": {"botWon":true,"botShots":1,"botScore":59200,"clearNoAbility":0.617,"clearWithAbility":0.98},
+      "solution": [
+        {"vx":21.492089970005356,"vy":-2.1564017995714884}
+      ],
+      "blocks": [
+        {"material":"wood","x":1280,"y":865,"w":30,"h":150},
+        {"material":"wood","x":1540,"y":865,"w":30,"h":150},
+        {"material":"target","x":1410,"y":895,"shape":"serpentela-w50-02"},
+        {"material":"wood","x":1410,"y":777,"w":300,"h":26},
+        {"material":"wood","x":1335,"y":709,"w":28,"h":110},
+        {"material":"wood","x":1485,"y":709,"w":28,"h":110},
+        {"material":"target","x":1410,"y":718,"shape":"serpentela-w20-01"},
+        {"material":"wood","x":1410,"y":642,"w":200,"h":24},
+        {"material":"target","x":1410,"y":588,"shape":"serpentela-w5-01"}
+      ]
+    },
+    {
+      "id": "firework-shed",
+      "name": "煙火工坊",
+      "shots": ["caideng","caideng","poker","caideng","zhusun"],
+      "stars": {"two":32000,"three":50000},
+      "check": {"botWon":true,"botShots":1,"botScore":59200,"clearNoAbility":0.377,"clearWithAbility":0.737},
+      "solution": [
+        {"vx":19.176004999583352,"vy":-0.959600049997024,"abilityStep":43}
+      ],
+      "blocks": [
+        {"material":"wood","x":1233,"y":890,"w":26,"h":100},
+        {"material":"wood","x":1507,"y":890,"w":26,"h":100},
+        {"material":"wood","x":1370,"y":829,"w":324,"h":22},
+        {"material":"target","x":1320,"y":898,"shape":"serpentela-w50-02"},
+        {"material":"target","x":1420,"y":898,"shape":"serpentela-w20-01"},
+        {"material":"target","x":1370,"y":776,"shape":"serpentela-w5-01"}
+      ]
+    },
+    {
+      "id": "bamboo-gate",
+      "name": "竹林關",
+      "shots": ["zhusun","zhusun","caideng","zhusun","poker"],
+      "stars": {"two":33000,"three":51000},
+      "check": {"botWon":true,"botShots":1,"botScore":60400,"clearNoAbility":0.493,"clearWithAbility":0.733},
+      "solution": [
+        {"vx":23.97000624947919,"vy":-1.19950006249628,"abilityStep":28}
+      ],
+      "blocks": [
+        {"material":"wood","x":1300,"y":895,"w":24,"h":90},
+        {"material":"wood","x":1370,"y":880,"w":30,"h":120},
+        {"material":"wood","x":1530,"y":880,"w":30,"h":120},
+        {"material":"wood","x":1450,"y":807,"w":214,"h":26},
+        {"material":"target","x":1450,"y":898,"shape":"serpentela-w50-03"},
+        {"material":"target","x":1405,"y":752,"shape":"serpentela-w20-02"},
+        {"material":"target","x":1495,"y":752,"shape":"serpentela-w5-02"}
+      ]
+    },
+    {
+      "id": "card-tower",
+      "name": "紙牌塔",
+      "shots": ["poker","poker","caideng","poker","jiangpian"],
+      "stars": {"two":33000,"three":52000},
+      "check": {"botWon":true,"botShots":1,"botScore":61600,"clearNoAbility":0.407,"clearWithAbility":0.713},
+      "solution": [
+        {"vx":23.253898121055474,"vy":-5.93769502210855,"abilityStep":34}
+      ],
+      "blocks": [
+        {"material":"wood","x":1675,"y":885,"w":30,"h":110},
+        {"material":"wood","x":1825,"y":885,"w":30,"h":110},
+        {"material":"wood","x":1750,"y":817,"w":204,"h":26},
+        {"material":"target","x":1750,"y":898,"shape":"serpentela-w50-04"},
+        {"material":"wood","x":1675,"y":749,"w":30,"h":110},
+        {"material":"wood","x":1825,"y":749,"w":30,"h":110},
+        {"material":"wood","x":1750,"y":681,"w":204,"h":26},
+        {"material":"target","x":1750,"y":762,"shape":"serpentela-w20-03"},
+        {"material":"wood","x":1675,"y":613,"w":30,"h":110},
+        {"material":"wood","x":1825,"y":613,"w":30,"h":110},
+        {"material":"wood","x":1750,"y":545,"w":204,"h":26},
+        {"material":"target","x":1750,"y":626,"shape":"serpentela-w5-03"}
+      ]
+    },
+    {
+      "id": "rice-press",
+      "name": "油飯壓頂",
+      "shots": ["youfan3d","youfan3d","caideng","youfan3d","zhusun"],
+      "stars": {"two":32000,"three":50000},
+      "check": {"botWon":true,"botShots":1,"botScore":59200,"clearNoAbility":0.403,"clearWithAbility":0.707},
+      "solution": [
+        {"vx":23.253898121055474,"vy":-5.93769502210855}
+      ],
+      "blocks": [
+        {"material":"wood","x":1620,"y":825,"w":36,"h":230},
+        {"material":"wood","x":1662,"y":825,"w":36,"h":230},
+        {"material":"wood","x":2020,"y":825,"w":36,"h":230},
+        {"material":"wood","x":1820,"y":696,"w":440,"h":28},
+        {"material":"target","x":1770,"y":898,"shape":"serpentela-w50-01"},
+        {"material":"target","x":1910,"y":898,"shape":"serpentela-w20-02"},
+        {"material":"target","x":1840,"y":640,"shape":"serpentela-w1-01"}
+      ]
+    },
+    {
+      "id": "spicy-bounce",
+      "name": "辣味彈跳",
+      "shots": ["jiangpian","jiangpian","poker","jiangpian","caideng"],
+      "stars": {"two":32000,"three":50000},
+      "check": {"botWon":true,"botShots":1,"botScore":59200,"clearNoAbility":0.247,"clearWithAbility":0.603},
+      "solution": [
+        {"vx":21.573005624531273,"vy":-1.079550056246652,"abilityStep":38}
+      ],
+      "blocks": [
+        {"material":"target","x":1360,"y":898,"shape":"serpentela-w50-05"},
+        {"material":"target","x":1500,"y":898,"shape":"serpentela-w1-02"},
+        {"material":"wood","x":1573,"y":890,"w":26,"h":100},
+        {"material":"wood","x":1707,"y":890,"w":26,"h":100},
+        {"material":"wood","x":1640,"y":829,"w":184,"h":22},
+        {"material":"target","x":1640,"y":898,"shape":"serpentela-w20-05"}
+      ]
+    },
+    {
+      "id": "glasshouse",
+      "name": "玻璃溫室",
+      "shots": ["jian","poker","caideng","zhusun","zhaxidele"],
+      "stars": {"two":38000,"three":56000},
+      "check": {"botWon":true,"botShots":1,"botScore":67000,"clearNoAbility":0.12,"clearWithAbility":0.647},
+      "solution": [
+        {"vx":18.414529676485323,"vy":-11.29004414490224,"abilityStep":60}
+      ],
+      "blocks": [
+        {"material":"wood","x":1520,"y":855,"w":34,"h":170},
+        {"material":"wood","x":1570,"y":855,"w":34,"h":170},
+        {"material":"wood","x":1640,"y":870,"w":30,"h":140},
+        {"material":"wood","x":2040,"y":870,"w":30,"h":140},
+        {"material":"glass","x":1773,"y":870,"w":24,"h":140},
+        {"material":"glass","x":1907,"y":870,"w":24,"h":140},
+        {"material":"wood","x":1840,"y":787,"w":440,"h":26},
+        {"material":"target","x":1706,"y":898,"shape":"serpentela-w20-01"},
+        {"material":"target","x":1974,"y":898,"shape":"serpentela-w50-04"},
+        {"material":"glass","x":1757,"y":719,"w":24,"h":110},
+        {"material":"glass","x":1923,"y":719,"w":24,"h":110},
+        {"material":"glass","x":1840,"y":653,"w":214,"h":22},
+        {"material":"target","x":1840,"y":732,"shape":"serpentela-w5-01"},
+        {"material":"target","x":1840,"y":600,"shape":"serpentela-w1-01"}
+      ]
+    },
+    {
+      "id": "twin-towers",
+      "name": "雙塔",
+      "shots": ["caideng","poker","zhusun","jian","youfan3d"],
+      "stars": {"two":34000,"three":49000},
+      "check": {"botWon":true,"botShots":2,"botScore":57740,"clearNoAbility":0.13,"clearWithAbility":0.643},
+      "solution": [
+        {"vx":22.544945108337092,"vy":-8.229547378930834},
+        {"vx":23.730505870465013,"vy":-3.5865151793663816,"abilityStep":26}
+      ],
+      "blocks": [
+        {"material":"glass","x":1530,"y":860,"w":24,"h":160},
+        {"material":"wood","x":1570,"y":880,"w":30,"h":120},
+        {"material":"wood","x":1710,"y":880,"w":30,"h":120},
+        {"material":"wood","x":1640,"y":807,"w":194,"h":26},
+        {"material":"target","x":1640,"y":898,"shape":"serpentela-w50-05"},
+        {"material":"wood","x":1570,"y":739,"w":30,"h":110},
+        {"material":"wood","x":1710,"y":739,"w":30,"h":110},
+        {"material":"glass","x":1640,"y":673,"w":194,"h":22},
+        {"material":"target","x":1640,"y":752,"shape":"serpentela-w20-03"},
+        {"material":"wood","x":1950,"y":840,"w":30,"h":200},
+        {"material":"glass","x":1987,"y":880,"w":24,"h":120},
+        {"material":"glass","x":2133,"y":880,"w":24,"h":120},
+        {"material":"glass","x":2060,"y":807,"w":194,"h":26},
+        {"material":"wood","x":1990,"y":739,"w":30,"h":110},
+        {"material":"wood","x":2130,"y":739,"w":30,"h":110},
+        {"material":"wood","x":2060,"y":671,"w":194,"h":26},
+        {"material":"target","x":2060,"y":752,"shape":"serpentela-w5-03"},
+        {"material":"glass","x":1997,"y":608,"w":24,"h":100},
+        {"material":"glass","x":2123,"y":608,"w":24,"h":100},
+        {"material":"glass","x":2060,"y":547,"w":174,"h":22},
+        {"material":"target","x":2060,"y":616,"shape":"serpentela-w50-02"}
+      ]
+    },
+    {
+      "id": "longhouse",
+      "name": "長屋",
+      "shots": ["zhaxidele","zhaxidele","jiangpian","poker","jian"],
+      "stars": {"two":32000,"three":50000},
+      "check": {"botWon":true,"botShots":1,"botScore":59320,"clearNoAbility":0.14,"clearWithAbility":0.417},
+      "solution": [
+        {"vx":16.779004374635434,"vy":-0.8396500437473959,"abilityStep":37}
+      ],
+      "blocks": [
+        {"material":"glass","x":1240,"y":885,"w":26,"h":110},
+        {"material":"glass","x":1600,"y":885,"w":26,"h":110},
+        {"material":"wood","x":1420,"y":817,"w":400,"h":26},
+        {"material":"target","x":1300,"y":898,"shape":"serpentela-w50-03"},
+        {"material":"target","x":1420,"y":898,"shape":"serpentela-w20-02"},
+        {"material":"target","x":1540,"y":898,"shape":"serpentela-w5-02"}
+      ]
+    },
+    {
+      "id": "stone-front",
+      "name": "石頭擋路",
+      "shots": ["jian","youfan3d","jian","youfan3d","caideng"],
+      "stars": {"two":32000,"three":49000},
+      "check": {"botWon":true,"botShots":1,"botScore":58560,"clearNoAbility":0.093,"clearWithAbility":0.233},
+      "solution": [
+        {"vx":17.195410048659607,"vy":-13.072026363898457}
+      ],
+      "blocks": [
+        {"material":"stone","x":1950,"y":860,"w":100,"h":160},
+        {"material":"stone","x":2350,"y":860,"w":100,"h":160},
+        {"material":"glass","x":2090,"y":880,"w":24,"h":120},
+        {"material":"glass","x":2210,"y":880,"w":24,"h":120},
+        {"material":"glass","x":2150,"y":808,"w":160,"h":24},
+        {"material":"target","x":2150,"y":895,"shape":"serpentela-w50-03"},
+        {"material":"wood","x":2150,"y":765,"w":520,"h":30},
+        {"material":"wood","x":1960,"y":650,"w":30,"h":200},
+        {"material":"wood","x":2340,"y":650,"w":30,"h":200},
+        {"material":"wood","x":2080,"y":690,"w":28,"h":120},
+        {"material":"wood","x":2220,"y":690,"w":28,"h":120},
+        {"material":"target","x":2150,"y":710,"shape":"serpentela-w20-03"},
+        {"material":"wood","x":2150,"y":617,"w":200,"h":28},
+        {"material":"wood","x":2150,"y":536,"w":440,"h":28},
+        {"material":"stone","x":2150,"y":487,"w":70,"h":70},
+        {"material":"target","x":2150,"y":410,"shape":"serpentela-w1-01"}
+      ]
+    },
+    {
+      "id": "stone-base",
+      "name": "石基高塔",
+      "shots": ["caideng","youfan3d","jian","poker","zhusun"],
+      "stars": {"two":33000,"three":47000},
+      "check": {"botWon":true,"botShots":2,"botScore":56300,"clearNoAbility":0.15,"clearWithAbility":0.497},
+      "solution": [
+        {"vx":23.5215978681898,"vy":-4.768063939081469},
+        {"vx":22.544945108337092,"vy":-8.229547378930834,"abilityStep":90}
+      ],
+      "blocks": [
+        {"material":"wood","x":1713,"y":880,"w":36,"h":120},
+        {"material":"wood","x":1907,"y":880,"w":36,"h":120},
+        {"material":"wood","x":1810,"y":807,"w":254,"h":26},
+        {"material":"target","x":1810,"y":898,"shape":"serpentela-w20-04"},
+        {"material":"wood","x":1725,"y":734,"w":30,"h":120},
+        {"material":"wood","x":1895,"y":734,"w":30,"h":120},
+        {"material":"wood","x":1810,"y":661,"w":224,"h":26},
+        {"material":"target","x":1810,"y":752,"shape":"serpentela-w50-05"},
+        {"material":"target","x":1810,"y":606,"shape":"serpentela-w1-01"},
+        {"material":"stone","x":2020,"y":910,"w":60,"h":60},
+        {"material":"target","x":2100,"y":898,"shape":"serpentela-w50-03"}
+      ]
+    },
+    {
+      "id": "stone-wall",
+      "name": "石牆小屋",
+      "shots": ["youfan3d","caideng","zhusun","jian","zhaxidele"],
+      "stars": {"two":33000,"three":51000},
+      "check": {"botWon":true,"botShots":1,"botScore":60400,"clearNoAbility":0.16,"clearWithAbility":0.43},
+      "solution": [
+        {"vx":20.290450597503384,"vy":-7.406592641037751,"abilityStep":93}
+      ],
+      "blocks": [
+        {"material":"stone","x":1550,"y":830,"w":60,"h":220},
+        {"material":"wood","x":1645,"y":875,"w":30,"h":130},
+        {"material":"wood","x":1835,"y":875,"w":30,"h":130},
+        {"material":"wood","x":1740,"y":797,"w":244,"h":26},
+        {"material":"target","x":1740,"y":898,"shape":"serpentela-w20-05"},
+        {"material":"target","x":1740,"y":742,"shape":"serpentela-w20-01"},
+        {"material":"wood","x":1910,"y":885,"w":30,"h":110},
+        {"material":"target","x":1990,"y":898,"shape":"serpentela-w5-01"}
+      ]
+    },
+    {
+      "id": "bunker",
+      "name": "碉堡",
+      "shots": ["caideng","youfan3d","jiangpian","caideng","jian"],
+      "stars": {"two":33000,"three":47000},
+      "check": {"botWon":true,"botShots":2,"botScore":55400,"clearNoAbility":0.023,"clearWithAbility":0.437},
+      "solution": [
+        {"vx":22.544945108337092,"vy":-8.229547378930834},
+        {"vx":22.544945108337092,"vy":-8.229547378930834,"abilityStep":49}
+      ],
+      "blocks": [
+        {"material":"stone","x":1340,"y":850,"w":60,"h":180},
+        {"material":"stone","x":1680,"y":850,"w":60,"h":180},
+        {"material":"stone","x":1510,"y":742,"w":420,"h":36},
+        {"material":"target","x":1460,"y":898,"shape":"serpentela-w20-02"},
+        {"material":"target","x":1580,"y":898,"shape":"serpentela-w50-04"},
+        {"material":"wood","x":1435,"y":669,"w":30,"h":110},
+        {"material":"wood","x":1585,"y":669,"w":30,"h":110},
+        {"material":"wood","x":1510,"y":601,"w":204,"h":26},
+        {"material":"target","x":1510,"y":682,"shape":"serpentela-w5-03"},
+        {"material":"wood","x":1810,"y":840,"w":30,"h":200},
+        {"material":"wood","x":1910,"y":840,"w":30,"h":200},
+        {"material":"wood","x":1860,"y":727,"w":154,"h":26},
+        {"material":"target","x":1860,"y":672,"shape":"serpentela-w50-01"}
+      ]
+    },
+    {
+      "id": "stair-town",
+      "name": "階梯城",
+      "shots": ["zhusun","caideng","youfan3d","jian","zhaxidele"],
+      "stars": {"two":31000,"three":42000},
+      "check": {"botWon":true,"botShots":2,"botScore":50300,"clearNoAbility":0.057,"clearWithAbility":0.367},
+      "solution": [
+        {"vx":22.928075739014545,"vy":-7.092484959872149,"abilityStep":43},
+        {"vx":23.253898121055474,"vy":-5.93769502210855,"abilityStep":60}
+      ],
+      "blocks": [
+        {"material":"stone","x":1550,"y":890,"w":120,"h":100},
+        {"material":"target","x":1550,"y":798,"shape":"serpentela-w50-02"},
+        {"material":"stone","x":1653,"y":865,"w":36,"h":150},
+        {"material":"stone","x":1787,"y":865,"w":36,"h":150},
+        {"material":"stone","x":1720,"y":777,"w":194,"h":26},
+        {"material":"target","x":1720,"y":722,"shape":"serpentela-w20-03"},
+        {"material":"glass","x":1720,"y":920,"w":80,"h":40},
+        {"material":"stone","x":1867,"y":830,"w":44,"h":220},
+        {"material":"stone","x":1993,"y":830,"w":44,"h":220},
+        {"material":"stone","x":1930,"y":707,"w":194,"h":26},
+        {"material":"target","x":1930,"y":898,"shape":"serpentela-w5-02"},
+        {"material":"target","x":1930,"y":652,"shape":"serpentela-w1-02"}
+      ]
+    },
+    {
+      "id": "stone-gate",
+      "name": "石門",
+      "shots": ["caideng","zhusun","youfan3d","jiangpian","jian"],
+      "stars": {"two":32000,"three":45000},
+      "check": {"botWon":true,"botShots":2,"botScore":53400,"clearNoAbility":0.073,"clearWithAbility":0.36},
+      "solution": [
+        {"vx":16.277728684738832,"vy":-4.156386515475985,"abilityStep":58},
+        {"vx":20.928508308949926,"vy":-5.343925519897695,"abilityStep":43}
+      ],
+      "blocks": [
+        {"material":"stone","x":1310,"y":860,"w":50,"h":160},
+        {"material":"stone","x":1490,"y":860,"w":50,"h":160},
+        {"material":"wood","x":1400,"y":765,"w":260,"h":30},
+        {"material":"target","x":1400,"y":898,"shape":"serpentela-w5-01"},
+        {"material":"target","x":1400,"y":708,"shape":"serpentela-w50-03"},
+        {"material":"wood","x":1630,"y":875,"w":30,"h":130},
+        {"material":"wood","x":1750,"y":875,"w":30,"h":130},
+        {"material":"wood","x":1690,"y":797,"w":174,"h":26},
+        {"material":"target","x":1690,"y":898,"shape":"serpentela-w20-01"},
+        {"material":"target","x":1690,"y":742,"shape":"serpentela-w20-05"}
+      ]
+    },
+    {
+      "id": "glass-spire",
+      "name": "玻璃尖塔",
+      "shots": ["zhusun","jiangpian","caideng","jian"],
+      "stars": {"two":33000,"three":47000},
+      "check": {"botWon":true,"botShots":1,"botScore":56400,"clearNoAbility":0.01,"clearWithAbility":0.247},
+      "solution": [
+        {"vx":17.684371084855396,"vy":-7.47683217232609,"abilityStep":56}
+      ],
+      "blocks": [
+        {"material":"stone","x":1500,"y":880,"w":60,"h":120},
+        {"material":"stone","x":1602,"y":880,"w":44,"h":120},
+        {"material":"stone","x":1758,"y":880,"w":44,"h":120},
+        {"material":"stone","x":1680,"y":807,"w":224,"h":26},
+        {"material":"target","x":1680,"y":898,"shape":"serpentela-w50-05"},
+        {"material":"glass","x":1602,"y":739,"w":24,"h":110},
+        {"material":"glass","x":1758,"y":739,"w":24,"h":110},
+        {"material":"glass","x":1680,"y":671,"w":204,"h":26},
+        {"material":"target","x":1680,"y":752,"shape":"serpentela-w20-02"},
+        {"material":"wood","x":1610,"y":603,"w":30,"h":110},
+        {"material":"wood","x":1750,"y":603,"w":30,"h":110},
+        {"material":"wood","x":1680,"y":535,"w":194,"h":26},
+        {"material":"target","x":1680,"y":616,"shape":"serpentela-w5-02"},
+        {"material":"glass","x":1617,"y":472,"w":24,"h":100},
+        {"material":"glass","x":1743,"y":472,"w":24,"h":100},
+        {"material":"glass","x":1680,"y":411,"w":174,"h":22},
+        {"material":"target","x":1680,"y":480,"shape":"serpentela-w1-01"}
+      ]
+    },
+    {
+      "id": "castle",
+      "name": "四十塊城堡",
+      "shots": ["caideng","jian","youfan3d","zhusun"],
+      "stars": {"two":35000,"three":45000},
+      "check": {"botWon":true,"botShots":2,"botScore":53000,"clearNoAbility":0.023,"clearWithAbility":0.263},
+      "solution": [
+        {"vx":13.42677531464635,"vy":-16.919861247953648,"abilityStep":134},
+        {"vx":15.846443806265823,"vy":-10.841135489184682,"abilityStep":54}
+      ],
+      "blocks": [
+        {"material":"wood","x":1480,"y":820,"w":40,"h":240},
+        {"material":"wood","x":1620,"y":820,"w":40,"h":240},
+        {"material":"wood","x":1550,"y":687,"w":204,"h":26},
+        {"material":"target","x":1550,"y":898,"shape":"serpentela-w20-05"},
+        {"material":"target","x":1550,"y":632,"shape":"serpentela-w50-01"},
+        {"material":"wood","x":1675,"y":875,"w":30,"h":130},
+        {"material":"wood","x":1865,"y":875,"w":30,"h":130},
+        {"material":"wood","x":1770,"y":797,"w":244,"h":26},
+        {"material":"target","x":1740,"y":898,"shape":"serpentela-w50-04"},
+        {"material":"target","x":1820,"y":898,"shape":"serpentela-w1-02"},
+        {"material":"wood","x":1770,"y":771,"w":140,"h":26},
+        {"material":"stone","x":1932,"y":820,"w":44,"h":240},
+        {"material":"stone","x":2068,"y":820,"w":44,"h":240},
+        {"material":"stone","x":2000,"y":687,"w":204,"h":26},
+        {"material":"target","x":2000,"y":632,"shape":"serpentela-w5-03"}
+      ]
+    },
+    {
+      "id": "stone-heart",
+      "name": "石心塔",
+      "shots": ["youfan3d","caideng","zhaxidele","jian"],
+      "stars": {"two":35000,"three":45000},
+      "check": {"botWon":true,"botShots":2,"botScore":53200,"clearNoAbility":0.017,"clearWithAbility":0.263},
+      "solution": [
+        {"vx":23.730505870465013,"vy":-3.5865151793663816},
+        {"vx":13.960394147133204,"vy":-19.52197211494497,"abilityStep":155}
+      ],
+      "blocks": [
+        {"material":"stone","x":1780,"y":810,"w":70,"h":260},
+        {"material":"stone","x":1780,"y":660,"w":110,"h":40},
+        {"material":"target","x":1780,"y":598,"shape":"serpentela-w50-03"},
+        {"material":"wood","x":1570,"y":880,"w":30,"h":120},
+        {"material":"wood","x":1690,"y":880,"w":30,"h":120},
+        {"material":"wood","x":1630,"y":807,"w":174,"h":26},
+        {"material":"target","x":1630,"y":898,"shape":"serpentela-w20-01"},
+        {"material":"glass","x":1567,"y":744,"w":24,"h":100},
+        {"material":"glass","x":1693,"y":744,"w":24,"h":100},
+        {"material":"glass","x":1630,"y":681,"w":174,"h":26},
+        {"material":"target","x":1630,"y":752,"shape":"serpentela-w5-01"},
+        {"material":"glass","x":1857,"y":880,"w":24,"h":120},
+        {"material":"glass","x":1983,"y":880,"w":24,"h":120},
+        {"material":"glass","x":1920,"y":807,"w":174,"h":26},
+        {"material":"target","x":1920,"y":898,"shape":"serpentela-w20-03"},
+        {"material":"wood","x":1920,"y":781,"w":120,"h":26},
+        {"material":"target","x":1920,"y":726,"shape":"serpentela-w50-02"}
+      ]
+    },
+    {
+      "id": "twin-spires",
+      "name": "雙子高塔",
+      "shots": ["poker","caideng","zhusun","jiangpian"],
+      "stars": {"two":29000,"three":38000},
+      "check": {"botWon":true,"botShots":2,"botScore":45180,"clearNoAbility":0.013,"clearWithAbility":0.137},
+      "solution": [
+        {"vx":23.5215978681898,"vy":-4.768063939081469,"abilityStep":17},
+        {"vx":11.168315317706565,"vy":-15.617577691955976,"abilityStep":137}
+      ],
+      "blocks": [
+        {"material":"stone","x":1305,"y":880,"w":40,"h":120},
+        {"material":"stone","x":1435,"y":880,"w":40,"h":120},
+        {"material":"stone","x":1370,"y":807,"w":194,"h":26},
+        {"material":"target","x":1370,"y":898,"shape":"serpentela-w50-04"},
+        {"material":"glass","x":1297,"y":739,"w":24,"h":110},
+        {"material":"glass","x":1443,"y":739,"w":24,"h":110},
+        {"material":"glass","x":1370,"y":671,"w":194,"h":26},
+        {"material":"target","x":1370,"y":752,"shape":"serpentela-w5-03"},
+        {"material":"wood","x":1650,"y":880,"w":30,"h":120},
+        {"material":"wood","x":1790,"y":880,"w":30,"h":120},
+        {"material":"wood","x":1720,"y":807,"w":194,"h":26},
+        {"material":"target","x":1720,"y":898,"shape":"serpentela-w20-04"},
+        {"material":"stone","x":1655,"y":739,"w":40,"h":110},
+        {"material":"stone","x":1785,"y":739,"w":40,"h":110},
+        {"material":"stone","x":1720,"y":671,"w":194,"h":26},
+        {"material":"target","x":1720,"y":752,"shape":"serpentela-w50-01"},
+        {"material":"wood","x":1720,"y":645,"w":90,"h":26}
+      ]
+    },
+    {
+      "id": "headquarters",
+      "name": "四十塊總部",
+      "shots": ["youfan3d","caideng","jian"],
+      "stars": {"two":35000,"three":45000},
+      "check": {"botWon":true,"botShots":1,"botScore":53360,"clearNoAbility":0.057,"clearWithAbility":0.14},
+      "solution": [
+        {"vx":22.105463856069242,"vy":-9.346040215407612,"abilityStep":102}
+      ],
+      "blocks": [
+        {"material":"stone","x":1840,"y":830,"w":60,"h":220},
+        {"material":"stone","x":1975,"y":875,"w":50,"h":130},
+        {"material":"stone","x":2225,"y":875,"w":50,"h":130},
+        {"material":"wood","x":2100,"y":795,"w":324,"h":30},
+        {"material":"target","x":2040,"y":898,"shape":"serpentela-w50-05"},
+        {"material":"target","x":2160,"y":898,"shape":"serpentela-w20-04"},
+        {"material":"wood","x":1995,"y":720,"w":30,"h":120},
+        {"material":"wood","x":2205,"y":720,"w":30,"h":120},
+        {"material":"wood","x":2100,"y":647,"w":264,"h":26},
+        {"material":"glass","x":2100,"y":720,"w":24,"h":120},
+        {"material":"target","x":2035,"y":738,"shape":"serpentela-w5-01"},
+        {"material":"target","x":2165,"y":738,"shape":"serpentela-w20-02"},
+        {"material":"stone","x":2040,"y":584,"w":40,"h":100},
+        {"material":"stone","x":2160,"y":584,"w":40,"h":100},
+        {"material":"stone","x":2100,"y":519,"w":184,"h":30},
+        {"material":"target","x":2100,"y":592,"shape":"serpentela-w1-01"},
+        {"material":"stone","x":2100,"y":474,"w":60,"h":60}
+      ]
+    }
+  ]
+}

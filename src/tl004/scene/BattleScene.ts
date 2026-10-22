@@ -27,8 +27,11 @@ export interface BattleHooks {
   /** Partner ids still to fire, sling first. */
   onShots(ids: string[]): void;
   onSkipAvailable(available: boolean): void;
-  /** The ability the player can trigger right now by tapping, or undefined. */
-  onAbilityAvailable(ability: AbilityId | undefined): void;
+  /**
+   * The ability the player can trigger right now by tapping, or undefined.
+   * `hurry` is true once the partner has touched something and the short after-contact window is running.
+   */
+  onAbilityAvailable(ability: AbilityId | undefined, hurry: boolean): void;
   onResult(result: BattleResult): void;
 }
 
@@ -36,7 +39,8 @@ export interface BattleHooks {
 export interface AttackerArt { name: string; textureScale: number }
 
 export interface BattleConfig {
-  level: LevelData;
+  /** Every level (textures for all of them load up front; they are small). The first one is shown at boot. */
+  levels: readonly LevelData[];
   shapes: ShapeLibrary;
   attackerArt: ReadonlyMap<string, AttackerArt>;
   attackerUrl(id: string): string;
@@ -61,6 +65,8 @@ function towerBounds(pieces: Iterable<Piece>): Rect {
 export class BattleScene extends Phaser.Scene {
   private readonly hooks: BattleHooks;
   private readonly config: BattleConfig;
+  /** Level being played; create() builds it. */
+  private level: LevelData;
   private sim!: BattleSim;
   private rig!: CameraRig;
   private stepper!: FixedStepper;
@@ -75,6 +81,7 @@ export class BattleScene extends Phaser.Scene {
   private debris = new Map<BlockMaterial, Phaser.GameObjects.Particles.ParticleEmitter>();
   private puffs!: Phaser.GameObjects.Particles.ParticleEmitter;
   private sparks!: Phaser.GameObjects.Particles.ParticleEmitter;
+  private water!: Phaser.GameObjects.Particles.ParticleEmitter;
   private started = false;
   /** create() has finished; begin() before that is remembered and run at the end of create(). */
   private created = false;
@@ -92,29 +99,28 @@ export class BattleScene extends Phaser.Scene {
   private currentTrail: Vec[] = [];
   private lastTrail: Vec[] = [];
   private bonuses: number[] = [];
-  private reported: { score: number; shots: string; skip: boolean; ability: AbilityId | undefined } = { score: -1, shots: '', skip: false, ability: undefined };
+  private reported: { score: number; shots: string; skip: boolean; ability: AbilityId | undefined; hurry: boolean } = { score: -1, shots: '', skip: false, ability: undefined, hurry: false };
   private resultTimer: Phaser.Time.TimerEvent | undefined;
 
   constructor(hooks: BattleHooks, config: BattleConfig) {
     super({ key: 'battle' });
     this.hooks = hooks;
     this.config = config;
+    this.level = config.levels[0];
   }
 
   preload(): void {
-    for (const id of new Set(this.config.level.shots)) {
-      if (!this.textures.exists(attackerKey(id))) this.load.image(attackerKey(id), this.config.attackerUrl(id));
-    }
-    for (const block of this.config.level.blocks) {
-      if (block.material === 'target' && block.shape && !this.textures.exists(targetKey(block.shape))) this.load.image(targetKey(block.shape), this.config.targetUrl(block.shape));
-    }
+    const attackers = new Set(this.config.levels.flatMap((level) => level.shots));
+    const targets = new Set(this.config.levels.flatMap((level) => level.blocks.flatMap((block) => (block.material === 'target' && block.shape ? [block.shape] : []))));
+    for (const id of attackers) if (!this.textures.exists(attackerKey(id))) this.load.image(attackerKey(id), this.config.attackerUrl(id));
+    for (const id of targets) if (!this.textures.exists(targetKey(id))) this.load.image(targetKey(id), this.config.targetUrl(id));
   }
 
   create(): void {
     this.sprites = new Map(); this.debris = new Map(); this.queue = [];
     this.started = false; this.paused = false; this.slingReady = false; this.aim = undefined; this.aimPointer = undefined;
     this.hitStopUntil = 0; this.slowUntil = 0; this.slowUsedThisShot = false; this.recoil = undefined;
-    this.currentTrail = []; this.lastTrail = []; this.bonuses = []; this.reported = { score: -1, shots: '', skip: false, ability: undefined };
+    this.currentTrail = []; this.lastTrail = []; this.bonuses = []; this.reported = { score: -1, shots: '', skip: false, ability: undefined, hurry: false };
     this.stepper = new FixedStepper(STEP_MS, PHYSICS.maxStepsPerFrame);
 
     buildScenery(this);
@@ -135,13 +141,17 @@ export class BattleScene extends Phaser.Scene {
     this.sparks = this.add.particles(0, 0, sparkTexture(this), {
       emitting: false, speed: { min: 120, max: 380 }, lifespan: 520, scale: { start: 1.1, end: 0 }, tint: [0xffffff, 0xffe9a8, 0xffd9e0],
     }).setDepth(52);
+    this.water = this.add.particles(0, 0, sparkTexture(this), {
+      emitting: false, speed: { min: 160, max: 480 }, angle: { min: 200, max: 340 }, gravityY: 1400, lifespan: { min: 500, max: 800 },
+      scale: { start: 1.5, end: 0.4 }, alpha: { start: 0.95, end: 0 }, tint: [0x7fd0ff, 0xbfeaff, 0x3a9ad9, 0xffffff],
+    }).setDepth(51);
 
     const Matter = (Phaser.Physics.Matter as unknown as { Matter: MatterKit }).Matter;
     this.matter.world.autoUpdate = false;
-    this.sim = new BattleSim(Matter, this.matter.world.engine as unknown as SimEngine, this.config.level, this.config.shapes);
+    this.sim = new BattleSim(Matter, this.matter.world.engine as unknown as SimEngine, this.level, this.config.shapes);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => { this.created = false; this.sim.destroy(); });
 
-    const first = this.config.level.shots[0];
+    const first = this.level.shots[0];
     this.slingSprite = this.add.image(SLING_REST.x, SLING_REST.y, attackerKey(first)).setDepth(20).setScale(this.attackerScale(first)).setVisible(false);
     this.syncSprites();
     this.rig = new CameraRig(this.cameras.main, towerBounds(this.sim.pieces.values()));
@@ -161,11 +171,22 @@ export class BattleScene extends Phaser.Scene {
     this.time.delayedCall(900, () => { if (this.rig.mode === 'tower' && this.sim.phase === 'aiming') this.toAim(); });
   }
 
-  /** Restart the level and start it as soon as the new create() finishes. Repeated calls before then do nothing. */
+  /** Switch to another level and start it (fly-by, then the sling). */
+  startLevel(level: LevelData): void {
+    this.level = level;
+    this.restartLevel();
+  }
+
+  /**
+   * Restart the current level and start it as soon as the new create() finishes. While a create() is still
+   * pending (boot or a restart in progress) it only asks for the start: that create() reads `this.level`.
+   */
   restartLevel(): void {
-    if (!this.created && this.pendingBegin) return;
-    this.created = false;
+    this.resultTimer?.remove();
+    this.resultTimer = undefined;
     this.pendingBegin = true;
+    if (!this.created) return;
+    this.created = false;
     this.scene.restart();
   }
 
@@ -264,6 +285,8 @@ export class BattleScene extends Phaser.Scene {
     if (!aim || aim.power < SLING.cancelPower || !this.canAim()) return;
     this.recoil = { from: this.pullWorld(aim), start: this.time.now };
     this.hooks.sfx.launch(aim.power);
+    const id = this.sim.currentShapeId;
+    if (id) this.hooks.sfx.wee(id, aim.power);
     this.lastTrail = this.currentTrail;
     this.currentTrail = [];
     this.slowUsedThisShot = false;
@@ -297,7 +320,7 @@ export class BattleScene extends Phaser.Scene {
     for (const sprite of this.queue) { this.tweens.killTweensOf(sprite); sprite.destroy(); }
     this.queue = [];
     const first = this.sim.phase === 'aiming' ? this.sim.shotIndex + (skipSling || this.slingSprite.visible ? 1 : 0) : this.sim.shotIndex + 1;
-    this.config.level.shots.slice(first).forEach((id, i) => {
+    this.level.shots.slice(first).forEach((id, i) => {
       const scale = this.attackerScale(id) * 0.86;
       const sprite = this.add.image(SLING.x - 160 - i * 92, WORLD.groundY - 44, attackerKey(id)).setDepth(4).setScale(scale);
       if (!this.hooks.reducedMotion()) this.tweens.add({ targets: sprite, scaleY: scale * 0.95, scaleX: scale * 1.05, duration: 1200 + i * 130, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
@@ -456,6 +479,23 @@ export class BattleScene extends Phaser.Scene {
         if (sprite && !reduced) this.tweens.add({ targets: sprite, scaleX: (sprite.getData('baseScale') as number) * 1.25, scaleY: (sprite.getData('baseScale') as number) * 1.25, duration: 160, yoyo: true });
         this.popup(event.x, event.y - 70, '咚!', 0xffffff);
         break;
+      case 'roll':
+        sprite?.setTint(0xffe2a8);
+        this.puffs.explode(8, event.x, event.y + 30);
+        this.sparks.explode(10, event.x, event.y);
+        this.popup(event.x, event.y - 70, '滾!', 0xffd166);
+        break;
+      case 'wave':
+        sprite?.setTint(0xcdeeff);
+        this.popup(event.x, event.y - 70, '嘩!', 0x8fd3ff);
+        // A spray that runs forward and down through the water band, like a wave breaking over the tower.
+        for (let i = 0; i < 7; i++) {
+          const x = event.x + event.dir * i * 80, y = event.y + i * 40;
+          if (reduced) { if (i % 2 === 0) this.water.explode(10, x, y); continue; }
+          this.time.delayedCall(i * 45, () => this.water.explode(14, x, y));
+        }
+        if (!reduced) this.cameras.main.shake(180, 0.004);
+        break;
     }
   }
 
@@ -534,12 +574,17 @@ export class BattleScene extends Phaser.Scene {
     const score = this.sim.score.total;
     if (score !== this.reported.score) { this.reported.score = score; this.hooks.onScore(score); }
     const over = this.sim.phase === 'won' || this.sim.phase === 'lost';
-    const waiting = over ? [] : this.config.level.shots.slice(this.sim.phase === 'aiming' ? this.sim.shotIndex : this.sim.shotIndex + 1);
+    const waiting = over ? [] : this.level.shots.slice(this.sim.phase === 'aiming' ? this.sim.shotIndex : this.sim.shotIndex + 1);
     const key = waiting.join(',');
     if (key !== this.reported.shots) { this.reported.shots = key; this.hooks.onShots(waiting); }
     const skip = this.sim.canSkip;
     if (skip !== this.reported.skip) { this.reported.skip = skip; this.hooks.onSkipAvailable(skip); }
     const ability = this.sim.canUseAbility ? this.sim.currentAbility : undefined;
-    if (ability !== this.reported.ability) { this.reported.ability = ability; this.hooks.onAbilityAvailable(ability); }
+    const hurry = ability !== undefined && this.sim.firstImpactStep !== undefined;
+    if (ability !== this.reported.ability || hurry !== this.reported.hurry) {
+      this.reported.ability = ability;
+      this.reported.hurry = hurry;
+      this.hooks.onAbilityAvailable(ability, hurry);
+    }
   }
 }

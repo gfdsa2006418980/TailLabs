@@ -13,13 +13,19 @@ export interface BlockSpec {
   shape?: string;
 }
 
+/** One recorded shot: launch velocity (px/step) and, if used, the shot step at which the ability was tapped. */
+export interface ShotRecord { vx: number; vy: number; abilityStep?: number }
+
 export interface LevelData {
+  /** Save key: never change it for a released level. */
   id: string;
   name: string;
   /** Partner ids fired in order (see src/tl004/data/attackers.generated.json). */
   shots: string[];
   stars: StarThresholds;
   blocks: BlockSpec[];
+  /** A winning replay found by tools/tl004-balance.mjs (tests replay it). */
+  solution?: ShotRecord[];
 }
 
 export interface Point { x: number; y: number }

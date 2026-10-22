@@ -18,6 +18,8 @@ const ATTACKERS = [
   { id: 'poker', name: '撲克', file: 'poker.png' },
   { id: 'jiangpian', name: '薑片', file: 'jiangpian.png' },
   { id: 'youfan3d', name: '3D油飯', file: 'youfan3d.png' },
+  { id: 'zhaxidele', name: '札西德勒', file: 'zhaxidele.png' },
+  { id: 'jian', name: '澗', file: 'jian.png' },
 ];
 
 /** On-screen size (px, 1080p safe area) of the art box; matches the 96 px serpentelas. */

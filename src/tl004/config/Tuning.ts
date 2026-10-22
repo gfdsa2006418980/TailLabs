@@ -42,7 +42,7 @@ export const PHYSICS = {
 /** Downward speed gained per step: gravity × scale × step². */
 export const GRAVITY_PER_STEP = PHYSICS.gravityY * PHYSICS.gravityScale * STEP_MS * STEP_MS;
 
-/** The five launched partners (彩燈, 竹筍, 撲克, 薑片, 3D油飯). Outlines are already in display px. */
+/** The launched partners (彩燈, 竹筍, 撲克, 薑片, 3D油飯, 札西德勒, 澗). Outlines are already in display px. */
 export const ATTACKER = {
   /**
    * Heavier than the tower so hits carry through. Tuned with a random-aim bot: ≈60% of 5-shot runs clear

@@ -248,6 +248,10 @@ html, body {
   animation: pop-in 260ms cubic-bezier(.34, 1.56, .64, 1);
 }
 .ability-hint strong { font-weight: 900; }
+/* After the first contact the ability is only usable for a moment: flash to say "now!". */
+.ability-hint.hurry { background: #ffb38a; animation: hurry 180ms ease-in-out infinite alternate; }
+@keyframes hurry { to { transform: translateX(-50%) scale(1.08); } }
+@media (prefers-reduced-motion: reduce) { .ability-hint.hurry { animation: none; } }
 
 .secondary-button {
   pointer-events: auto;
@@ -299,3 +303,73 @@ html, body {
 .partner-list h3 { margin: 0; font-size: 17px; font-weight: 900; }
 .partner-list .ability-name { margin: 2px 0; font-size: 14px; font-weight: 800; color: var(--rose-brown); }
 .partner-list p { margin: 0; font-size: 13px; line-height: 1.45; }
+
+/* ---------- Level label, level select, result actions ---------- */
+.level-card {
+  padding: 8px 14px;
+  font-size: 16px;
+  font-weight: 900;
+  background: var(--paper);
+  border: 3px solid var(--ink);
+  border-radius: 16px;
+  box-shadow: 0 4px 0 var(--ink);
+  white-space: nowrap;
+}
+
+.select-panel { width: min(720px, calc(100% - var(--safe-left) - var(--safe-right))); }
+.select-head { display: flex; align-items: baseline; justify-content: center; gap: 16px; margin-bottom: 10px; }
+.select-head h2 { margin: 0; font-size: 26px; font-weight: 900; }
+.select-total { margin: 0; font-size: 18px; font-weight: 900; color: var(--rose-brown); font-variant-numeric: tabular-nums; }
+.level-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 10px;
+  margin: 0 0 14px;
+  padding: 0;
+  list-style: none;
+}
+.level-tile {
+  pointer-events: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  width: 100%;
+  min-height: 64px;
+  padding: 6px 4px;
+  font: inherit;
+  color: var(--ink);
+  background: #fff;
+  border: 3px solid var(--ink);
+  border-radius: 14px;
+  box-shadow: 0 3px 0 var(--ink);
+  cursor: pointer;
+}
+.level-tile:active { transform: translateY(2px); box-shadow: 0 1px 0 var(--ink); }
+.level-tile:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
+.level-tile .num { font-size: 22px; font-weight: 900; line-height: 1; font-variant-numeric: tabular-nums; }
+.level-tile .tile-stars { font-size: 14px; letter-spacing: 1px; line-height: 1; color: color-mix(in srgb, var(--ink) 22%, transparent); }
+.level-tile .tile-stars .lit { color: var(--gold); -webkit-text-stroke: 1px var(--ink); }
+.level-tile.next { background: var(--rose); color: var(--cream); }
+.level-tile.next .num { text-shadow: 0 2px 0 var(--rose-brown); }
+.level-tile.locked { background: color-mix(in srgb, var(--ink) 10%, var(--paper)); color: color-mix(in srgb, var(--ink) 45%, transparent); box-shadow: none; cursor: not-allowed; }
+.level-tile.locked:active { transform: none; }
+
+.result-best { min-height: 1.2em; margin: -6px 0 12px; font-size: 14px; font-weight: 800; color: var(--rose-brown); }
+.result-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; }
+.result-actions { gap: 8px; }
+.result-actions .primary-button, .result-actions .secondary-button { min-width: 0; padding-left: 18px; padding-right: 18px; }
+.result-actions .primary-button { font-size: 18px; min-height: 48px; }
+.result-panel .eyebrow { margin-bottom: 0; }
+
+@media (max-height: 480px) {
+  .level-grid { grid-template-columns: repeat(10, 1fr); gap: 6px; }
+  .level-tile { min-height: 52px; border-radius: 12px; }
+  .level-tile .num { font-size: 18px; }
+  .level-tile .tile-stars { font-size: 11px; letter-spacing: 0; }
+  .level-card { padding: 5px 10px; font-size: 14px; }
+}
+@media (max-width: 560px) {
+  .level-grid { grid-template-columns: repeat(5, 1fr); }
+}
