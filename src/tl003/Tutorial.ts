@@ -9,19 +9,24 @@ import './tutorial.css';
 
 export const INTRO_LINES = [
   '喪屍如潮水般湧來……',
-  '人類不斷退守……',
-  '你是',
-  '人類最前線的指揮官',
-  '指揮部隊，守住屍潮',
-  '或者放棄這座城市',
-  '人類還能往後退幾座城池',
-  '只能依靠你。',
+  '人類的防線不斷後退。',
+  '而你，身為最前線的指揮官，',
+  '必須率領部隊，守住這道防線。',
+  '如果守不住——',
+  '就放棄這裡，撤往下一座城市。',
+  '我們還能後退。',
+  '但能退多久，',
+  '就只能靠你的指揮。',
 ] as const;
 export const FALLEN_LINES = [
-  '防線崩潰了',
-  '來不及撤離的人們加入了它們',
-  '人類被迫退守到下一座城市',
-  '在它們再次過來前加固防線',
+  '防線崩潰了。',
+  '來不及撤離的人，',
+  '最終也成了它們的一員。',
+  '人類被迫再次後退，',
+  '撤往下一座城市。',
+  '趁屍潮尚未追上來，',
+  '趕緊加固新的防線。',
+  '它們很快就會再次出現……',
 ] as const;
 
 /** The story overlay's markup; `playStory` fills the lines. */
@@ -58,7 +63,7 @@ export function playStory(root: HTMLElement, lines: readonly string[], opts: { r
       p.textContent = text.slice(0, ++char);
       if (char % 2 === 1) opts.onTick?.();
       // Ellipses and commas hold a beat, like a hand on the key.
-      timer = setTimeout(tick, /[……，。]/.test(text[char - 1]!) ? 160 : 70);
+      timer = setTimeout(tick, /[…，。—]/.test(text[char - 1]!) ? 160 : 70);
       return;
     }
     p.classList.remove('typing'); line++; char = 0;
