@@ -4,18 +4,18 @@ import './generated/sprites.css';
 import { Battlefield } from './Battlefield.ts';
 import type { Aim } from './Battlefield.ts';
 import { Camera } from './Camera.ts';
-import { MERCENARIES, MERC_KINDS } from './Content.ts';
-import type { MercKind } from './Content.ts';
+import { MERCENARIES, SKILLS } from './Content.ts';
 import { formatNumber } from './Combat.ts';
 import { DefenseRun } from './Run.ts';
 import { LocalMetaMirror, META_KEY } from './Meta.ts';
 import { TalentScreen } from './TalentScreen.ts';
-import { choiceScreen, deployScreen, formatCount, resultScreen } from './Screens.ts';
+import { cardIcon, choiceScreen, deployScreen, formatCount, resultScreen } from './Screens.ts';
 import type { Report } from './Screens.ts';
 import { countUp, motionReduced, pop, setReducedMotion } from './Motion.ts';
 import { DefenseAudio, loadAudioPreferences, saveAudioPreferences } from './Audio.ts';
 import type { Cue } from './Audio.ts';
 import type { VisualEvent } from './Run.ts';
+import { Coach, FALLEN_LINES, INTRO_LINES, playStory, storyScreen } from './Tutorial.ts';
 
 const icon = (name: string) => {
   const paths: Record<string, string> = {
@@ -28,7 +28,10 @@ const icon = (name: string) => {
 };
 /** A frame of the pixel sprite sheet as an inline icon; size = screen pixels per art pixel. */
 const px = (name: string, size = 2) => `<i class="px-icon" data-icon="${name}" style="--px:${size}px" aria-hidden="true"></i>`;
-const ELEMENTS = [['kinetic', '動能', 'icon_el_kinetic'], ['fire', '火焰', 'icon_el_fire'], ['bio', '生化', 'icon_el_bio'], ['electric', '電能', 'icon_el_electric']] as const;
+const ELEMENTS = [['kinetic', '動能', 'icon_el_kinetic'], ['toxin', '毒素', 'icon_el_toxin'], ['blast', '爆裂', 'icon_el_blast'],
+  ['fire', '火焰', 'icon_el_fire'], ['cold', '冷凍', 'icon_el_cold'], ['electric', '電能', 'icon_el_electric']] as const;
+/** Three columns: skill slot i on the orb, mercenary slot i on the chip under it. */
+const SLOTS = [0, 1, 2] as const;
 
 document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
 <main class="stage" aria-labelledby="game-title">
@@ -45,16 +48,13 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
   <div id="toast" class="toast" aria-hidden="true"></div>
   <nav class="hud-bottom" aria-label="傭兵與防守">
     <button id="repair" class="side-action" aria-label="修復拒馬">${px('icon_repair', 2)}<span class="cost">${px('icon_money', 1)}<span id="repair-cost">6</span></span></button>
-    <div class="squad">${MERC_KINDS.map((kind, index) => {
-      const m = MERCENARIES[kind];
-      return `<div class="unit" data-kind="${kind}" style="--merc-color:${m.color}">
-        <button class="orb" id="skill-${kind}" aria-label="${m.name}：${m.skill}，按住拖曳至戰場" data-key="${index + 1}">
-          <span class="orb-ring"></span><span class="orb-face">${px('icon_skill_' + kind, 3)}</span><span class="orb-portrait">${px('icon_merc_' + kind, 3)}</span>
-          <span class="orb-level" id="level-${kind}">1</span><span class="orb-time" id="cooldown-${kind}"></span>
+    <div class="squad">${SLOTS.map(slot => `<div class="unit" id="unit-${slot}" data-slot="${slot}">
+        <button class="orb" id="skill-${slot}" aria-label="技能欄 ${slot + 1}，按住拖曳至戰場" data-key="${slot + 1}">
+          <span class="orb-ring"></span><span class="orb-face">${px('icon_skill_grenade', 3)}</span><span class="orb-empty">+</span>
+          <span class="orb-time" id="cooldown-${slot}"></span>
         </button>
-        <button class="chip" id="buy-${kind}" aria-label="招募或升級${m.name}"><span class="chip-sign" id="buy-sign-${kind}">+</span>${px('icon_money', 1)}<span id="buy-label-${kind}"></span></button>
-      </div>`;
-    }).join('')}</div>
+        <button class="chip" id="buy-${slot}" aria-label="升級傭兵欄 ${slot + 1}"><span class="chip-merc">${px('icon_merc_rifle', 1)}<b id="level-${slot}">1</b></span>${px('icon_money', 1)}<span id="buy-label-${slot}"></span></button>
+      </div>`).join('')}</div>
     <button id="fortify" class="side-action" aria-label="補強拒馬">${px('icon_fortify', 2)}<span class="cost">${px('icon_money', 1)}<span id="fortify-cost">10</span></span></button>
   </nav>
   <div id="drag-hint" class="drag-hint" hidden>${icon('hand')}</div>
@@ -68,6 +68,8 @@ const text = (id: string, value: string) => { const node = el(id); if (node.text
 let storage: Storage | undefined;
 try { storage = window.localStorage; } catch { /* Memory-only fallback. */ }
 const MOTION_KEY = 'taillabs.tl003.motion.v1', HINT_KEY = 'taillabs.tl003.hint.v1', TIPS_KEY = 'taillabs.tl003.tips.v1', SPEED_KEY = 'taillabs.tl003.speed.v1';
+/** New-player guide: the opening briefing, the first fall, and the coach's finished steps. */
+const INTRO_KEY = 'taillabs.tl003.intro.v1', FALLEN_KEY = 'taillabs.tl003.fallen.v1', COACH_KEY = 'taillabs.tl003.coach.v1';
 const readFlag = (key: string) => { try { return storage?.getItem(key) ?? null; } catch { return null; } };
 const writeFlag = (key: string, value: string) => { try { storage?.setItem(key, value); } catch { /* convenience only */ } };
 let reducedMotion = readFlag(MOTION_KEY) === null ? window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false : readFlag(MOTION_KEY) === '1';
@@ -82,6 +84,9 @@ const camera = new Camera();
 const applyMotion = () => { camera.reducedMotion = battlefield.reducedMotion = reducedMotion; setReducedMotion(reducedMotion); document.documentElement.classList.toggle('reduce-motion', reducedMotion); };
 applyMotion();
 const dialog = el<HTMLDialogElement>('modal');
+const coach = new Coach(storage, COACH_KEY);
+/** Game time of the last coaching bubble, so steps never arrive back to back. */
+let coachAt = -Infinity;
 const talents = new TalentScreen(dialog, meta, {
   close: () => { if (run.phase === 'ready') newRun(); displayedPhase = ''; sync(); },
   deploy: () => startRun(),
@@ -91,13 +96,12 @@ let displayedPhase = '', previous = performance.now(), uiClock = 0, shownMoney =
 let cuedRun: DefenseRun | undefined, cuedKey = '';
 const phaseKey = () => run.phase === 'choice' ? `choice:${run.level}:${run.picksLeft}:${run.choices.length}` : run.phase;
 const clock = (seconds: number) => `${Math.floor(seconds / 60).toString().padStart(2, '0')}:${Math.floor(seconds % 60).toString().padStart(2, '0')}`;
-function newRun() { run = new DefenseRun(undefined, meta.effects); camera.reset(); battlefield.clear(); shownMoney = 0; resetWatchers(); applyUnitLook(); }
+function newRun() { run = new DefenseRun(undefined, meta.effects); camera.reset(); battlefield.clear(); shownMoney = 0; shownSquad = ''; coach.dismiss(); coachAt = -Infinity; resetWatchers(); }
 function reset() { meta.refresh(); aim = undefined; newRun(); displayedPhase = ''; sync(); }
 function startRun() {
   if (!meta.beginRun()) return;
   writeFlag(TIPS_KEY, '1');
   aim = undefined; newRun(); run.start(); displayedPhase = ''; sync();
-  battlefield.mercArrived(0);
 }
 battlefield.feedback.onCoin = () => { pop(el('money-box'), 1.14, 140); audio.play('coin'); };
 
@@ -108,11 +112,21 @@ function showModal(content: string, kind: string, focusFirst = true) {
   if (focusFirst) dialog.querySelector<HTMLButtonElement>('button')?.focus();
   else { const title = el('modal-title'); title.tabIndex = -1; title.focus({ preventScroll: true }); }
 }
+// ---------- story (telegraph) ----------
+let stopStory: (() => void) | undefined;
+/** Types the lines full screen, then runs `after`. */
+function showStory(lines: readonly string[], kicker: string, done: string, after: () => void) {
+  stopStory?.();
+  showModal(storyScreen(kicker, done), 'story', false);
+  stopStory = playStory(el('story'), lines, { reduced: reducedMotion, onTick: () => audio.play('type'), onDone: () => { stopStory = undefined; after(); } });
+}
 // ---------- level-up choice ----------
 let choiceResolving = false, legendTimer: ReturnType<typeof setTimeout> | undefined;
+const CHOICE_TIP = '<b>戰地補給：</b>每次升級從三張裡選一張。看到<b>「招募」</b>卡建議優先選：多一名傭兵就多一把槍。三格都滿之後，再挑技能和強化。';
 function showChoice() {
   choiceResolving = false;
-  showModal(choiceScreen(run.level, run.choices, run.canReroll ? { cost: run.rerollCost, affordable: run.money >= run.rerollCost } : undefined, run.picksLeft), 'choice', false);
+  const tip = coach.enabled && !coach.has('choice') ? CHOICE_TIP : undefined;
+  showModal(choiceScreen(run.level, run.choices, run.canReroll ? { cost: run.rerollCost, affordable: run.money >= run.rerollCost } : undefined, run.picksLeft, tip), 'choice', false);
   clearTimeout(legendTimer);
   if (run.choices.some(c => c.rarity === 'legendary')) legendTimer = setTimeout(() => { if (run.phase === 'choice') { audio.play('bossDown'); camera.shake(0.25); } }, motionReduced() ? 0 : 900);
   else if (run.choices.some(c => c.rarity === 'rare')) audio.play('ready');
@@ -144,7 +158,7 @@ function resolveChoice(index: number) {
   setTimeout(() => {
     try {
       if (run !== owner || run.level !== level || run.phase !== 'choice') return;
-      if (run.choose(card.id)) pop(el('level'), 1.6, 320);
+      if (run.choose(card.id)) { pop(el('level'), 1.6, 320); coach.complete('choice'); }
       if (document.hidden || !document.hasFocus()) run.pause();
     } finally { choiceResolving = false; sync(); }
   }, motionReduced() ? 0 : 400);
@@ -162,7 +176,15 @@ function showReport() {
       points: run.score, timePoints: Math.floor(run.elapsed / 30), incomePoints: Math.floor(Math.log10(run.totalEarnedMoney + 1)),
       bestWave: meta.value.HighestClearedWave, previousBest, persistent: meta.persistent,
     } };
+    // The first time the line falls, the story picks up before the report (points are already saved).
+    if (run.phase === 'over' && !readFlag(FALLEN_KEY)) {
+      showStory(FALLEN_LINES, 'LAST TRANSMISSION', '加固防線', () => { writeFlag(FALLEN_KEY, '1'); presentReport(true); });
+      return;
+    }
   }
+  presentReport(first);
+}
+function presentReport(first: boolean) {
   const data = report!.data;
   showModal(resultScreen(data), 'result');
   el('result-talents').onclick = () => talents.open();
@@ -181,7 +203,7 @@ function showReport() {
 }
 function pauseMenu() {
   const counts = ELEMENTS.map(([id, name, iconName]) => `<span class="${id}" title="${name}">${px(iconName, 2)}<b>${run.selectedCards.filter(c => c.category === name).length}</b></span>`).join('');
-  const cards = run.selectedCards.length ? run.selectedCards.map(c => `<span title="${c.name}">${px('icon_card_' + c.id, 2)}</span>`).join('') : '<small>—</small>';
+  const cards = run.selectedCards.length ? run.selectedCards.map(c => `<span title="${c.name}">${px(cardIcon(c.id), 2)}</span>`).join('') : '<small>—</small>';
   showModal(`<div class="modal-kicker">暫停</div><h2 id="modal-title">暫停防守</h2>
     <div class="pause-build"><div class="pause-elements">${counts}</div><div class="pause-cards">${cards}</div></div>
     <div class="settings">
@@ -213,9 +235,10 @@ function syncPhase() {
   }
   text('announcement', run.phase === 'choice' ? '戰地補給到達，選擇一張。' : run.phase === 'over' ? '防線失守。本局結束。' : run.phase === 'running' ? '防守開始。' : '');
   if (run.phase === 'ready') {
-    showModal(deployScreen(meta.effects, meta.value.TalentPoints, meta.value.HighestClearedWave, !readFlag(TIPS_KEY)), 'deploy');
-    el('start').onclick = startRun;
-    el('open-talents').onclick = () => talents.open();
+    const deploy = () => { displayedPhase = 'ready'; showModal(deployScreen(meta.effects, meta.value.TalentPoints, meta.value.HighestClearedWave, !readFlag(TIPS_KEY)), 'deploy'); bindDeploy(); };
+    // First open: the briefing comes before the deploy screen.
+    if (!readFlag(INTRO_KEY)) showStory(INTRO_LINES, 'INCOMING TRANSMISSION', '接受指揮', () => { writeFlag(INTRO_KEY, '1'); deploy(); });
+    else deploy();
   } else if (run.phase === 'choice') {
     showChoice();
   } else if (run.phase === 'paused') {
@@ -224,26 +247,29 @@ function syncPhase() {
     showReport();
   } else if (dialog.open) dialog.close();
 }
+function bindDeploy() {
+  el('start').onclick = startRun;
+  el('open-talents').onclick = () => talents.open();
+  el('replay-briefing').onclick = () => showStory(INTRO_LINES, 'INCOMING TRANSMISSION', '返回', () => { displayedPhase = ''; sync(); });
+}
 
 // ---------- HUD ----------
-/** Which mercenary a HUD unit stands for: its own kind, except that under 制式部隊 the 2nd and 3rd units are extra riflemen. */
-const unitOf = (unit: MercKind) => run.cores.has('uniform') && unit !== 'rifle' ? { kind: 'rifle' as MercKind, copy: unit === 'flame' ? 1 : 2 } : { kind: unit, copy: 0 };
-function slotOf(unit: MercKind) {
-  const { kind, copy } = unitOf(unit); let n = 0;
-  for (let i = 0; i < run.mercenaries.length; i++) if (run.mercenaries[i]!.kind === kind && n++ === copy) return i;
-  return -1;
-}
-/** Under 制式部隊 every unit shows the rifleman's portrait and grenade. */
+/** Each column shows its skill on the orb and its mercenary on the chip; empty slots wait for a card. */
 function applyUnitLook() {
-  for (const unit of MERC_KINDS) {
-    const { kind } = unitOf(unit), box = el(`skill-${unit}`).parentElement!;
-    box.style.setProperty('--merc-color', MERCENARIES[kind].color);
-    box.querySelector('.orb-face .px-icon')!.setAttribute('data-icon', 'icon_skill_' + kind);
-    box.querySelector('.orb-portrait .px-icon')!.setAttribute('data-icon', 'icon_merc_' + kind);
+  for (const slot of SLOTS) {
+    const skill = run.skills[slot], merc = run.mercenaries[slot], unit = el(`unit-${slot}`);
+    unit.style.setProperty('--merc-color', skill ? SKILLS[skill.id].color : '#5b6157');
+    unit.style.setProperty('--chip-color', merc ? MERCENARIES[merc.kind].color : '#5b6157');
+    unit.classList.toggle('no-skill', !skill); unit.classList.toggle('no-merc', !merc);
+    unit.querySelector('.orb-face .px-icon')!.setAttribute('data-icon', skill ? 'icon_skill_' + skill.id : 'icon_skill_grenade');
+    unit.querySelector('.chip-merc .px-icon')!.setAttribute('data-icon', merc ? 'icon_merc_' + merc.kind : 'icon_merc_rifle');
+    el(`skill-${slot}`).setAttribute('aria-label', skill ? `${SKILLS[skill.id].name}，按住拖曳至戰場` : `技能欄 ${slot + 1}（空，從戰地補給取得）`);
+    el(`buy-${slot}`).setAttribute('aria-label', merc ? `升級${MERCENARIES[merc.kind].name}` : `傭兵欄 ${slot + 1}（空，從戰地補給招募）`);
   }
 }
-const wasReady: Record<MercKind, boolean> = { rifle: false, flame: false, tesla: false };
-const wasAffordable: Record<MercKind, boolean> = { rifle: false, flame: false, tesla: false };
+/** What the columns currently show, so the look is only rebuilt when a card adds a mercenary or a skill. */
+let shownSquad = '';
+const wasReady = [false, false, false], wasAffordable = [false, false, false];
 let shownWave = 0, shownLevel = 1;
 function toast(html: string, tone = '') {
   const node = el('toast'); node.className = `toast ${tone}`; node.innerHTML = html;
@@ -265,36 +291,38 @@ function sync() {
   }
   if (run.level !== shownLevel) { if (run.level > shownLevel) pop(el('level'), 1.5, 300); shownLevel = run.level; }
   syncBoss();
-  for (const kind of MERC_KINDS) {
-    const slot = slotOf(kind), merc = run.mercenaries[slot], real = unitOf(kind).kind;
-    const buy = el<HTMLButtonElement>(`buy-${kind}`), skill = el<HTMLButtonElement>(`skill-${kind}`), unit = skill.parentElement!;
-    const cost = merc ? run.upgradeCost(real) : run.recruitCost(real);
-    // Closed: the core 孤狼 shut this unit, or another slot already holds this kind.
-    const closed = !merc && !run.canRecruit(real);
-    const full = !merc && (run.mercenaries.length >= 3 || closed);
-    unit.classList.toggle('closed', closed);
-    text(`level-${kind}`, run.levels[real].toString());
-    text(`buy-sign-${kind}`, merc ? '▲' : '+'); text(`buy-label-${kind}`, formatNumber(cost));
+  const squad = run.mercenaries.map(m => m.kind).join() + '|' + run.skills.map(s => s.id).join();
+  if (squad !== shownSquad) {
+    // A recruit card drops the new mercenary into its slot.
+    const before = shownSquad.split('|')[0]!.split(',').filter(Boolean).length;
+    shownSquad = squad; applyUnitLook();
+    for (let i = before; i < run.mercenaries.length && run.phase !== 'ready'; i++) battlefield.mercArrived(i);
+  }
+  for (const slot of SLOTS) {
+    const merc = run.mercenaries[slot], skillSlot = run.skills[slot];
+    const buy = el<HTMLButtonElement>(`buy-${slot}`), orb = el<HTMLButtonElement>(`skill-${slot}`);
+    const cost = merc ? run.upgradeCost(merc.kind) : 0;
+    text(`level-${slot}`, merc ? run.levels[merc.kind].toString() : '');
+    text(`buy-label-${slot}`, merc ? formatNumber(cost) : '—');
     // A thin bar under the chip fills towards the next level milestone.
-    const level = run.levels[real], next = nextMilestone(level), prev = [0, 10, 25, 50, 100].filter(m => m <= level).at(-1) ?? 0;
+    const level = merc ? run.levels[merc.kind] : 0, next = nextMilestone(level), prev = [0, 10, 25, 50, 100].filter(m => m <= level).at(-1) ?? 0;
     buy.style.setProperty('--milestone', merc && next ? ((level - prev) / (next - prev)).toFixed(3) : '0');
-    const affordable = run.phase === 'running' && visibleMoney() >= cost && !full;
+    const affordable = run.phase === 'running' && !!merc && visibleMoney() >= cost;
     buy.disabled = !affordable;
-    if (affordable && !wasAffordable[kind]) pop(buy, 1.12, 220);
-    wasAffordable[kind] = affordable;
-    unit.classList.toggle('recruited', !!merc); unit.classList.toggle('locked', !merc);
-    const total = Math.max(1e-6, run.skillCooldown(real)), ready = run.phase === 'running' && !!merc && merc.cooldown <= 0;
-    skill.disabled = run.phase !== 'running' || (!merc && !affordable);
-    skill.classList.toggle('ready', ready); skill.classList.toggle('aiming', !!merc && !!aim && aim.slot === slot);
-    skill.style.setProperty('--cd', merc ? (merc.cooldown / total).toFixed(3) : '1');
-    text(`cooldown-${kind}`, merc && merc.cooldown > 0 ? Math.ceil(merc.cooldown).toString() : '');
-    if (ready && !wasReady[kind]) { if (shownWave) { pop(skill, 1.15, 260); audio.play('ready'); } maybeHint(skill); }
-    wasReady[kind] = ready;
+    if (affordable && !wasAffordable[slot]) pop(buy, 1.12, 220);
+    wasAffordable[slot] = affordable;
+    const total = skillSlot ? Math.max(1e-6, run.skillCooldown(skillSlot.id)) : 1, ready = run.phase === 'running' && !!skillSlot && skillSlot.cooldown <= 0;
+    orb.disabled = run.phase !== 'running' || !skillSlot;
+    orb.classList.toggle('ready', ready); orb.classList.toggle('aiming', !!skillSlot && !!aim && aim.slot === slot);
+    orb.style.setProperty('--cd', skillSlot ? (skillSlot.cooldown / total).toFixed(3) : '1');
+    text(`cooldown-${slot}`, skillSlot && skillSlot.cooldown > 0 ? Math.ceil(skillSlot.cooldown).toString() : '');
+    if (ready && !wasReady[slot]) { if (shownWave) { pop(orb, 1.15, 260); audio.play('ready'); } maybeHint(orb); }
+    wasReady[slot] = ready;
   }
   for (const action of ['repair', 'fortify'] as const) {
     const cost = action === 'repair' ? run.repairCost : run.fortifyCost;
     text(`${action}-cost`, formatNumber(cost));
-    el<HTMLButtonElement>(action).disabled = run.phase !== 'running' || (action === 'repair' && !run.canRepair) || visibleMoney() < cost || (action === 'repair' && run.wallHealth >= run.wallMaxHealth);
+    el<HTMLButtonElement>(action).disabled = run.phase !== 'running' || (action === 'repair' && !run.canRepair) || (action === 'fortify' && !run.canFortify) || visibleMoney() < cost || (action === 'repair' && run.wallHealth >= run.wallMaxHealth);
   }
 }
 /** The run's money minus coins still flying in: what the counter shows and what buttons offer. */
@@ -330,10 +358,10 @@ function maybeHint(skill: HTMLElement) {
 }
 function hideHint() { if (!el('drag-hint').hidden) { el('drag-hint').hidden = true; writeFlag(HINT_KEY, '1'); } }
 
-function cast(slot: number, x: number, y: number) { if (run.cast(slot, x, y)) hideHint(); }
+function cast(slot: number, x: number, y: number) { if (run.cast(slot, x, y)) { hideHint(); coach.complete('skill'); } }
 el('pause').onclick = () => { if (run.phase === 'paused') run.resume(); else run.pause(); sync(); };
-el('repair').onclick = () => { if (run.repair()) { audio.play('buy'); pop(el('wall-value'), 1.3, 220); } sync(); };
-el('fortify').onclick = () => { if (run.fortify()) { audio.play('buy'); pop(el('wall-value'), 1.3, 220); } sync(); };
+el('repair').onclick = () => { if (run.repair()) { audio.play('buy'); pop(el('wall-value'), 1.3, 220); coach.complete('repair'); } sync(); };
+el('fortify').onclick = () => { if (run.fortify()) { audio.play('buy'); pop(el('wall-value'), 1.3, 220); coach.complete('fortify'); } sync(); };
 dialog.addEventListener('close', () => {
   if (talents.active) talents.close();
   else if (run.phase !== 'running') { displayedPhase = ''; sync(); }
@@ -346,27 +374,24 @@ window.addEventListener('storage', event => {
 /** Mercenary level milestones (spec §18) and their one-line announcements. */
 const MILESTONES: Record<number, string> = { 10: '火力倍增', 25: '射速 ×1.5', 50: '火力 ×3', 100: '專精解鎖' };
 const nextMilestone = (level: number) => [10, 25, 50, 100].find(m => m > level);
-function buyOrRecruit(unit: MercKind) {
-  const kind = unitOf(unit).kind, had = slotOf(unit) >= 0;
-  if (had ? run.upgrade(kind) : run.recruit(kind)) {
-    audio.play('buy'); const slot = slotOf(unit);
-    if (had) {
-      battlefield.mercLeveled(slot); pop(el(`level-${unit}`), 1.6, 300);
-      const milestone = MILESTONES[run.levels[kind]];
-      if (milestone) { toast(`<small>${MERCENARIES[kind].name} Lv${run.levels[kind]}</small><b>${milestone}</b>`, 'gold'); audio.play('levelUp'); camera.punch(0.03); }
-    } else battlefield.mercArrived(slot);
-    pop(el(`skill-${unit}`), 1.1, 200);
+/** Upgrade the mercenary in a slot; every copy of a kind shares its level. */
+function upgradeSlot(slot: number) {
+  const merc = run.mercenaries[slot];
+  if (merc && run.upgrade(merc.kind)) {
+    audio.play('buy'); coach.complete('upgrade');
+    run.mercenaries.forEach((m, i) => { if (m.kind === merc.kind) { battlefield.mercLeveled(i); pop(el(`level-${i}`), 1.6, 300); } });
+    const milestone = MILESTONES[run.levels[merc.kind]];
+    if (milestone) { toast(`<small>${MERCENARIES[merc.kind].name} Lv${run.levels[merc.kind]}</small><b>${milestone}</b>`, 'gold'); audio.play('levelUp'); camera.punch(0.03); }
   }
   sync();
 }
-for (const kind of MERC_KINDS) {
-  el(`buy-${kind}`).onclick = () => buyOrRecruit(kind);
-  const button = el<HTMLButtonElement>(`skill-${kind}`); let down: { x: number; y: number; id: number } | undefined;
+const skillReady = (slot: number) => { const s = run.skills[slot]; return !!s && s.cooldown <= 0; };
+for (const slot of SLOTS) {
+  el(`buy-${slot}`).onclick = () => upgradeSlot(slot);
+  const button = el<HTMLButtonElement>(`skill-${slot}`); let down: { x: number; y: number; id: number } | undefined;
   button.addEventListener('pointerdown', event => {
     if (event.button !== 0 || button.disabled) return;
-    const slot = slotOf(kind);
-    if (slot < 0) { buyOrRecruit(kind); return; }
-    if (run.mercenaries[slot]!.cooldown > 0) return;
+    if (!skillReady(slot)) return;
     event.preventDefault(); down = { x: event.clientX, y: event.clientY, id: event.pointerId }; button.setPointerCapture(event.pointerId);
     aim = { slot, ...battlefield.point(event.clientX, event.clientY) }; aimClient = { x: event.clientX, y: event.clientY };
   });
@@ -382,9 +407,7 @@ for (const kind of MERC_KINDS) {
   button.addEventListener('pointercancel', () => { down = undefined; aim = undefined; sync(); });
   button.addEventListener('click', event => {
     if (event.detail !== 0 || button.disabled) return;
-    const slot = slotOf(kind);
-    if (slot < 0) buyOrRecruit(kind);
-    else if (run.mercenaries[slot]!.cooldown <= 0) { aim = { slot, x: 470, y: 235, valid: true }; el('battlefield').focus(); sync(); }
+    if (skillReady(slot)) { aim = { slot, x: 470, y: 235, valid: true }; el('battlefield').focus(); sync(); }
   });
 }
 el('battlefield').addEventListener('pointermove', event => { if (aim) { aimClient = { x: event.clientX, y: event.clientY }; Object.assign(aim, battlefield.point(event.clientX, event.clientY)); } });
@@ -397,7 +420,7 @@ window.addEventListener('keydown', event => {
   }
   if (event.key === 'Escape') { if (aim) aim = undefined; else run.pause(); sync(); return; }
   const index = ['1', '2', '3'].indexOf(event.key);
-  if (index >= 0 && run.phase === 'running') { const slot = slotOf(MERC_KINDS[index]!); if (slot >= 0 && run.mercenaries[slot]!.cooldown <= 0) aim = { slot, x: 470, y: 235, valid: true }; }
+  if (index >= 0 && run.phase === 'running' && skillReady(index)) aim = { slot: index, x: 470, y: 235, valid: true };
   if (aim && ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Enter', ' '].includes(event.key)) {
     event.preventDefault();
     if (event.key === 'Enter' || event.key === ' ') { cast(aim.slot, aim.x, aim.y); aim = undefined; }
@@ -418,7 +441,7 @@ let watchedRun: DefenseRun | undefined, lastWall = 0, wallLoss = 0, wallKick = 0
 function resetWatchers() { watchedRun = undefined; shownWave = 0; shownLevel = 1; hideToast(); }
 function hideToast() { el('toast').classList.remove('show'); }
 function cueFor(event: VisualEvent): Cue | undefined {
-  if (event.kind === 'shot') return event.color === MERCENARIES.tesla.color ? 'tesla' : 'rifle';
+  if (event.kind === 'shot') return event.merc === 'tesla' || event.merc === 'signal' ? 'tesla' : 'rifle';
   if (event.kind === 'blast') return event.color === '#e6764b' ? 'molotov' : 'grenade';
   if (event.kind === 'flame' || event.kind === 'laser' || event.kind === 'kill') return event.kind;
   return undefined;
@@ -488,6 +511,32 @@ function coinTarget() {
   const r = el('money-box').querySelector('.px-icon')!.getBoundingClientRect();
   battlefield.setCoinTarget(r.left + r.width / 2, r.top + r.height / 2);
 }
+/**
+ * New-player coach: each step appears once, when its moment first comes up in a running battle, at
+ * least a couple of game seconds after the previous one. Action steps wait for the highlighted control.
+ */
+function guide() {
+  if (!coach.enabled || talents.active) return;
+  // Click-to-aim needs the battlefield: step the bubble aside while aiming; the cast completes the step.
+  if (coach.current === 'skill' && aim) { coach.dismiss(); return; }
+  if (coach.holding || run.phase !== 'running' || dialog.open || run.elapsed - coachAt < 2) return;
+  const offer = (...args: Parameters<Coach['offer']>) => { if (coach.offer(...args)) coachAt = run.elapsed; };
+  const rifle = run.mercenaries[0];
+  if (run.events.some(e => e.kind === 'shot' && e.merc))
+    offer('shoot', '你的士兵會<b>自動射擊</b>進入射程的喪屍，不用操作。<br>每種傭兵射程不同：步槍手只打得到道路的下半段。');
+  if (run.kills > 0)
+    offer('kill', '擊倒喪屍會掉落<b>資金</b>（右上），並累積<b>經驗</b>（上方細條）。<br>經驗滿了就會進入戰地補給。', { target: el('money-box') });
+  if (coach.has('kill') && rifle && visibleMoney() >= run.upgradeCost(rifle.kind))
+    offer('upgrade', '資金夠了！點<b>傭兵下方的按鈕</b>花資金升級，傷害會提高。', { target: el('buy-0'), act: true });
+  if (run.canRepair && run.wallHealth < run.wallMaxHealth && visibleMoney() >= run.repairCost)
+    offer('repair', '拒馬被咬了！點左下的<b>修復</b>補回生命。<br>拒馬被打穿，這座城就守不住了。', { target: el('repair'), act: true });
+  if (coach.has('repair') && run.canFortify && visibleMoney() >= run.fortifyCost)
+    offer('fortify', '右下的<b>補強</b>會提高拒馬的生命上限。<br>喪屍只會越來越多，記得持續加固。', { target: el('fortify'), act: true });
+  if (coach.has('kill') && skillReady(0) && run.enemies.filter(e => e.x > 200).length >= 3)
+    offer('skill', '按住<b>技能鈕</b>拖到喪屍群上放開，就能丟出手榴彈。<br>之後的戰地補給還能換到其他技能。', { target: el('skill-0'), act: true });
+  if (run.bossWarning !== undefined)
+    offer('boss', '<b>屍王</b>要來了！它很耐打，拒馬撐不了幾秒。<br>集中火力、丟技能，必要時修補拒馬。', { target: el('boss-banner') });
+}
 function step(now: number) {
   const realDt = Math.min(0.1, Math.max(0, (now - previous) / 1000)); previous = now;
   camera.lean(aim ? battlefield.offsetOf(aim.x, aim.y) : undefined);
@@ -495,7 +544,9 @@ function step(now: number) {
   battlefield.useCamera(view);
   if (!aim) aimClient = undefined;
   else if (aimClient) Object.assign(aim, battlefield.point(aimClient.x, aimClient.y));
-  run.advance(realDt * view.timeScale * gameSpeed); uiClock += realDt; react(realDt);
+  // A coaching bubble holds the battle until it is answered.
+  if (!coach.holding) run.advance(realDt * view.timeScale * gameSpeed);
+  uiClock += realDt; react(realDt); guide(); coach.place();
   if (uiClock >= 0.08 || displayedPhase !== phaseKey()) { sync(); uiClock = 0; }
   tickMoney(realDt); coinTarget();
   battlefield.draw(run, aim, view, realDt);

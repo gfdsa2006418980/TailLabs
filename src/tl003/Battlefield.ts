@@ -1,6 +1,7 @@
-import { MERCENARIES } from './Content.ts';
+import { SKILLS } from './Content.ts';
 import type { MercKind } from './Content.ts';
-import { FIELD, mercPosition } from './Run.ts';
+import { FIELD, METER_KINDS, meterThreshold, mercPosition } from './Run.ts';
+import * as B from './Balance.ts';
 import type { DefenseRun, VisualEvent } from './Run.ts';
 import { project, projectedCircle, unproject } from './Projection.ts';
 import type { Viewport } from './Projection.ts';
@@ -23,11 +24,18 @@ const WALL_SCALE = project(FIELD.wallX, 225, { width: 480, height: 600 }).scale;
 /** Keyed by enemy kind; any kind without art falls back to the walker so new enemies never break drawing. */
 const ENEMY_ART: Record<string, { anim: string; scale: number }> = {
   walker: { anim: 'zombie_walker', scale: 1 }, runner: { anim: 'zombie_runner', scale: 0.95 },
-  armored: { anim: 'zombie_armored', scale: 1.05 }, brute: { anim: 'zombie_brute', scale: 1 }, elite: { anim: 'zombie_elite', scale: 1.1 },
+  armored: { anim: 'zombie_armored', scale: 1.05 }, hazmat: { anim: 'zombie_hazmat', scale: 1.05 }, brute: { anim: 'zombie_brute', scale: 1 }, elite: { anim: 'zombie_elite', scale: 1.1 },
   boss: { anim: 'zombie_boss', scale: 1.25 },
 };
 /** Muzzle pixel inside each mercenary sprite (sprite-local coordinates). */
-const MUZZLE: Record<MercKind, [number, number]> = { rifle: [21, 1], flame: [20, 1], tesla: [21, 2] };
+const MUZZLE: Record<MercKind, [number, number]> = {
+  rifle: [21, 1], flame: [20, 1], tesla: [21, 2], gunner: [22, 1], sniper: [23, 1], cryo: [21, 1], grenadier: [21, 2], chemist: [21, 1], engineer: [21, 2], signal: [21, 2],
+};
+/** Mercenaries whose guns throw brass casings. */
+const SHELLS = new Set<MercKind>(['rifle', 'gunner', 'sniper']);
+/** Status meter colours under the health bar: 凍結、感電、暈眩. */
+const METER_COLOR = { chill: '#9fd8f0', shock: '#bff1ea', stun: '#ffe9a8' } as const;
+const ICE: readonly [number, number, number] = [0.6, 0.85, 1], TOXIC: readonly [number, number, number] = [0.6, 1, 0.35];
 /** The right-hand slot is mirrored so every weapon points in towards the road. */
 const FLIPPED_SLOT = 2;
 const COLOR = {
@@ -261,12 +269,15 @@ export class Battlefield {
       if (on) { this.light(p.x + 2 * s, p.y - 27 * s, 70 * s, WARM, 1.1, 30); this.dot(this.c.emissive, p.x + 2 * s, p.y - 27 * s, '#fff1c4'); }
     }
     for (const lateral of [55, 395]) { const p = this.at(FIELD.wallX + 14, lateral); this.light(p.x, p.y - 6, 150, WARM, 1.1, 60); }
-    // The searchlight sweeps the road; its beam is a faint dithered wedge from the barricade.
-    const front = 330 + 230 * Math.sin(t * 0.21), lateral = 225 + 150 * Math.sin(t * 0.33 + 1);
-    const spot = this.at(front, lateral), origin = this.at(FIELD.wallX + 30, 225);
-    const spotRadius = 30 + 24 * spot.scale;
-    this.light(spot.x, spot.y, spotRadius, MOON, 1.3, 40);
+    // The searchlight sweeps the road on game time (it is part of the model since core 探照獵殺 uses it);
+    // its beam is a faint dithered wedge from the barricade.
+    const light = run.searchlight, wide = light.radius > B.SEARCHLIGHT_RADIUS;
+    const spot = this.at(light.x, light.y), origin = this.at(FIELD.wallX + 30, 225);
+    const spotRadius = (30 + 24 * spot.scale) * light.radius / B.SEARCHLIGHT_RADIUS;
+    this.light(spot.x, spot.y, spotRadius, MOON, wide ? 1.6 : 1.3, 40);
     this.beam(origin.x, origin.y - 10, spot.x, spot.y, spotRadius * 0.35);
+    // With 探照獵殺 the lit area is a rule, so its edge is drawn.
+    if (wide) projectedCircle(light.x, light.y, light.radius, this.view).forEach((p, i) => { if ((i + Math.floor(t * 6)) % 3 === 0) this.dot(this.c.emissive, p.x * PX, p.y * PX, '#dfe9ff'); });
     // Danger pulse at the horizon while a boss is announced.
     if (run.bossWarning !== undefined) this.light(horizon.x, horizon.y, 120, [1, 0.15, 0.1], 0.8 + 0.5 * Math.sin(t * 9), 30);
   }
@@ -303,7 +314,7 @@ export class Battlefield {
         const art = ENEMY_ART[e.enemy ?? ''] ?? ENEMY_ART.walker!, death = `${art.anim}_death`;
         if (ANIMS[death]) this.corpses.push({ name: ANIMS[death]!.frames.at(-1)!, x: p.x, y: p.y + 1, scale: p.scale / WALL_SCALE * art.scale, at: t + e.life });
       }
-      if (e.kind === 'shot' && e.color !== MERCENARIES.tesla.color && !this.reducedMotion) this.ejectShell(run, e);
+      if (e.kind === 'shot' && e.merc && SHELLS.has(e.merc) && !this.reducedMotion) this.ejectShell(run, e);
       if (e.kind === 'blast') this.scorch(e.x, e.y, e.radius * 0.5);
     }
     // Game time: a death frozen by hit-stop, a card choice or a pause keeps its body standing.
@@ -315,7 +326,16 @@ export class Battlefield {
     this.decalFade += realDt;
     if (this.decalFade > 1) { this.decalFade = 0; const d = ctx(this.decals); d.globalCompositeOperation = 'destination-out'; d.fillStyle = 'rgba(0,0,0,0.025)'; d.fillRect(0, 0, BUFFER_WIDTH, bufferHeight); d.globalCompositeOperation = 'source-over'; }
 
-    for (const zone of run.zones) this.fireZone(zone.x, zone.y, zone.radius, t, zone.remaining);
+    for (const zone of run.zones) {
+      if (zone.kind === 'gas') this.gasZone(zone.x, zone.y, zone.radius, t, zone.remaining);
+      else this.fireZone(zone.x, zone.y, zone.radius, t, zone.remaining);
+    }
+    // 地雷陣: dark discs with a blinking red fuse light.
+    for (const mine of run.mines) {
+      const p = this.at(mine.x, mine.y);
+      A.fillStyle = '#1d2016'; A.fillRect(Math.round(p.x) - 2, Math.round(p.y) - 1, 5, 2);
+      if (Math.floor(real * 3 + mine.x) % 2 === 0) { this.dot(E, p.x, p.y - 1, '#ff5a3c'); this.light(p.x, p.y - 1, 10, [1, 0.25, 0.15], 0.6, 4); }
+    }
     let burningLights = 0;
     for (const enemy of [...run.enemies].sort((a, b) => a.x - b.x)) {
       const art = ENEMY_ART[enemy.kind] ?? ENEMY_ART.walker!, p = this.at(enemy.x, enemy.y), s = p.scale / WALL_SCALE * art.scale;
@@ -325,9 +345,11 @@ export class Battlefield {
       // At the barricade they claw and chew; the boss roars when it first appears.
       if (enemy.kind === 'boss' && !this.bossSeen.has(enemy.id)) this.bossSeen.set(enemy.id, real);
       const roaring = enemy.kind === 'boss' && real - this.bossSeen.get(enemy.id)! < 0.75 && ANIMS.zombie_boss_roar;
-      const chewing = enemy.x >= FIELD.wallX - 18.01 && ANIMS[`${art.anim}_attack`];
+      const frozen = run.isFrozen(enemy), stunned = run.isStunned(enemy), paralyzed = run.isParalyzed(enemy);
+      const chewing = enemy.x >= FIELD.wallX - 18.01 && !paralyzed && ANIMS[`${art.anim}_attack`];
       const anim = roaring ? 'zombie_boss_roar' : chewing ? `${art.anim}_attack` : art.anim;
-      const clock = roaring ? real - this.bossSeen.get(enemy.id)! : t + enemy.id * 0.137;
+      // Frozen zombies stop mid-stride: their animation clock stands still.
+      const clock = roaring ? real - this.bossSeen.get(enemy.id)! : frozen ? enemy.id * 0.137 : t + enemy.id * 0.137;
       const name = this.animFrame(anim, clock, !roaring);
       const box = this.sprite(name, p.x, p.y + 1 + knock, s, this.lit());
       if (ANIMS[`${anim}_eyes`]) this.sprite(this.animFrame(`${anim}_eyes`, clock, !roaring), p.x, p.y + 1 + knock, s, this.glow());
@@ -337,15 +359,26 @@ export class Battlefield {
         const bw = Math.max(6, box.w - 2), bx = Math.round(p.x - bw / 2), by = box.top - 3;
         O.fillStyle = COLOR.hpBack; O.fillRect(bx - 1, by - 1, bw + 2, 3); O.fillStyle = enemy.kind === 'boss' ? '#ff7a5c' : COLOR.hp; O.fillRect(bx, by, Math.max(1, Math.round(bw * Math.max(0, enemy.hp / enemy.maxHp))), 1);
         let sx = bx;
-        for (const [active, color] of [[enemy.burnDuration > 0, '#ee9d4f'], [enemy.corrosionPower > 0, '#a3b47a'], [enemy.shockPower > 0, '#bff1ea']] as const)
+        for (const [active, color] of [[enemy.burnDuration > 0, '#ee9d4f'], [enemy.toxin > 0, '#a6c46a'], [frozen, '#9fd8f0'], [paralyzed, '#bff1ea'], [stunned, '#ffe9a8']] as const)
           if (active) { O.fillStyle = color; O.fillRect(sx, by - 3, 2, 2); sx += 3; }
+        // Build-up meters: one pixel row each under the health bar, filling towards the next control.
+        let my = by + 2;
+        for (const kind of METER_KINDS) {
+          const m = enemy.meters[kind]; if (m.value <= 0) continue;
+          const fill = Math.min(1, m.value / meterThreshold(enemy, kind, run.elapsed));
+          O.fillStyle = COLOR.hpBack; O.fillRect(bx - 1, my, bw + 2, 2); O.fillStyle = METER_COLOR[kind]; O.fillRect(bx, my, Math.max(1, Math.round(bw * fill)), 1); my += 2;
+        }
         if (enemy.burnDuration > 0 && enemy.burnFlammability > 0) pixelText(O, `x${burnSpeed(enemy).toFixed(2)}`, p.x, by - 10, '#ffd884');
       }
       if (enemy.burnDuration > 0 && box.w) {
         this.sprite(this.animFrame('fire', t + enemy.id * 0.21), p.x, box.top + box.h * 0.55, Math.max(0.5, s * 0.8), this.glow());
         if (burningLights++ < 10) this.light(p.x, box.top + box.h * 0.5, 22 * s + 6, FIRE, 0.7, 8);
       }
-      if (enemy.shockPower > 0 && box.w && Math.floor(real * 20 + enemy.id) % 5 === 0) this.dot(E, p.x + (hash(enemy.id, Math.floor(real * 20)) - 0.5) * box.w, box.top + hash(Math.floor(real * 20), enemy.id) * box.h, '#bff1ea');
+      if (frozen && box.w) { this.sprite('fx_ice', p.x, box.top + box.h * 0.75, Math.max(0.6, s * 1.2), this.glow()); this.light(p.x, box.top + box.h * 0.5, 18 * s + 6, ICE, 0.7, 8); }
+      if (stunned && box.w && ANIMS.fx_stun) this.sprite(this.animFrame('fx_stun', real + enemy.id * 0.3), p.x, box.top - 1, Math.max(0.6, s), this.glow());
+      if (enemy.toxin > 0 && box.w && Math.floor(real * 6 + enemy.id) % 4 === 0) this.dot(E, p.x + (hash(enemy.id, Math.floor(real * 6)) - 0.5) * box.w, box.top + box.h * 0.3, '#a4dc4c');
+      const sparks = paralyzed ? 2 : enemy.meters.shock.value > 0 ? 5 : 0;
+      if (sparks && box.w && Math.floor(real * 20 + enemy.id) % sparks === 0) this.dot(E, p.x + (hash(enemy.id, Math.floor(real * 20)) - 0.5) * box.w, box.top + hash(Math.floor(real * 20), enemy.id) * box.h, '#bff1ea');
     }
 
     // Core 亡者徵召: raised corpses walk back up the road, lit by a sickly green glow.
@@ -456,26 +489,61 @@ export class Battlefield {
     this.light(centre.x, centre.y - 4, across * 0.9 + 10, FIRE, (1.1 + 0.25 * Math.sin(t * 17) * Math.sin(t * 5.1)) * fade, 10);
   }
 
+  /** 毒氣彈: a slow, dithered purple-green cloud with puffs. */
+  private gasZone(x: number, y: number, radius: number, t: number, remaining: number) {
+    const ring = projectedCircle(x, y, radius, this.view).map(p => ({ x: p.x * PX, y: p.y * PX }));
+    const minX = Math.floor(Math.min(...ring.map(p => p.x))), maxX = Math.ceil(Math.max(...ring.map(p => p.x)));
+    const minY = Math.floor(Math.min(...ring.map(p => p.y))), maxY = Math.ceil(Math.max(...ring.map(p => p.y)));
+    const E = this.c.emissive, fade = Math.min(1, remaining / 1.2);
+    E.globalAlpha = 0.55 * fade;
+    for (let py = minY; py <= maxY; py++) for (let px = minX; px <= maxX; px++) {
+      const q = unproject(px / PX, py / PX, this.view), r = Math.hypot(q.x - x, q.y - y) / radius;
+      if (r <= 1 && dither(px + Math.floor(t * 3), py, 0.45 - r * 0.3)) this.dot(E, px, py, r > 0.75 ? '#4a2a58' : '#6a3f7c');
+    }
+    E.globalAlpha = 1;
+    if (ANIMS.fx_toxic) for (let i = 0; i < 6; i++) {
+      const a = i * 2.4 + t * 0.3, rr = Math.sqrt((i + 0.5) / 6) * radius * 0.8, p = this.at(x + Math.cos(a) * rr, y + Math.sin(a) * rr);
+      this.sprite(this.animFrame('fx_toxic', t + i * 0.2), p.x, p.y, Math.max(0.5, p.scale / WALL_SCALE), this.glow());
+    }
+    const centre = this.at(x, y), across = this.at(x, y + radius).x - this.at(x, y - radius).x;
+    this.light(centre.x, centre.y - 4, across * 0.8 + 10, TOXIC, 0.7 * fade, 10);
+  }
+
   private effect(run: DefenseRun, e: VisualEvent) {
     const progress = 1 - e.life / e.maxLife, end = this.at(e.x, e.y), E = this.c.emissive;
+    if (e.kind === 'freeze' || e.kind === 'stun' || e.kind === 'paralyze') {
+      // A control just triggered: a ring that snaps outwards in the status colour.
+      const color = e.kind === 'freeze' ? '#e8f8ff' : e.kind === 'stun' ? '#ffe9a8' : '#bff1ea', s = Math.max(0.6, end.scale / WALL_SCALE);
+      this.ring(E, end.x, end.y - 8 * s, (4 + progress * 10) * s, color, 1 - progress);
+      if (e.kind === 'paralyze') for (let i = 0; i < 3; i++) this.sprite(this.animFrame('zap', progress + i * 0.1), end.x + (i - 1) * 4 * s, end.y - 10 * s, s, this.glow());
+      this.light(end.x, end.y - 8 * s, 26 * s + 8, e.kind === 'freeze' ? ICE : e.kind === 'stun' ? WARM : CYAN, 1.2 * (1 - progress), 8);
+      return;
+    }
+    if (e.kind === 'toxic') {
+      const across = (this.at(e.x, e.y + e.radius).x - this.at(e.x, e.y - e.radius).x);
+      if (ANIMS.fx_toxic) this.sprite(this.animFrame('fx_toxic', progress * 0.5), end.x, end.y, Math.max(0.6, Math.min(2.5, across / 30)), this.glow());
+      this.light(end.x, end.y - across * 0.2, across * 1.2 + 16, TOXIC, 1.2 * (1 - progress), 14);
+      return;
+    }
     if (e.kind === 'shot' || e.kind === 'flame' || e.kind === 'laser') {
       const slot = run.mercenaries.findIndex((_, i) => mercPosition(i).x === e.fromX && mercPosition(i).y === e.fromY);
       const merc = run.mercenaries[slot];
       if (!merc) {
-        // Refraction: a side beam that starts at an enemy.
-        if (e.kind === 'laser' && e.fromX !== undefined) {
-          const from = this.at(e.fromX, e.fromY!), far = this.at(e.x, e.y), fade = progress < 0.7 ? 1 : 1 - (progress - 0.7) / 0.3;
-          if (fade > 0) { this.line(E, from.x, from.y - 6, far.x, far.y, '#56aebb'); this.line(E, from.x, from.y - 6, far.x, far.y, '#bff1ea', 2); this.light(from.x, from.y - 6, 30, CYAN, fade, 10); }
-        }
+        if (e.fromX === undefined) return;
+        const from = this.at(e.fromX, e.fromY!), far = this.at(e.x, e.y), fade = progress < 0.7 ? 1 : 1 - (progress - 0.7) / 0.3;
+        if (fade <= 0) return;
+        // Refraction side beams and the strafe band start away from the squad; relay shots jump enemy to enemy.
+        if (e.kind === 'laser') { this.line(E, from.x, from.y - 6, far.x, far.y, '#56aebb'); this.line(E, from.x, from.y - 6, far.x, far.y, e.color, 2); this.light(from.x, from.y - 6, 30, CYAN, fade, 10); }
+        else if (e.kind === 'shot') { this.line(E, from.x, from.y - 6, far.x, far.y - 6, e.color); this.light(far.x, far.y - 6, 14, CYAN, fade, 6); }
         return;
       }
-      const p = this.at(e.fromX!, e.fromY!), f = FRAMES[`merc_${merc.kind}`]!, [mx, my] = MUZZLE[merc.kind];
+      const p = this.at(e.fromX!, e.fromY!), f = FRAMES[`merc_${merc.kind}`] ?? FRAMES.merc_rifle!, [mx, my] = MUZZLE[merc.kind];
       const left = Math.round(p.x - f[2] / 2), sx = slot === FLIPPED_SLOT ? left + f[2] - 1 - mx : left + mx, sy = Math.round(p.y - f[3]) + my;
       const ty = end.y - 8 * end.scale / WALL_SCALE;
       if (e.kind === 'shot') {
-        const tesla = merc.kind === 'tesla', tint = tesla ? CYAN : WARM;
+        const cool = merc.kind === 'tesla' || merc.kind === 'signal' || merc.kind === 'cryo', tint = cool ? (merc.kind === 'cryo' ? ICE : CYAN) : WARM;
         const a = Math.min(1, progress * 1.6), b = Math.min(1, progress * 1.6 + 0.35);
-        this.line(E, sx + (end.x - sx) * a, sy + (ty - sy) * a, sx + (end.x - sx) * b, sy + (ty - sy) * b, tesla ? '#bff1ea' : '#ffd884');
+        this.line(E, sx + (end.x - sx) * a, sy + (ty - sy) * a, sx + (end.x - sx) * b, sy + (ty - sy) * b, cool ? '#bff1ea' : merc.kind === 'chemist' ? '#a4dc4c' : '#ffd884');
         if (progress < 0.35) { this.sprite('muzzle', sx, sy + 3, 1, this.glow()); this.light(sx, sy, 38, tint, 1.3 * (1 - progress / 0.35), 12); }
         if (progress > 0.45) { this.sprite(this.animFrame('hit', (progress - 0.45) * 0.3, false), end.x, ty + 3, 1, this.glow()); this.light(end.x, ty, 16, tint, 0.8, 6); }
       } else if (e.kind === 'flame') {
@@ -509,11 +577,14 @@ export class Battlefield {
   }
 
   private aim(run: DefenseRun, aim: Aim) {
-    const merc = run.mercenaries[aim.slot]; if (!merc) return;
-    const def = MERCENARIES[merc.kind], color = aim.valid ? '#ffd884' : '#ee9d4f', r = def.radius * run.skillRange, O = this.c.overlay;
+    const skill = run.skills[aim.slot]; if (!skill) return;
+    const def = SKILLS[skill.id], color = aim.valid ? '#ffd884' : '#ee9d4f', r = def.radius * run.skillRange, O = this.c.overlay;
     const pulse = 0.65 + 0.35 * Math.sin(this.realTime * 10);
     O.globalAlpha = pulse;
-    if (merc.kind === 'tesla') {
+    if (def.shape === 'band') {
+      // The strafe sweeps the whole road between two depths.
+      for (const depth of [aim.x - r, aim.x + r]) { const a = this.at(depth, 65), b = this.at(depth, 390); this.line(O, a.x, a.y, b.x, b.y, color, 2); }
+    } else if (def.shape === 'beam') {
       const origin = mercPosition(aim.slot), dx = aim.x - origin.x, dy = aim.y - origin.y, len = Math.hypot(dx, dy) || 1, ux = dx / len, uy = dy / len;
       const corners = [[origin.x - uy * r, origin.y + ux * r], [origin.x + ux * 1100 - uy * r, origin.y + uy * 1100 + ux * r], [origin.x + ux * 1100 + uy * r, origin.y + uy * 1100 - ux * r], [origin.x + uy * r, origin.y - ux * r]] as const;
       const pts = corners.map(([x, y]) => this.at(x, y));

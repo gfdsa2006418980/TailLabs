@@ -4,12 +4,12 @@
  */
 export type Cue =
   | 'rifle' | 'tesla' | 'flame' | 'laser' | 'grenade' | 'molotov' | 'kill' | 'wall'
-  | 'buy' | 'levelUp' | 'pick' | 'bossWarning' | 'bossArrive' | 'bossDown' | 'gameOver' | 'victory' | 'coin' | 'ready';
+  | 'buy' | 'levelUp' | 'pick' | 'bossWarning' | 'bossArrive' | 'bossDown' | 'gameOver' | 'victory' | 'coin' | 'ready' | 'type';
 
 /** Minimum seconds between two plays of the same cue. */
 const GAP: Record<Cue, number> = {
   rifle: 0.07, tesla: 0.08, flame: 0.14, laser: 0.2, grenade: 0.08, molotov: 0.1, kill: 0.05, wall: 0.4,
-  buy: 0.04, levelUp: 0.3, pick: 0.1, bossWarning: 1.5, bossArrive: 1, bossDown: 1, gameOver: 1, victory: 1, coin: 0.035, ready: 0.2,
+  buy: 0.04, levelUp: 0.3, pick: 0.1, bossWarning: 1.5, bossArrive: 1, bossDown: 1, gameOver: 1, victory: 1, coin: 0.035, ready: 0.2, type: 0.05,
 };
 /** Cues that are dropped first when many voices are already sounding. */
 const AMBIENT = new Set<Cue>(['rifle', 'tesla', 'flame', 'kill', 'wall', 'coin']);
@@ -92,6 +92,8 @@ export class DefenseAudio {
       case 'buy': this.tone('sine', 1050, 1500, 0.1, 0.05); this.tone('triangle', 1580, 1920, 0.08, 0.025, 0.04); break;
       case 'levelUp': [660, 880, 1320].forEach((f, i) => this.tone('triangle', f, f * 1.01, 0.16, 0.06, i * 0.07)); break;
       case 'pick': this.tone('sine', 880, 1320, 0.12, 0.05); break;
+      // Telegraph key: a short, quiet click per typed character of the story.
+      case 'type': this.tone('square', 1150 * v, 1150 * v, 0.018, 0.012); break;
       case 'coin': this.tone('square', 1900 * v, 2500 * v, 0.045, 0.018); break;
       case 'ready': this.tone('triangle', 990, 1480, 0.09, 0.04); this.tone('sine', 1480, 1480, 0.12, 0.025, 0.06); break;
       case 'bossWarning': for (let i = 0; i < 3; i++) { this.tone('sawtooth', 440, 660, 0.18, 0.05, i * 0.36); this.tone('sawtooth', 660, 440, 0.16, 0.045, i * 0.36 + 0.18); } break;

@@ -1,6 +1,6 @@
 import { calculateValue, effectiveCooldown } from './Combat.ts';
 import type { Modifier, Tag } from './Combat.ts';
-import { MERCENARIES, MERC_KINDS } from './Content.ts';
+import { MERCENARIES, MERC_KINDS, SKILLS } from './Content.ts';
 import type { TalentTree } from './Meta.ts';
 
 /**
@@ -8,19 +8,19 @@ import type { TalentTree } from './Meta.ts';
  * multiplicative (`growth ^ level`), plus 16 tactical cores (0/1) at branch tips and between branches.
  * The 9 original node ids are kept so existing saves keep every level.
  */
-export const BRANCHES = ['動能', '火焰', '生化', '電能', '傭兵', '主動技能', '拒馬', '經濟'] as const;
+export const BRANCHES = ['動能', '火焰', '毒素', '電能', '傭兵', '主動技能', '拒馬', '經濟'] as const;
 export type Branch = typeof BRANCHES[number] | '中心';
 const BRANCH_COLOR: Record<Branch, string> = {
-  中心: '#e8c58b', 動能: '#e8c58b', 火焰: '#ec865a', 生化: '#b5cc7f', 電能: '#83c9d4', 傭兵: '#d8c391', 主動技能: '#f0a35e', 拒馬: '#a9c48a', 經濟: '#e3cf8f',
+  中心: '#e8c58b', 動能: '#e8c58b', 火焰: '#ec865a', 毒素: '#a6c46a', 電能: '#83c9d4', 傭兵: '#d8c391', 主動技能: '#f0a35e', 拒馬: '#a9c48a', 經濟: '#e3cf8f',
 };
-const BRANCH_GLYPH: Record<Branch, string> = { 中心: '◆', 動能: '✦', 火焰: '♨', 生化: '☣', 電能: 'ϟ', 傭兵: '»', 主動技能: '◎', 拒馬: '▱', 經濟: '¤' };
+const BRANCH_GLYPH: Record<Branch, string> = { 中心: '◆', 動能: '✦', 火焰: '♨', 毒素: '☣', 電能: 'ϟ', 傭兵: '»', 主動技能: '◎', 拒馬: '▱', 經濟: '¤' };
 
 interface NodeSpec { id: string; name: string; growth: number; describe: string; flavor: string }
 /** Branch order matches BRANCHES; the first node of each branch links to the hub. */
 const SPECS: Record<Branch, NodeSpec[]> = {
   中心: [{ id: 'mercenary_damage', name: '傭兵訓練', growth: 1.06, describe: '所有傭兵的普攻與技能傷害', flavor: '基本功，練到不用想。' }],
   動能: [
-    { id: 'kinetic_damage', name: '動能專精', growth: 1.08, describe: '所有動能傷害，包含手榴彈', flavor: '火藥多放一點。' },
+    { id: 'kinetic_damage', name: '動能專精', growth: 1.08, describe: '所有動能傷害', flavor: '火藥多放一點。' },
     { id: 'crit_rate', name: '射擊精度', growth: 1.05, describe: '暴擊率（每級 +0.5%）', flavor: '準星對齊，再扣。' },
     { id: 'crit_power', name: '要害訓練', growth: 1.04, describe: '暴擊傷害', flavor: '知道哪裡最痛。' },
     { id: 'pierce_training', name: '穿甲訓練', growth: 1.04, describe: '穿透後保留的傷害（上限 95%）', flavor: '別讓子彈停下來。' },
@@ -34,19 +34,19 @@ const SPECS: Record<Branch, NodeSpec[]> = {
     { id: 'firezone', name: '火區擴張', growth: 1.03, describe: '燃燒瓶火區半徑', flavor: '潑得更開。' },
     { id: 'fuel_stock', name: '汽油存量', growth: 1.04, describe: '燃燒瓶火區持續時間', flavor: '油還很多。' },
   ],
-  生化: [
-    { id: 'corrosion_power', name: '腐蝕研究', growth: 1.06, describe: '施加的腐蝕強度', flavor: '配方又改良了。' },
-    { id: 'corrosion_time', name: '酸液保存', growth: 1.04, describe: '腐蝕持續時間', flavor: '酸不會自己乾掉。' },
+  毒素: [
+    { id: 'corrosion_power', name: '毒劑研究', growth: 1.06, describe: '施加的毒素', flavor: '配方又改良了。' },
+    { id: 'corrosion_time', name: '毒素保存', growth: 1.04, describe: '毒素持續時間', flavor: '酸不會自己乾掉。' },
     { id: 'eroder', name: '侵蝕彈頭', growth: 1.05, describe: '對防禦 50 以上敵人的傷害', flavor: '越硬越好吃。' },
-    { id: 'toxic_residue', name: '毒霧殘留', growth: 1.06, describe: '腐蝕中的敵人死亡時，使周圍敵人腐蝕', flavor: '死了也要害人。' },
-    { id: 'bio_shield', name: '生化防護', growth: 1.03, describe: '腐蝕中的敵人對拒馬的傷害降低', flavor: '它們的牙齒先爛了。' },
+    { id: 'toxic_residue', name: '毒霧殘留', growth: 1.06, describe: '中毒的敵人死亡時，使周圍敵人中毒', flavor: '死了也要害人。' },
+    { id: 'bio_shield', name: '防毒面具', growth: 1.03, describe: '中毒的敵人對拒馬的傷害降低', flavor: '它們的牙齒先爛了。' },
   ],
   電能: [
-    { id: 'shock_power', name: '電容強化', growth: 1.06, describe: '施加的感電強度', flavor: '電容再加一組。' },
-    { id: 'shock_time', name: '蓄電', growth: 1.04, describe: '感電持續時間', flavor: '電流留在體內。' },
+    { id: 'shock_power', name: '電容強化', growth: 1.06, describe: '感電值累積速度', flavor: '電容再加一組。' },
+    { id: 'shock_time', name: '蓄電', growth: 1.04, describe: '麻痺持續時間', flavor: '電流留在體內。' },
     { id: 'laser_focus', name: '雷射校準', growth: 1.08, describe: '雷射傷害', flavor: '焦點對準了。' },
     { id: 'coil_cooling', name: '線圈冷卻', growth: 1.03, describe: '電磁兵攻擊速度', flavor: '線圈不再過熱。' },
-    { id: 'stun_field', name: '高壓警戒', growth: 1.02, describe: '感電中的敵人移動速度降低（下限 −40%）', flavor: '電麻了就走不動。' },
+    { id: 'stun_field', name: '高壓警戒', growth: 1.02, describe: '帶感電值的敵人移動速度降低（下限 −40%）', flavor: '電麻了就走不動。' },
   ],
   傭兵: [
     { id: 'attack_speed', name: '供彈訓練', growth: 1.03, describe: '所有傭兵攻擊速度', flavor: '換彈匣再快一秒。' },
@@ -115,22 +115,22 @@ export interface CoreNode {
 }
 interface CoreSpec { id: CoreId; name: string; kind: string; rule: string; price: string; flavor: string; cost: number; exclusive?: CoreId[] }
 const CORE_SPECS: { at: number; between: boolean; spec: CoreSpec }[] = [
-  { at: 0, between: false, spec: { id: 'coldsteel', name: '冷鋼紀律', kind: '狀態', rule: '直接傷害無視敵人 60% 防禦，普攻必定穿透 1 名。', price: '永遠不會暴擊。', flavor: '不靠運氣，靠紀律。', cost: 15, exclusive: ['cremation', 'agony'] } },
+  { at: 0, between: false, spec: { id: 'coldsteel', name: '冷鋼紀律', kind: '狀態', rule: '動能傷害無視敵人 50% 物理防禦，單發普攻必定穿透 2 名。', price: '永遠不會暴擊。', flavor: '不靠運氣，靠紀律。', cost: 15 } },
   { at: 1, between: false, spec: { id: 'layers', name: '千層烈焰', kind: '狀態', rule: '燃燒不再只取最強，改為可以疊加，最多 10 層。', price: '每層威力 ×0.35。', flavor: '一層一層燒上去。', cost: 15 } },
-  { at: 2, between: false, spec: { id: 'agony', name: '痛苦精通', kind: '轉換', rule: '暴擊時，這一擊施加的燃燒、腐蝕、感電威力 × 暴擊傷害。', price: '暴擊不再加倍直接傷害。', flavor: '讓它們痛得久一點。', cost: 25, exclusive: ['coldsteel', 'cremation'] } },
-  { at: 3, between: false, spec: { id: 'rotation', name: '元素輪替', kind: '狀態', rule: '敵人受到與上一擊「不同屬性」的傷害 ×1.6。', price: '同屬性連打 ×0.7。', flavor: '換個方式打，它就扛不住。', cost: 25, exclusive: ['uniform'] } },
-  { at: 4, between: false, spec: { id: 'lonewolf', name: '孤狼', kind: '陣容', rule: '只能部署 1 名傭兵；他的傷害 ×4、攻速 ×1.5、技能冷卻 ×0.5。', price: '另外兩個招募入口關閉。', flavor: '一個人就夠了。', cost: 40, exclusive: ['uniform'] } },
-  { at: 5, between: false, spec: { id: 'autofire', name: '自動火控', kind: '技能', rule: '技能就緒時自動朝最大的敵群施放，仍可手動拖曳。', price: '技能傷害 ×0.85。', flavor: '系統會自己找目標。', cost: 15, exclusive: ['bloodprice'] } },
+  { at: 2, between: false, spec: { id: 'agony', name: '痛苦精通', kind: '轉換', rule: '暴擊時，這一擊的燃燒、毒素與冷凍／感電／暈眩累積 × 暴擊傷害。', price: '暴擊不再加倍直接傷害。', flavor: '讓它們痛得久一點。', cost: 25 } },
+  { at: 3, between: false, spec: { id: 'rotation', name: '元素輪替', kind: '狀態', rule: '敵人受到與上一擊「不同屬性」的傷害 ×1.6。', price: '同屬性連打 ×0.7。', flavor: '換個方式打，它就扛不住。', cost: 25 } },
+  { at: 4, between: false, spec: { id: 'lonewolf', name: '孤狼', kind: '陣容', rule: '只能部署 1 名傭兵；他的傷害 ×4、攻速 ×1.5、技能冷卻 ×0.5。', price: '另外兩個招募入口關閉。', flavor: '一個人就夠了。', cost: 40 } },
+  { at: 5, between: false, spec: { id: 'autofire', name: '自動火控', kind: '技能', rule: '技能就緒時自動朝最大的敵群施放，仍可手動拖曳。', price: '技能傷害 ×0.85。', flavor: '系統會自己找目標。', cost: 15 } },
   { at: 6, between: false, spec: { id: 'plunder', name: '掠奪者', kind: '經濟', rule: '每次擊殺回復拒馬 1% 最大生命，補強費用 ×0.6。', price: '「修復」停用。', flavor: '拆它們的骨頭補牆。', cost: 15 } },
-  { at: 7, between: false, spec: { id: 'ammoeco', name: '彈藥經濟', kind: '經濟', rule: '普攻傷害 ×（1 + log₂(1 + 資金) ÷ 4）。', price: '每發消耗當前資金 1%；資金歸零時傷害 ×0.5。', flavor: '錢就是子彈。', cost: 25 } },
-  { at: 0, between: true, spec: { id: 'cremation', name: '焚化協議', kind: '轉換', rule: '所有直接傷害改為以 120% 威力掛上燃燒。', price: '不再造成任何直接傷害。', flavor: '全部燒掉，一個不留。', cost: 25, exclusive: ['coldsteel', 'agony'] } },
+  { at: 7, between: false, spec: { id: 'ammoeco', name: '彈藥經濟', kind: '經濟', rule: '動能傷害 ×（1 + log₂(1 + 資金) ÷ 4）。', price: '每發動能普攻消耗當前資金 1%；資金歸零時動能傷害 ×0.5。', flavor: '錢就是子彈。', cost: 25 } },
+  { at: 0, between: true, spec: { id: 'cremation', name: '焚化協議', kind: '轉換', rule: '所有直接傷害改為以 80% 威力掛上燃燒。', price: '不再造成任何直接傷害。', flavor: '全部燒掉，一個不留。', cost: 25 } },
   { at: 1, between: true, spec: { id: 'corpseblast', name: '屍爆連鎖', kind: '連鎖', rule: '敵人死亡時爆炸，對周圍造成其最大生命 20% 的動能爆炸傷害，可以連鎖。', price: '擊殺獎金 ×0.7。', flavor: '一爆一整片。', cost: 25 } },
-  { at: 2, between: true, spec: { id: 'raisedead', name: '亡者徵召', kind: '連鎖', rule: '被擊殺的一般喪屍有 30% 機率變成我方屍兵，往前衝進敵群爆炸。', price: '拒馬最大生命 ×0.6。', flavor: '它們會替我們走回去。', cost: 40 } },
-  { at: 3, between: true, spec: { id: 'focusfire', name: '集火射擊', kind: '連鎖', rule: '連續命中同一目標，每發傷害 +15%，最多 ×4。', price: '換目標就歸零。', flavor: '所有人，打那一隻。', cost: 15 } },
-  { at: 4, between: true, spec: { id: 'uniform', name: '制式部隊', kind: '陣容', rule: '可以招募 3 名步槍手；每多一名，全隊傷害 ×1.3。', price: '只能招募步槍手。', flavor: '同一套裝備，同一套戰法。', cost: 40, exclusive: ['lonewolf', 'rotation'] } },
-  { at: 5, between: true, spec: { id: 'bloodprice', name: '血債血償', kind: '技能', rule: '技能不再有冷卻，修復費用 ×0.5。', price: '每次施放消耗拒馬 10% 最大生命。', flavor: '用牆換火力。', cost: 25, exclusive: ['autofire'] } },
-  { at: 6, between: true, spec: { id: 'pointblank', name: '定點防禦', kind: '距離', rule: '敵人越接近拒馬受到的傷害越高，拒馬前 ×2.5。', price: '遠處只有 ×0.4。', flavor: '等它們靠近。', cost: 15 } },
-  { at: 7, between: true, spec: { id: 'blackmarket', name: '黑市補給', kind: '補給', rule: '戰地補給改為五選二。', price: '其中 1～2 張是帶副作用的詛咒卡，重抽停用。', flavor: '別問貨從哪來。', cost: 25 } },
+  { at: 2, between: true, spec: { id: 'raisedead', name: '亡者徵召', kind: '連鎖', rule: '被擊殺的一般喪屍有 30% 機率變成我方屍兵，往前衝進敵群爆炸。', price: '拒馬最大生命固定為 1，無法補強。', flavor: '它們會替我們走回去。', cost: 40 } },
+  { at: 3, between: true, spec: { id: 'focusfire', name: '集火射擊', kind: '連鎖', rule: '連續射擊同一目標，每發射速 +15%，最多 ×4。', price: '換目標就歸零。', flavor: '所有人，打那一隻。', cost: 15 } },
+  { at: 4, between: true, spec: { id: 'uniform', name: '制式部隊', kind: '陣容', rule: '可以招募 3 名步槍手；每多一名，全隊傷害 ×1.3。', price: '只能招募步槍手。', flavor: '同一套裝備，同一套戰法。', cost: 40 } },
+  { at: 5, between: true, spec: { id: 'bloodprice', name: '血債血償', kind: '背水', rule: '拒馬生命越低，所有造成的傷害越高，最高 ×2（生命一半時 ×1.5）。', price: '每次施放技能消耗拒馬 4% 最大生命（最低留 1）。', flavor: '牆塌一寸，火力加一分。', cost: 25 } },
+  { at: 6, between: true, spec: { id: 'pointblank', name: '探照獵殺', kind: '光照', rule: '探照燈照到的喪屍受到的傷害 ×2；光圈放大，傭兵優先射擊光圈內的目標。', price: '沒被照到的喪屍受到的傷害 ÷2。', flavor: '燈照到哪，就打哪。', cost: 15 } },
+  { at: 7, between: true, spec: { id: 'blackmarket', name: '以牆為彈', kind: '火力', rule: '每名傭兵每秒額外造成拒馬當前生命 8% 的傷害（分攤到每一發普攻）。', price: '拒馬受到的傷害 ×1.3。', flavor: '牆越厚，子彈越重。', cost: 25 } },
 ];
 export const CORES: readonly CoreNode[] = CORE_SPECS.map(({ at, between, spec }) => {
   const branch = BRANCHES[at]!, next = BRANCHES[(at + 1) % BRANCHES.length]!;
@@ -144,7 +144,7 @@ export const coreSlots = (tree: TalentTree) => Math.min(3, Math.max(1, tree.tier
 export const isCoreRevealed = (tree: TalentTree, id: string) => coreById(id)?.links.some(link => talentLevel(tree, link) > 0) ?? false;
 export const isCoreUnlocked = (tree: TalentTree, id: string) => tree.unlockedCoreTalents.includes(id);
 export const isCoreActive = (tree: TalentTree, id: string) => tree.activeCoreTalents.includes(id);
-/** Active cores that cannot share a loadout with `id`. */
+/** Active cores that cannot share a loadout with `id`. None since 2026-10-23 (the field stays for future use). */
 export const coreConflicts = (tree: TalentTree, id: string) => (coreById(id)?.exclusive ?? []).filter(other => tree.activeCoreTalents.includes(other));
 
 // ---------- general nodes ----------
@@ -182,7 +182,9 @@ export function compileTalents(tree: TalentTree): PermanentEffects {
   const modifiers: Modifier[] = [];
   const m = (id: string) => talentMultiplier(tree, id), lv = (id: string) => talentLevel(tree, id);
   const more = (tags: Tag[], value: number) => { if (value !== 1) modifiers.push({ kind: 'More', tags: [...tags], value }); };
+  // The hub raises every mercenary's attacks and, since skills no longer belong to a mercenary (2026-10-23), every active skill.
   for (const kind of MERC_KINDS) more([`Mercenary.${kind}`], m('mercenary_damage'));
+  more(['Skill.Active'], m('mercenary_damage'));
   more(['Damage.Kinetic'], m('kinetic_damage'));
   more(['Damage.Fire', 'Mechanic.DOT'], m('fire_dot'));
   more(['Skill.Active'], m('active_skill_damage'));
@@ -191,8 +193,8 @@ export function compileTalents(tree: TalentTree): PermanentEffects {
   more(['Defense.Repair'], m('repair_efficiency'));
   more(['Skill.AutoAttack', 'Mechanic.DOT'], m('igniter'));
   more(['Mercenary.rifle'], m('rifle_specialist')); more(['Mercenary.flame'], m('flame_specialist')); more(['Mercenary.tesla'], m('tesla_specialist'));
-  more(['Mercenary.tesla', 'Skill.Active'], m('laser_focus'));
-  more(['Mercenary.rifle', 'Skill.Active'], m('grenade_payload')); more(['Mercenary.flame', 'Skill.Active'], m('molotov_payload'));
+  more(['Weapon.laser', 'Skill.Active'], m('laser_focus'));
+  more(['Weapon.grenade', 'Skill.Active'], m('grenade_payload')); more(['Weapon.molotov', 'Skill.Active'], m('molotov_payload'));
   if (lv('recruiter')) more(['Economy.RecruitCost'], 1 / m('recruiter'));
   if (lv('veteran')) more(['Economy.UpgradeCost'], 1 / m('veteran'));
   const effects: PermanentEffects = {
@@ -229,5 +231,5 @@ export function deploymentStats(effects: PermanentEffects) {
   const rifle = MERCENARIES.rifle;
   const damage = calculateValue(rifle.damage, rifle.tags, effects.modifiers);
   return { damage, dps: damage / (rifle.interval / effects.attackSpeed), wallHealth: 40 * effects.wallHealth,
-    income: calculateValue(1, ['Economy.KillReward'], effects.modifiers), grenadeCooldown: effectiveCooldown(rifle.cooldown, effects.haste) };
+    income: calculateValue(1, ['Economy.KillReward'], effects.modifiers), grenadeCooldown: effectiveCooldown(SKILLS.grenade.cooldown, effects.haste) };
 }

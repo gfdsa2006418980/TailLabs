@@ -21,16 +21,66 @@ export const ENEMY_ATTACK_GROWTH_PER_MINUTE = 1.45;
  */
 export const UPGRADE_BASE_COST = 10;
 export const UPGRADE_COST_GROWTH = 1.15;
-export const MERC_DAMAGE_PER_LEVEL = 1.13;
+export const MERC_DAMAGE_PER_LEVEL = 1.12;
 /** 2026-10-22 decision: the fire squad's growth per level is halved (+6.5% instead of +13%). */
 export const FLAME_DAMAGE_PER_LEVEL = 1.065;
-/** Base recruit costs (not fixed by the spec). */
-export const RECRUIT_RIFLE_COST = 12;
-export const RECRUIT_FLAME_COST = 18;
-export const RECRUIT_TESLA_COST = 40;
-export const RECRUIT_BASE_COST = { rifle: RECRUIT_RIFLE_COST, flame: RECRUIT_FLAME_COST, tesla: RECRUIT_TESLA_COST } as const;
-/** §16: duplicate recruits cost ×1.35 per owned copy. */
-export const RECRUIT_COST_GROWTH = 1.35;
+/**
+ * 2026-10-23: mercenaries and active skills are no longer bought with money; they come from the
+ * level-up cards. Until the squad has three members, every choice offers 1–2 mercenaries.
+ */
+export const MAX_SQUAD = 3;
+export const MAX_SKILLS = 3;
+
+/**
+ * Build-up statuses (2026-10-23 decision): each hit of an element fills a meter by
+ * `final damage × rate`; the meter's threshold is a share of the enemy's max HP, so bosses are hard to
+ * control and late waves are not frozen wholesale. A full meter triggers the control, empties, and
+ * every trigger within STATUS_WINDOW seconds raises the next threshold by +200% of the base
+ * (×1, ×3, ×5, …) until the window passes without one.
+ */
+export const STATUS = {
+  /** 冷凍: slows while filling, then freezes (no movement) and deals frostbite as cold damage. */
+  chill: { rate: 2, threshold: 0.6, duration: 2, burst: 0.1, slow: 0.5 },
+  /** 電能: raises damage taken while filling, then paralyses (no barricade damage) with an electric burst. */
+  shock: { rate: 2, threshold: 0.6, duration: 4, burst: 0.05, vulnerability: 0.5 },
+  /** 爆裂: stuns (no movement). */
+  stun: { rate: 1.5, threshold: 0.8, duration: 4, burst: 0 },
+} as const;
+export const STATUS_ESCALATION = 2;
+export const STATUS_WINDOW = 10;
+/** A meter that is not fed for this long drains by METER_DRAIN of its threshold per second. */
+export const METER_IDLE = 1.5;
+export const METER_DRAIN = 0.15;
+/** 毒素: flat toxin points subtract from defense; reaching zero detonates once per zombie for 5% of its max HP around it. */
+export const TOXIN_DURATION = 6;
+export const TOXIN_BURST = 0.05;
+export const TOXIN_BURST_RADIUS = 55;
+/** Each zombie's defense varies ±25% around its kind's value. */
+export const DEFENSE_SPREAD = 0.25;
+
+/**
+ * Core 以牆為彈 (reworked 黑市補給, 2026-10-23): every mercenary adds this share of the barricade's
+ * current health to its damage per second (split over its shots, so fast guns get no extra), and the
+ * barricade takes this much more damage.
+ */
+export const BULWARK_SHARE = 0.08;
+export const BULWARK_WALL_DAMAGE = 1.3;
+
+/**
+ * Core 血債血償 (reworked 2026-10-23): all damage × (1 + (BLOOD_MAX − 1) × missing barricade share),
+ * so ×1.5 at half health and ×2 at the brink. Every skill cast costs BLOOD_SKILL_COST of max health
+ * (never below 1). It reaches every damage source, so the cap stays modest.
+ */
+export const BLOOD_MAX = 2;
+export const BLOOD_SKILL_COST = 0.04;
+
+/**
+ * The searchlight sweeps the road on game time. Core 探照獵殺 (reworked 定點防禦): lit zombies take
+ * ×SEARCHLIGHT_FACTOR damage, unlit ones ÷SEARCHLIGHT_FACTOR; the beam widens and the guns prefer lit targets.
+ */
+export const SEARCHLIGHT_RADIUS = 55;
+export const SEARCHLIGHT_WIDE_RADIUS = 95;
+export const SEARCHLIGHT_FACTOR = 2;
 
 /**
  * Barricade. Max HP must grow slower than the money spent on it

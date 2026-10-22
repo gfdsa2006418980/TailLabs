@@ -1,0 +1,46 @@
+/* New-player guide: telegraph story and the step coach. */
+dialog[data-kind="story"] {
+  width: min(520px, 100%); max-width: 100%; height: 100dvh; max-height: 100dvh; margin: 0 auto; overflow: auto;
+  padding: calc(env(safe-area-inset-top, 0px) + 28px) 22px calc(env(safe-area-inset-bottom, 0px) + 22px);
+  background: radial-gradient(ellipse at 50% 40%, #0b1210, #030404 80%); border: 0; box-shadow: none; clip-path: none;
+}
+dialog[data-kind="story"][open] { animation: none }
+dialog[data-kind="story"]::backdrop { background: #030404 }
+body:has(dialog[open][data-kind="story"]) :is(.hud-top, .hud-xp, .boss-banner, .hud-bottom) { opacity: 0 }
+dialog[data-kind="story"] #modal-content { height: 100% }
+.story-screen { display: flex; flex-direction: column; height: 100%; text-align: left; cursor: pointer }
+.story-head { display: flex; align-items: center; gap: 8px; color: var(--sage); font: 700 11px/1 Consolas, monospace; letter-spacing: 3px }
+.story-dot { width: 8px; height: 8px; background: #ff5a3c; box-shadow: 0 0 8px #ff5a3c; animation: story-blink 1s steps(2) infinite }
+.story-lines { flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 18px; padding: 24px 4px }
+.story-line { min-height: 1.5em; margin: 0; font: 700 20px/1.5 Consolas, "Microsoft JhengHei", monospace; color: #b8f0a0; text-shadow: 0 0 10px #6fd05a66; letter-spacing: 1px; visibility: hidden }
+.story-line.shown { visibility: visible }
+.story-line.typing::after { content: "▌"; margin-left: 2px; color: #b8f0a0; animation: story-blink .6s steps(2) infinite }
+.story-actions { display: grid; justify-items: center; gap: 10px; cursor: default }
+.story-actions [hidden] { display: none !important }
+.story-skip { min-height: 44px; padding: 8px 18px; font: 700 13px/1 Consolas, "Microsoft JhengHei", monospace; color: var(--sage); background: transparent; border: 0; box-shadow: none }
+@keyframes story-blink { 50% { opacity: 0 } }
+@media (min-width: 420px) { .story-line { font-size: 22px } }
+
+/* Coach: four blockers frame a hole over the control being taught; the ring marks it; the bubble explains. */
+.coach { position: fixed; inset: 0; z-index: 60; pointer-events: none }
+.coach[hidden] { display: none }
+.coach-block { position: fixed; background: #050607b8; pointer-events: auto }
+.coach-ring { position: fixed; pointer-events: none; box-shadow: 0 0 0 2px var(--gold), 0 0 18px 2px #ffd88488; animation: coach-pulse 1.1s ease-in-out infinite }
+.coach-bubble {
+  position: fixed; left: 50%; width: min(340px, calc(100% - 32px)); transform: translateX(-50%); padding: 14px 16px 10px; pointer-events: auto;
+  color: var(--bone); background: linear-gradient(#141a17, #0b0d0e); text-align: left;
+  box-shadow: inset 0 0 0 2px var(--mid), inset 0 4px 0 2px var(--gold); clip-path: var(--notch);
+}
+.coach-bubble p { margin: 0 0 10px; font-size: 15px; line-height: 1.6 }
+.coach-bubble b { color: var(--gold) }
+.coach-actions { display: flex; justify-content: space-between; align-items: center; gap: 8px }
+.coach-skip { min-height: 40px; padding: 6px 4px; font-size: 12px; color: var(--sage); background: transparent; border: 0; box-shadow: none }
+.coach-ok { min-height: 40px; margin-left: auto; padding: 6px 18px; font-weight: 700; color: var(--ink); background: var(--gold); border: 0; box-shadow: inset -2px -2px 0 #b8954a }
+.coach.acting .coach-bubble::after { content: "▼ 點亮起來的按鈕"; display: block; margin-top: 2px; font: 700 11px/1 Consolas, "Microsoft JhengHei", monospace; color: var(--gold); opacity: .8 }
+@keyframes coach-pulse { 50% { box-shadow: 0 0 0 4px var(--gold), 0 0 26px 6px #ffd884aa } }
+.reduce-motion .coach-ring, .reduce-motion .story-dot, .reduce-motion .story-line.typing::after { animation: none }
+
+/* Deploy screen: replay the briefing. Choice screen: the coach's note for the first pick. */
+.briefing-button { min-height: 40px; margin-top: 10px; padding: 6px 16px; font: 700 12px/1 Consolas, "Microsoft JhengHei", monospace; letter-spacing: 1px; color: var(--sage); background: #0b0d0eb0; border: 0; box-shadow: inset 0 0 0 1px #ffffff20 }
+.choice-tip { max-width: 360px; margin: 2px auto 10px; padding: 10px 12px; font-size: 13px; line-height: 1.6; text-align: left; color: var(--bone); background: #0b0d0ecc; box-shadow: inset 3px 0 0 var(--gold) }
+.choice-tip b { color: var(--gold) }

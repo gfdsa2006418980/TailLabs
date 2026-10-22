@@ -24,10 +24,11 @@ const anims = Object.fromEntries(sheet.meta.frameTags.map(tag => {
 }));
 
 // The renderer looks these up by name and silently skips missing ones: fail the build instead.
-const kinds = ['walker', 'runner', 'armored', 'brute', 'elite', 'boss'];
+const kinds = ['walker', 'runner', 'armored', 'hazmat', 'brute', 'elite', 'boss'];
 const required = ['explosion', 'smoke', 'blood', 'fire', 'hit', 'death', 'zap', 'zombie_boss_roar', 'zombie_boss_roar_eyes',
   ...kinds.flatMap(k => ['', '_eyes', '_attack', '_attack_eyes', '_death'].map(v => `zombie_${k}${v}`)),
-  ...['rifle', 'flame', 'tesla'].map(k => `merc_${k}_fire`)];
+  ...['rifle', 'flame', 'tesla', 'gunner', 'sniper', 'cryo', 'grenadier', 'chemist', 'engineer', 'signal'].map(k => `merc_${k}_fire`),
+  'fx_stun', 'fx_toxic'];
 const missing = required.filter(name => !anims[name]);
 if (missing.length) { console.error('error: animations missing from the sheet: ' + missing.join(', ')); process.exit(1); }
 const generated = join(root, 'src/tl003/generated');

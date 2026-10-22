@@ -1,8 +1,8 @@
 // TL003 balance harness: an active-play bot, panel DPS measurement and a meta-loop simulator.
 // Used by tests/tl003-balance.test.mjs and runnable as `npm run balance:tl003`.
 import { DefenseRun, FIELD } from '../src/tl003/Run.ts';
-import { calculateValue, effectiveCooldown } from '../src/tl003/Combat.ts';
-import { MERCENARIES, MERC_KINDS } from '../src/tl003/Content.ts';
+import { calculateValue, effectiveCooldown, withFamily } from '../src/tl003/Combat.ts';
+import { MERCENARIES, SKILLS } from '../src/tl003/Content.ts';
 import { compileTalents, isRevealed, talentCost, canBreakthrough, TALENTS } from '../src/tl003/Talents.ts';
 import { emptyTree } from '../src/tl003/Meta.ts';
 
@@ -10,11 +10,17 @@ import { emptyTree } from '../src/tl003/Meta.ts';
 export const LEGACY_NODES = ['mercenary_damage', 'kinetic_damage', 'barricade_health', 'economy_income', 'fire_dot', 'repair_efficiency', 'attack_speed', 'active_skill_damage', 'active_skill_haste'];
 export const seedFor = i => Math.imul(i + 1, 2654435761) >>> 0;
 
-/** Card preferences for a few common build directions. */
+/**
+ * Card preferences for a few common build directions: recruits first (until the squad is full), then
+ * skills (while a slot is free), then the build's normal cards.
+ */
 export const BUILDS = {
-  kinetic: ['kinetic', 'crit', 'critDamage', 'speed', 'training', 'pierce', 'active', 'shock', 'coil', 'bio', 'wall', 'plating', 'income', 'haste', 'radius', 'burn', 'fire', 'repair'],
-  fire: ['burn', 'fire', 'burnTime', 'speed', 'shock', 'active', 'haste', 'radius', 'acid', 'bio', 'kinetic', 'wall', 'plating', 'income', 'repair'],
-  economy: ['income', 'haggle', 'airdrop', 'kinetic', 'speed', 'wall', 'plating', 'active', 'shock', 'bio', 'haste', 'radius', 'burn', 'fire', 'repair'],
+  kinetic: ['merc_sniper', 'merc_grenadier', 'merc_gunner', 'merc_tesla', 'merc_cryo', 'skill_strafe', 'skill_mortar', 'skill_snipe',
+    'kinetic', 'physical', 'crit', 'critDamage', 'speed', 'training', 'pierce', 'active', 'shock', 'voltage', 'coil', 'wall', 'plating', 'income', 'haste', 'radius', 'bio', 'burn', 'fire', 'repair'],
+  fire: ['merc_flame', 'merc_engineer', 'merc_tesla', 'merc_cryo', 'merc_grenadier', 'skill_molotov', 'skill_minefield', 'skill_emp',
+    'burn', 'fire', 'burnTime', 'elemental', 'speed', 'shock', 'active', 'haste', 'radius', 'acid', 'bio', 'kinetic', 'wall', 'plating', 'income', 'repair'],
+  economy: ['merc_gunner', 'merc_grenadier', 'merc_tesla', 'merc_sniper', 'merc_chemist', 'skill_mortar', 'skill_strafe', 'skill_gas',
+    'income', 'haggle', 'airdrop', 'kinetic', 'physical', 'speed', 'wall', 'plating', 'active', 'shock', 'bio', 'haste', 'radius', 'burn', 'fire', 'repair'],
 };
 
 /**
@@ -51,7 +57,9 @@ export function pickCard(run, prefs) {
   const rank = c => ({ common: 0, uncommon: 1, rare: 2, legendary: 3 })[c.rarity ?? 'common'];
   const special = run.choices.filter(c => c.kind === 'evolution' || c.kind === 'synergy').sort((a, b) => (b.kind === 'evolution') - (a.kind === 'evolution'));
   if (special.length) return special[0].id;
-  const scored = run.choices.map(c => ({ c, p: prefs.indexOf(c.id) < 0 ? 99 : prefs.indexOf(c.id) })).sort((a, b) => a.p - b.p || rank(b.c) - rank(a.c));
+  // A recruit is a whole new gun: worth more than any normal card while the squad has room.
+  const score = c => prefs.indexOf(c.id) >= 0 ? prefs.indexOf(c.id) : c.kind === 'merc' ? 50 : c.kind === 'skill' ? 60 : 99;
+  const scored = run.choices.map(c => ({ c, p: score(c) })).sort((a, b) => a.p - b.p || rank(b.c) - rank(a.c));
   return scored[0].c.id;
 }
 /** Auto-attack DPS of one mercenary kind at a given level (all copies). */
@@ -59,10 +67,9 @@ function kindDps(run, kind, level = run.levels[kind], copies = run.mercenaries.f
   const saved = run.levels[kind]; run.levels[kind] = level;
   const def = MERCENARIES[kind], base = run.damageFor(kind), interval = run.intervalFor(kind);
   run.levels[kind] = saved;
-  const value = kind === 'flame'
-    ? calculateValue(base, ['Damage.Fire', 'Mechanic.DOT', 'Status.Burning', 'Skill.AutoAttack', `Mercenary.${kind}`], run.modifiers)
-    : calculateValue(base, def.tags, run.modifiers) / interval;
-  return value * copies;
+  // Upgrades are judged against a crowd: splash and chains count the extra targets they usually reach.
+  const crowd = def.pattern === 'aoe' ? 3 : def.pattern === 'cone' ? def.targets : def.pattern === 'chain' ? 1 + 0.7 * def.targets : 1;
+  return mercValue(run, kind, base, interval) * crowd * copies;
 }
 
 /**
@@ -73,7 +80,7 @@ function kindDps(run, kind, level = run.levels[kind], copies = run.mercenaries.f
 export function act(run) {
   let bought = 0;
   const front = run.enemies.reduce((best, e) => (!best || e.x > best.x ? e : best), undefined);
-  if (front && front.x > 0) run.mercenaries.forEach((m, slot) => { if (m.cooldown <= 0) run.cast(slot, Math.min(front.x, FIELD.wallX - 5), front.y); });
+  if (front && front.x > 0) run.skills.forEach((s, slot) => { if (s.cooldown <= 0) run.cast(slot, Math.min(front.x, FIELD.wallX - 5), front.y); });
   for (let guard = 0; guard < 60; guard++) {
     const attackers = run.enemies.filter(e => e.x >= FIELD.wallX - 18).reduce((s, e) => s + e.attack, 0);
     const threatened = run.wallHealth < run.wallMaxHealth * 0.5 || (attackers > 0 && run.wallHealth < attackers * 8);
@@ -82,16 +89,11 @@ export function act(run) {
       if (run.fortify()) { bought++; continue; }
     }
     const options = [];
+    // Recruits come from cards now; money only buys levels (and the barricade).
     const owned = [...new Set(run.mercenaries.map(m => m.kind))];
     for (const kind of owned) {
       const gain = kindDps(run, kind, run.levels[kind] + 1) - kindDps(run, kind);
       options.push({ cost: run.upgradeCost(kind), value: gain, buy: () => run.upgrade(kind) });
-    }
-    if (run.mercenaries.length < 3) for (const kind of MERC_KINDS.filter(k => !owned.includes(k))) {
-      const copies = run.mercenaries.filter(m => m.kind === kind).length;
-      // A new kind also brings a new active skill; count it as +50% of its auto-attack value.
-      const gain = (kindDps(run, kind, run.levels[kind], copies + 1) - kindDps(run, kind)) * (copies ? 1 : 1.5);
-      options.push({ cost: run.recruitCost(kind), value: gain, buy: () => run.recruit(kind) });
     }
     const best = options.sort((a, b) => b.value / b.cost - a.value / a.cost)[0];
     if (!best || run.money < best.cost || !best.buy()) break;
@@ -103,17 +105,27 @@ export function act(run) {
 /** Single-target panel DPS against a zero-defense dummy: auto attacks plus skills averaged over their cooldown. */
 export function panelDps(run) {
   let total = 0;
-  for (const merc of run.mercenaries) {
-    const def = MERCENARIES[merc.kind], base = run.damageFor(merc.kind);
-    if (merc.kind === 'flame') total += calculateValue(base, ['Damage.Fire', 'Mechanic.DOT', 'Status.Burning', 'Skill.AutoAttack', `Mercenary.${merc.kind}`], run.modifiers);
-    else total += calculateValue(base, def.tags, run.modifiers) / run.intervalFor(merc.kind);
-    const cooldown = effectiveCooldown(def.cooldown, run.haste);
-    if (merc.kind === 'rifle') total += calculateValue(base * 5, ['Damage.Kinetic', 'Mechanic.AOE', 'Mechanic.Explosion', 'Skill.Active', 'Mercenary.rifle'], run.modifiers) / cooldown;
-    if (merc.kind === 'flame') total += calculateValue(base * 3, ['Damage.Fire', 'Mechanic.AOE', 'Mechanic.DOT', 'Skill.Active', 'Mercenary.flame'], run.modifiers) * 6 / cooldown;
-    if (merc.kind === 'tesla') total += calculateValue(base * 9, ['Damage.Kinetic', 'Damage.Electric', 'Mechanic.Pierce', 'Skill.Active', 'Mercenary.tesla'], run.modifiers) / cooldown;
+  for (const merc of run.mercenaries) total += mercValue(run, merc.kind, run.damageFor(merc.kind), run.intervalFor(merc.kind));
+  for (const skill of run.skills) {
+    const [k, tags] = SKILL_PANEL[skill.id];
+    total += calculateValue(run.skillPower * k, withFamily(tags), run.modifiers) / Math.max(1, effectiveCooldown(SKILLS[skill.id].cooldown, run.haste));
   }
   return total;
 }
+/** One mercenary's single-target auto-attack DPS: the flamer's burn, a hit per interval for everyone else. */
+function mercValue(run, kind, base, interval) {
+  const def = MERCENARIES[kind];
+  if (kind === 'flame') return calculateValue(base, withFamily(['Damage.Fire', 'Mechanic.DOT', 'Status.Burning', 'Skill.AutoAttack', `Mercenary.${kind}`]), run.modifiers);
+  return calculateValue(base * (1 + (def.ignite ?? 0) * 3), withFamily(def.tags), run.modifiers) / interval;
+}
+/** Each skill's damage as a multiple of the squad's reference shot, and its tags, for panel DPS. */
+const SKILL_PANEL = {
+  grenade: [5, ['Damage.Blast', 'Skill.Active', 'Weapon.grenade']], molotov: [18, ['Damage.Fire', 'Mechanic.DOT', 'Skill.Active', 'Weapon.molotov']],
+  laser: [9, ['Damage.Electric', 'Skill.Active', 'Weapon.laser']], cryobomb: [4, ['Damage.Cold', 'Skill.Active', 'Weapon.cryobomb']],
+  gas: [3.6, ['Damage.Toxin', 'Skill.Active', 'Weapon.gas']], mortar: [5, ['Damage.Blast', 'Skill.Active', 'Weapon.mortar']],
+  emp: [3, ['Damage.Electric', 'Skill.Active', 'Weapon.emp']], strafe: [4.8, ['Damage.Kinetic', 'Skill.Active', 'Weapon.strafe']],
+  snipe: [45, ['Damage.Kinetic', 'Damage.Cold', 'Skill.Active', 'Weapon.snipe']], minefield: [6, ['Damage.Blast', 'Damage.Fire', 'Skill.Active', 'Weapon.minefield']],
+};
 
 /** Geometric mean of minute-over-minute panel DPS growth, from `from` to the last full minute. */
 export function dpsGrowth(dps, from = 1) {

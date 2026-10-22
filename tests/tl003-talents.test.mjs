@@ -3,8 +3,8 @@ import assert from 'node:assert/strict';
 import { LocalMetaMirror, META_KEY, emptyMeta, emptyTree } from '../src/tl003/Meta.ts';
 import { CORES, TALENTS, TALENT_LINKS, canBreakthrough, compileTalents, coreSlots, deploymentStats, isCoreRevealed, isRevealed, talentCost, talentMultiplier } from '../src/tl003/Talents.ts';
 import { calculateDamage, calculateValue, effectiveCooldown } from '../src/tl003/Combat.ts';
-import { MERCENARIES } from '../src/tl003/Content.ts';
-import { DefenseRun, FIELD, SPAWN_GROWTH_SPEED, spawnIntervalAt } from '../src/tl003/Run.ts';
+import { MERCENARIES, SKILLS } from '../src/tl003/Content.ts';
+import { DefenseRun, FIELD, SPAWN_GROWTH_SPEED, spawnIntervalAt , freshStatus } from '../src/tl003/Run.ts';
 
 const near = (actual, expected) => assert.ok(Math.abs(actual - expected) < 1e-8, `${actual} != ${expected}`);
 function mirror(points = 1000, tree = emptyTree()) {
@@ -13,7 +13,7 @@ function mirror(points = 1000, tree = emptyTree()) {
   return { meta: new LocalMetaMirror(storage), storage, data };
 }
 const treeWith = nodes => ({ ...emptyTree(), nodes });
-const target = { defense: 0, corrosionPower: 0, shockPower: 0 };
+const target = { defense: 0, toxin: 0 };
 const step = run => {
   if(run.phase === 'choice')run.choose(run.choices.find(c => c.id === 'kinetic')?.id ?? run.choices[0].id);
   run.advance(FIELD.step);
@@ -78,22 +78,23 @@ test('TL003 settlement awards points once and immediately permits camp investmen
 });
 test('TL003 neutral talent snapshots preserve the original first-run stats and contain no modifiers', () => {
   const effects=compileTalents(emptyTree());assert.deepEqual(effects,{modifiers:[],wallHealth:1,attackSpeed:1,haste:0});
-  const stats=deploymentStats(effects);near(stats.damage,5.2);near(stats.dps,4.16);near(stats.wallHealth,40);near(stats.income,1);near(stats.grenadeCooldown,MERCENARIES.rifle.cooldown);
+  const stats=deploymentStats(effects);near(stats.damage,MERCENARIES.rifle.damage);near(stats.dps,MERCENARIES.rifle.damage/MERCENARIES.rifle.interval);near(stats.wallHealth,40);near(stats.income,1);near(stats.grenadeCooldown,SKILLS.grenade.cooldown);
 });
 test('TL003 permanent damage uses multiplicative tag stages and strengthens all mercenaries and actives', () => {
   const effects=compileTalents(treeWith({mercenary_damage:2,kinetic_damage:3,active_skill_damage:1}));
   const kinetic=calculateDamage({baseDamage:10,tags:MERCENARIES.rifle.tags},target,effects.modifiers);
   near(kinetic.final,10*1.06**2*1.08**3);
-  const grenade=calculateDamage({baseDamage:26,tags:['Damage.Kinetic','Skill.Active','Mercenary.rifle']},target,effects.modifiers);
-  near(grenade.final,26*1.06**2*1.08**3*1.08);
-  const laser=calculateDamage({baseDamage:54,tags:['Damage.Kinetic','Damage.Electric','Skill.Active','Mercenary.tesla']},target,effects.modifiers);
-  near(laser.final,54*1.06**2*1.08**3*1.08);
+  // Skills belong to no mercenary: the hub and 軍火專精 reach them, the kinetic node does not touch a blast grenade.
+  const grenade=calculateDamage({baseDamage:26,tags:['Damage.Blast','Skill.Active','Weapon.grenade']},target,effects.modifiers);
+  near(grenade.final,26*1.06**2*1.08);
+  const laser=calculateDamage({baseDamage:54,tags:['Damage.Electric','Skill.Active','Weapon.laser']},target,effects.modifiers);
+  near(laser.final,54*1.06**2*1.08);
 });
 test('TL003 permanent Fire damage strengthens actual Burn and Molotov without double application', () => {
-  const effects=compileTalents(treeWith({mercenary_damage:1,fire_dot:2,active_skill_damage:1}));const run=new DefenseRun(1,effects);run.start();run.money=100;run.recruit('flame');
-  const victim={id:999,kind:'walker',x:500,y:220,hp:200,maxHp:200,defense:0,speed:0,attack:0,reward:3,xp:1,burnPower:0,burnDuration:0,burnFlammability:0,corrosionPower:0,corrosionDuration:0,shockPower:0,shockDuration:0,hitFlash:0};run.enemies=[victim];run.advance(FIELD.step);
+  const effects=compileTalents(treeWith({mercenary_damage:1,fire_dot:2,active_skill_damage:1}));const run=new DefenseRun(1,effects);run.start();run.recruit('flame');run.learn('molotov');
+  const victim={id:999,kind:'walker',x:600,y:220,hp:200,maxHp:200,defense:0,speed:0,attack:0,reward:3,xp:1,burnPower:0,burnDuration:0,burnFlammability:0,...freshStatus(),hitFlash:0};run.enemies=[victim];run.advance(FIELD.step);
   near(victim.burnPower,MERCENARIES.flame.damage*1.06*1.08**2);run.mercenaries.forEach(m=>m.shotTimer=100);const hp=victim.hp;run.advance(1);near(victim.hp,hp-victim.burnPower);
-  run.cast(1,500,220);near(run.zones[0].power,MERCENARIES.flame.damage*3*1.06*1.08**2*1.08);
+  run.cast(1,600,220);near(run.zones[0].power,MERCENARIES.rifle.damage*3*1.06*1.08**2*1.08);
 });
 test('TL003 permanent wall health, repair and attack speed enter the actual Run', () => {
   const effects=compileTalents(treeWith({barricade_health:2,repair_efficiency:3,attack_speed:4}));const run=new DefenseRun(1,effects);run.start();
@@ -107,7 +108,7 @@ test('TL003 permanent income multiplies real kill and completed Wave rewards and
 });
 test('TL003 permanent haste stays unbounded and matches the displayed cooldown prediction', () => {
   const effects=compileTalents(treeWith({active_skill_haste:200}));const run=new DefenseRun(1,effects);run.start();run.cast(0,500,220);
-  near(run.mercenaries[0].cooldown,MERCENARIES.rifle.cooldown/1.06**200);near(deploymentStats(effects).grenadeCooldown,effectiveCooldown(MERCENARIES.rifle.cooldown,run.haste));assert.ok(run.mercenaries[0].cooldown<.001);
+  near(run.skills[0].cooldown,SKILLS.grenade.cooldown/1.06**200);near(deploymentStats(effects).grenadeCooldown,effectiveCooldown(SKILLS.grenade.cooldown,run.haste));assert.ok(run.skills[0].cooldown<.001);
 });
 test('TL003 a run owns a snapshot; later camp changes and input-object mutation cannot change its stats', () => {
   const tree=treeWith({mercenary_damage:1,barricade_health:1}),effects=compileTalents(tree);const run=new DefenseRun(1,effects);
@@ -165,7 +166,8 @@ test('TL003 late-wave spawn growth can produce multiple enemies per simulation s
   assert.ok(run.enemies.length>1);assert.equal(new Set(run.enemies.map(e=>e.id)).size,run.enemies.length);
 });
 
-test('TL003 tactical cores: unlock spends points, forget refunds in full, slots open with the tier, exclusives block', () => {
+test('TL003 tactical cores: unlock spends points, forget refunds in full, slots open with the tier, no exclusives', () => {
+  assert.ok(CORES.every(c=>c.exclusive.length===0),'no core blocks another (2026-10-23)');
   const tip=CORES.find(c=>c.id==='coldsteel').links[0];
   const {meta}=mirror(200,treeWith({[tip]:1}));assert.equal(isCoreRevealed(meta.tree,'coldsteel'),true);
   const before=meta.value.TalentPoints;assert.equal(meta.unlockCore('coldsteel').ok,true);assert.equal(meta.value.TalentPoints,before-15);
@@ -173,10 +175,11 @@ test('TL003 tactical cores: unlock spends points, forget refunds in full, slots 
   // tier 1 = one slot
   const other=CORES.find(c=>c.id==='layers');const t2=meta.tree;t2.nodes[other.links[0]]=1;
   const {meta:m2}=mirror(200,t2);assert.equal(m2.unlockCore('layers').ok,true);assert.equal(m2.equipCore('layers').ok,false,'one slot at tier 1');
-  // exclusives
+  // formerly exclusive pairs (cold steel + cremation) now share a loadout
   const t3=structuredClone(m2.tree);t3.tier=3;t3.maxNodeLevel=30;for(const id of CORES.find(c=>c.id==='cremation').links)t3.nodes[id]=1;
-  const {meta:m3}=mirror(200,t3);assert.equal(m3.unlockCore('cremation').ok,true);assert.equal(m3.equipCore('cremation').ok,false,'cremation conflicts with cold steel');
+  const {meta:m3}=mirror(200,t3);assert.equal(m3.unlockCore('cremation').ok,true);assert.equal(m3.equipCore('cremation').ok,true,'cremation and cold steel together');
   assert.equal(m3.equipCore('layers').ok,true);assert.equal(coreSlots(m3.tree),3);
+  assert.equal(m3.unequipCore('cremation').ok,true);
   // forget refunds and unequips
   const points=m3.value.TalentPoints;assert.equal(m3.forgetCore('coldsteel').ok,true);assert.equal(m3.value.TalentPoints,points+15);assert.ok(!m3.tree.activeCoreTalents.includes('coldsteel'));
   assert.equal(m3.equipCore('cremation').ok,true);

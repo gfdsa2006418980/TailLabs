@@ -15,12 +15,13 @@ export const clock = (seconds: number) => `${Math.floor(seconds / 60).toString()
 
 /** Category → small pixel icon shown on the card's colour band. */
 const CATEGORY_ICON: Record<string, string> = {
-  動能: 'icon_el_kinetic', 火焰: 'icon_el_fire', 生化: 'icon_el_bio', 電能: 'icon_el_electric',
-  傭兵: 'icon_merc_rifle', 主動技能: 'icon_skill_rifle', 經濟: 'icon_money', 防守: 'icon_fortify', 連動: 'icon_star', 質變: 'icon_star', 詛咒: 'icon_wave',
+  動能: 'icon_el_kinetic', 火焰: 'icon_el_fire', 毒素: 'icon_el_toxin', 電能: 'icon_el_electric', 冷凍: 'icon_el_cold', 爆裂: 'icon_el_blast',
+  元素: 'icon_el_fire', 物理: 'icon_el_kinetic', 招募: 'icon_merc_rifle', 技能: 'icon_skill_grenade',
+  傭兵: 'icon_merc_rifle', 主動技能: 'icon_skill_grenade', 經濟: 'icon_money', 防守: 'icon_fortify', 連動: 'icon_star', 質變: 'icon_star', 詛咒: 'icon_wave',
 };
 
 export function deployScreen(effects: PermanentEffects, talentPoints: number, bestWave: number, showTips: boolean) {
-  const tips = [['icon_money', '擊殺賺錢'], ['icon_card_kinetic', '戰地補給'], ['icon_skill_rifle', '拖曳技能'], ['icon_wave', '02:00 屍王']];
+  const tips = [['icon_money', '擊殺賺錢'], ['icon_merc_cryo', '補給招募'], ['icon_skill_grenade', '拖曳技能'], ['icon_wave', '02:00 屍王']];
   return `<div class="screen deploy-screen">
     <div class="deploy-hero" aria-hidden="true"><span class="hero-glow"></span>${px('zombie_walker_0', 3)}${px('merc_rifle', 5)}${px('zombie_runner_1', 3)}</div>
     <h2 id="modal-title" class="logo"><span>無盡防線</span><small>THE LAST LINE</small></h2>
@@ -30,6 +31,7 @@ export function deployScreen(effects: PermanentEffects, talentPoints: number, be
       <button id="start" class="primary go">部署 <span>▶</span></button>
       <button id="open-talents" class="camp-button">${px('icon_star', 2)}<b>指揮星圖</b>${talentPoints > 0 ? `<span class="badge">${formatNumber(talentPoints)}</span>` : '<span></span>'}</button>
       ${bestWave > 0 ? `<p class="best">最高 <b>W${bestWave.toString().padStart(2, '0')}</b></p>` : ''}
+      <button id="replay-briefing" class="briefing-button" type="button">▶ 作戰簡報</button>
     </div>
   </div>`;
 }
@@ -42,12 +44,18 @@ const ICON_ALIAS: Record<string, string> = {
   chemfire: 'fire', overheat: 'shock', conductor: 'bio', frag: 'radius', double: 'active', hex: 'active', napalm: 'fire',
   inferno: 'radius', wildfire: 'burn', overload: 'shock', hifreq: 'haste', refract: 'shock',
 };
-export const cardIcon = (id: string) => FRAMES['icon_card_' + id] ? 'icon_card_' + id : 'icon_card_' + (ICON_ALIAS[id] ?? 'kinetic');
-const KIND_TAG: Record<string, string> = { synergy: '連動', evolution: '質變', curse: '詛咒' };
-export function choiceScreen(level: number, cards: readonly UpgradeCard[], reroll?: { cost: number; affordable: boolean }, picks = 1) {
+export const cardIcon = (id: string) => {
+  // Recruit and skill cards show the mercenary portrait or the skill icon.
+  if ((id.startsWith('merc_') || id.startsWith('skill_')) && FRAMES['icon_' + id]) return 'icon_' + id;
+  return FRAMES['icon_card_' + id] ? 'icon_card_' + id : 'icon_card_' + (ICON_ALIAS[id] ?? 'kinetic');
+};
+const KIND_TAG: Record<string, string> = { synergy: '連動', evolution: '質變', curse: '詛咒', merc: '招募', skill: '技能' };
+/** `tip`: the new-player guide's note for the first pick (HTML). */
+export function choiceScreen(level: number, cards: readonly UpgradeCard[], reroll?: { cost: number; affordable: boolean }, picks = 1, tip?: string) {
   const market = cards.length > 3 || picks > 1;
   return `<div class="screen choice-screen${market ? ' market' : ''}">
     <div class="choice-head"><small>${market ? 'BLACK MARKET' : 'FIELD SUPPLY'}</small><b id="modal-title">Lv ${level}<span class="sr-only">，戰地補給，選擇一張</span></b>${market ? `<span class="picks-left">再選 ${picks} 張</span>` : ''}</div>
+    ${tip ? `<p class="choice-tip">${tip}</p>` : ''}
     <div class="pick-row">${cards.map((card, i) => {
       const rarity = card.rarity ?? 'common', tag = KIND_TAG[card.kind ?? ''];
       return `<div class="pick-card rarity-${rarity}${card.kind && card.kind !== 'normal' ? ' kind-' + card.kind : ''}" style="--card-color:${card.color};--rarity:${RARITIES[rarity].color}">
