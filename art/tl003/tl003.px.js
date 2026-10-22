@@ -350,6 +350,37 @@ sprite("icon_card_radius", IC, (c) => { c.ring(7, 7, 6, "R"); c.ring(7, 7, 4, "o
 sprite("icon_card_income", IC, (c) => { for (const [y, col] of [[10, "o"], [7, "O"], [4, "Y"]]) { c.ellipse(7, y, 6, 2, col); c.hline(2, y + 2, 11, "R"); } c.px(5, 3, "w"); c.px(6, 3, "w"); c.text(6, 2, "", "k"); });
 sprite("icon_card_wall", IC, (c) => { c.rect(0, 8, 14, 3, "Q"); c.hline(0, 8, 14, "t"); c.line(1, 1, 12, 13, "t", 2); c.line(12, 1, 1, 13, "t", 2); c.px(1, 1, "T"); c.px(12, 1, "T"); c.rect(9, 0, 5, 5, "y"); c.rect(11, 0, 1, 5, "k"); c.rect(9, 2, 5, 1, "k"); });
 sprite("icon_card_repair", IC, (c) => { c.line(3, 11, 9, 5, "n", 2); c.circ(10, 4, 3, "N"); c.rect(10, 1, 3, 3, "_"); c.px(11, 4, "_"); c.circ(3, 11, 2, "M"); c.px(3, 11, "k"); });
+
+// v0.5 cards: crits, pierce, status gains, economy, defence, synergies and evolutions.
+const flame = (c, x, y, s = 1) => { c.poly([x, y + 4 * s, x + 2 * s, y, x + 4 * s, y + 4 * s], "O"); c.px(x + 2 * s, y + 3 * s, "Y"); };
+const grenade = (c, x, y) => { c.circ(x, y, 3, "f"); c.circ(x - 1, y - 1, 1, "F"); c.rect(x - 1, y - 5, 3, 2, "M"); c.px(x + 2, y - 5, "n"); };
+const bolt = (c, x, y, k = "L") => { c.poly([x + 2, y, x - 1, y + 5, x + 1, y + 5, x, y + 9, x + 4, y + 3, x + 2, y + 3, x + 3, y], k); };
+sprite("icon_card_crit", IC, (c) => { c.ring(7, 7, 5, "N"); c.ring(7, 7, 2, "n"); c.vline(7, 0, 4, "N"); c.vline(7, 11, 3, "N"); c.hline(0, 7, 4, "N"); c.hline(11, 7, 3, "N"); c.px(7, 7, "W"); });
+sprite("icon_card_critDamage", IC, (c) => { c.circ(7, 7, 6, "R"); c.circ(7, 7, 4, "w"); c.circ(7, 7, 2, "R"); c.px(7, 7, "Y"); c.line(11, 1, 13, 0, "w"); });
+sprite("icon_card_pierce", IC, (c) => { c.rect(3, 2, 2, 10, "M"); c.rect(9, 2, 2, 10, "M"); c.vline(3, 2, 10, "n"); c.vline(9, 2, 10, "n"); c.hline(0, 7, 14, "T"); c.rect(11, 6, 3, 3, "T"); c.px(13, 7, "w"); c.px(6, 6, "Y"); c.px(12, 5, "Y"); });
+sprite("icon_card_burnTime", IC, (c) => { c.hline(3, 0, 8, "Q"); c.hline(3, 13, 8, "Q"); c.poly([4, 1, 10, 1, 7, 7], "N"); c.poly([4, 13, 10, 13, 7, 7], "N"); c.poly([5, 12, 9, 12, 7, 9], "O"); c.px(7, 10, "Y"); flame(c, 9, 2); });
+sprite("icon_card_acid", IC, (c) => { c.rect(5, 0, 4, 4, "n"); c.poly([5, 4, 9, 4, 13, 13, 1, 13], "n"); c.poly([4, 8, 10, 8, 12, 12, 2, 12], "Z"); c.px(6, 10, "y"); c.px(9, 9, "y"); c.px(7, 6, "N"); });
+sprite("icon_card_coil", IC, (c) => { c.vline(7, 0, 14, "m"); for (let y = 2; y < 13; y += 3) { c.line(3, y, 11, y + 1, "o"); c.line(3, y + 1, 11, y + 2, "O"); } bolt(c, 9, 0); });
+sprite("icon_card_training", IC, (c) => { for (const y of [1, 5, 9]) { c.line(1, y + 3, 7, y, "T", 2); c.line(7, y, 13, y + 3, "T", 2); } c.px(7, 1, "w"); });
+sprite("icon_card_airdrop", IC, (c) => { c.ellipse(7, 3, 6, 3, "w"); c.hline(1, 3, 13, "T"); c.line(2, 4, 5, 9, "N"); c.line(12, 4, 9, 9, "N"); c.rect(4, 9, 6, 5, "t"); c.rect(4, 9, 6, 1, "T"); c.vline(7, 9, 5, "Q"); });
+sprite("icon_card_haggle", IC, (c) => { c.circ(7, 7, 6, "O"); c.circ(7, 7, 5, "Y"); c.rect(4, 6, 7, 2, "R"); c.px(4, 3, "w"); });
+sprite("icon_card_plating", IC, (c) => { c.rect(1, 1, 12, 12, "M"); c.rect(1, 1, 12, 1, "N"); c.rect(1, 12, 12, 1, "m"); for (const [x, y] of [[3, 3], [10, 3], [3, 10], [10, 10]]) c.px(x, y, "N"); c.line(5, 5, 9, 9, "n"); });
+sprite("icon_card_spikes", IC, (c) => { c.rect(0, 9, 14, 4, "t"); c.hline(0, 9, 14, "T"); for (const x of [1, 5, 9]) { c.poly([x, 9, x + 2, 1, x + 4, 9], "n"); c.px(x + 2, 2, "N"); } c.px(12, 3, "R"); });
+sprite("icon_card_phosphorus", IC, (c) => { c.rect(6, 3, 4, 8, "T"); c.rect(6, 1, 4, 2, "w"); c.vline(7, 3, 8, "w"); c.rect(6, 11, 4, 1, "q"); flame(c, 1, 8, 1); flame(c, 9, 9, 1); });
+sprite("icon_card_acidcore", IC, (c) => { c.rect(5, 1, 4, 9, "Z"); c.rect(5, 0, 4, 1, "y"); c.vline(6, 1, 9, "y"); c.rect(5, 10, 4, 1, "q"); c.px(7, 12, "Z"); c.px(7, 13, "y"); c.px(3, 6, "y"); });
+sprite("icon_card_railgun", IC, (c) => { c.hline(0, 3, 14, "M"); c.hline(0, 10, 14, "M"); c.hline(0, 4, 14, "m"); c.hline(0, 11, 14, "m"); c.line(1, 7, 13, 7, "L"); c.line(1, 6, 12, 6, "C"); c.px(13, 7, "w"); });
+sprite("icon_card_chemfire", IC, (c) => { c.rect(5, 4, 4, 2, "n"); c.poly([5, 6, 9, 6, 12, 13, 2, 13], "n"); c.poly([4, 9, 10, 9, 11, 12, 3, 12], "Z"); flame(c, 5, 0, 1); c.px(7, 11, "y"); });
+sprite("icon_card_overheat", IC, (c) => { c.poly([1, 13, 4, 5, 7, 10, 9, 4, 13, 13], "R"); c.poly([3, 13, 5, 8, 7, 12, 9, 7, 11, 13], "O"); bolt(c, 5, 0); });
+sprite("icon_card_conductor", IC, (c) => { c.rect(0, 5, 14, 4, "o"); c.hline(0, 5, 14, "O"); c.hline(0, 8, 14, "R"); for (const x of [3, 8, 11]) c.px(x, 6, "r"); bolt(c, 5, 0); c.px(7, 11, "L"); c.px(9, 12, "C"); });
+sprite("icon_card_frag", IC, (c) => { grenade(c, 7, 8); for (const [x, y] of [[1, 3], [13, 2], [0, 10], [13, 12], [6, 0], [10, 13]]) c.px(x, y, "Y"); c.px(2, 4, "O"); c.px(12, 3, "O"); });
+sprite("icon_card_double", IC, (c) => { grenade(c, 4, 8); grenade(c, 10, 10); c.px(12, 1, "Y"); c.px(1, 1, "Y"); });
+sprite("icon_card_hex", IC, (c) => { c.circ(7, 8, 5, "R"); c.circ(6, 7, 2, "o"); c.rect(5, 1, 4, 2, "M"); c.hline(3, 8, 9, "k"); c.px(12, 2, "Y"); c.px(13, 1, "O"); });
+sprite("icon_card_napalm", IC, (c) => { c.rect(3, 1, 8, 9, "o"); c.hline(3, 3, 8, "R"); c.hline(3, 7, 8, "R"); c.vline(4, 1, 9, "O"); for (const x of [3, 7, 10]) { c.px(x, 11, "O"); c.px(x, 12, "o"); } c.px(7, 13, "R"); });
+sprite("icon_card_inferno", IC, (c) => { for (const x of [0, 5, 9]) { c.poly([x, 13, x + 2, 3, x + 5, 13], "R"); c.poly([x + 1, 13, x + 2, 7, x + 4, 13], "O"); c.px(x + 2, 11, "Y"); } });
+sprite("icon_card_wildfire", IC, (c) => { c.circ(7, 9, 4, "w"); c.rect(4, 11, 7, 3, "w"); c.rect(5, 8, 2, 2, "k"); c.rect(8, 8, 2, 2, "k"); flame(c, 3, 0, 1); flame(c, 7, 1, 1); });
+sprite("icon_card_overload", IC, (c) => { c.rect(2, 2, 10, 11, "M"); c.rect(5, 0, 4, 2, "n"); c.rect(3, 3, 8, 9, "m"); bolt(c, 5, 3, "W"); });
+sprite("icon_card_hifreq", IC, (c) => { for (let x = 0; x < 14; x++) { const y = 7 + Math.round(Math.sin(x * 1.4) * 4); c.px(x, y, "L"); c.px(x, y + 1, "C"); } c.hline(0, 7, 14, "c"); });
+sprite("icon_card_refract", IC, (c) => { c.poly([7, 1, 13, 12, 1, 12], "C"); c.poly([7, 3, 11, 11, 3, 11], "L"); c.line(0, 6, 5, 7, "w"); c.line(9, 7, 13, 3, "L"); c.line(9, 8, 13, 9, "L"); });
 // Skills
 sprite("icon_skill_rifle", IC, (c) => { c.circ(7, 8, 5, "f"); c.circ(6, 7, 3, "F"); c.hline(2, 8, 11, "e"); c.vline(7, 3, 11, "e"); c.rect(6, 1, 3, 2, "M"); c.line(9, 2, 12, 0, "n"); c.px(5, 6, "w"); });
 sprite("icon_skill_flame", IC, (c) => { c.rect(4, 6, 6, 8, "e"); c.rect(5, 7, 4, 6, "f"); c.rect(5, 4, 4, 2, "T"); c.rect(6, 3, 2, 1, "w"); c.poly([5, 3, 7, -1, 9, 3], "O"); c.px(7, 1, "Y"); c.rect(5, 9, 4, 2, "R"); });

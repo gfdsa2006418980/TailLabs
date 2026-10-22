@@ -187,3 +187,11 @@ html.reduce-motion .toast.show { animation-name: toast-fade !important; animatio
   dialog[open] { visibility: hidden }
 }
 @keyframes rotate-phone { 0%, 20% { transform: rotate(90deg) } 60%, 100% { transform: rotate(0deg) } }
+/* milestone progress under each upgrade chip, and the ×2 speed button */
+.chip { position: relative }
+.chip::after { content: ""; position: absolute; left: 4px; right: 4px; bottom: 3px; height: 2px; background: linear-gradient(90deg, var(--gold) calc(var(--milestone, 0) * 100%), #ffffff14 0); pointer-events: none }
+.speed-button { font: 700 12px/1 Consolas, monospace; color: var(--bone) }
+.speed-button.fast { color: var(--ink); background: var(--gold); box-shadow: 0 0 10px #ffd88466 }
+/* a unit closed by a core (孤狼) */
+.unit.closed .orb, .unit.closed .chip { opacity: .3; filter: grayscale(1) }
+.unit.closed .orb::after { content: "✕"; position: absolute; inset: 0; display: grid; place-items: center; font: 900 26px/1 Consolas, monospace; color: #ff7a5c }

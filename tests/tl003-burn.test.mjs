@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { advanceBurn, applyBurn, burnSpeed } from '../src/tl003/Burn.ts';
+import { advanceBurn, applyBurn, burnSpeed, MAX_FLAMMABILITY } from '../src/tl003/Burn.ts';
 import { DefenseRun, FIELD } from '../src/tl003/Run.ts';
 import { CARDS, MERCENARIES } from '../src/tl003/Content.ts';
 
@@ -67,12 +67,17 @@ test('TL003 flamer weak hits cannot overwrite a stronger Molotov and pause freez
 });
 test('TL003 stronger later Fire modifiers replace a snapshot once; defense and shock stay dynamic',()=>{
   const {run,victim}=fireRun();run.mercenaries[1].shotTimer=0;run.advance(FIELD.step);near(victim.burnPower,F);
-  run.modifiers.push(CARDS.find(c=>c.id==='fire').modifier);run.mercenaries[1].shotTimer=0;run.advance(FIELD.step);near(victim.burnPower,F*1.6);
+  run.modifiers.push(CARDS.find(c=>c.id==='fire').modifier);run.mercenaries[1].shotTimer=0;run.advance(FIELD.step);near(victim.burnPower,F*(1+CARDS.find(c=>c.id==='fire').value));
   run.mercenaries.forEach(m=>m.shotTimer=100);victim.defense=100;victim.corrosionPower=1;victim.corrosionDuration=10;victim.shockPower=1;victim.shockDuration=10;
-  const hp=victim.hp;run.advance(.5);near(victim.hp,hp-F*1.6*.5/1.5*1.25);near(victim.burnPower,F*1.6);
+  const hp=victim.hp;run.advance(.5);near(victim.hp,hp-F*(1+CARDS.find(c=>c.id==='fire').value)*.5/1.5*1.25);near(victim.burnPower,F*(1+CARDS.find(c=>c.id==='fire').value));
 });
 test('TL003 accelerated DOT death awards one bounty and one XP even inside overlapping fire',()=>{
   const {run,victim}=fireRun(target({hp:.1}));run.cast(1,500,220);run.mercenaries[1].cooldown=0;run.cast(1,500,220);
   const money=run.money;run.advance(FIELD.step);near(run.kills,1);near(run.money,money+3);near(run.xp,1);
   run.advance(.5);near(run.kills,1);near(run.totalEarnedMoney,3);
+});
+
+test('TL003 flammability stops at twelve stacks (×4 burn speed)',()=>{
+  const s=state();applyBurn(s,20,4);for(let i=0;i<40;i++)applyBurn(s,1,4);
+  assert.equal(s.burnFlammability,MAX_FLAMMABILITY);near(burnSpeed(s),1+MAX_FLAMMABILITY*0.25);near(burnSpeed({...s,burnFlammability:99}),4);
 });

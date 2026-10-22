@@ -6,13 +6,15 @@ import { MERCENARIES, MERC_KINDS } from '../src/tl003/Content.ts';
 import { compileTalents, isRevealed, talentCost, canBreakthrough, TALENTS } from '../src/tl003/Talents.ts';
 import { emptyTree } from '../src/tl003/Meta.ts';
 
+/** The nine nodes of the first star map (still present with the same ids). */
+export const LEGACY_NODES = ['mercenary_damage', 'kinetic_damage', 'barricade_health', 'economy_income', 'fire_dot', 'repair_efficiency', 'attack_speed', 'active_skill_damage', 'active_skill_haste'];
 export const seedFor = i => Math.imul(i + 1, 2654435761) >>> 0;
 
 /** Card preferences for a few common build directions. */
 export const BUILDS = {
-  kinetic: ['kinetic', 'speed', 'active', 'shock', 'bio', 'wall', 'income', 'haste', 'radius', 'burn', 'fire', 'repair'],
-  fire: ['burn', 'fire', 'speed', 'shock', 'active', 'haste', 'radius', 'kinetic', 'wall', 'income', 'bio', 'repair'],
-  economy: ['income', 'kinetic', 'speed', 'wall', 'active', 'shock', 'bio', 'haste', 'radius', 'burn', 'fire', 'repair'],
+  kinetic: ['kinetic', 'crit', 'critDamage', 'speed', 'training', 'pierce', 'active', 'shock', 'coil', 'bio', 'wall', 'plating', 'income', 'haste', 'radius', 'burn', 'fire', 'repair'],
+  fire: ['burn', 'fire', 'burnTime', 'speed', 'shock', 'active', 'haste', 'radius', 'acid', 'bio', 'kinetic', 'wall', 'plating', 'income', 'repair'],
+  economy: ['income', 'haggle', 'airdrop', 'kinetic', 'speed', 'wall', 'plating', 'active', 'shock', 'bio', 'haste', 'radius', 'burn', 'fire', 'repair'],
 };
 
 /**
@@ -29,7 +31,7 @@ export function playRun({ seed = 1, effects, policy = 'active', build = 'kinetic
   // One extra second so floating-point step drift never stops a run just short of the victory check.
   const limit = Math.round((maxSeconds + 1) / FIELD.step);
   for (let tick = 0; tick <= limit && run.elapsed < maxSeconds + 1e-6; tick++) {
-    if (run.phase === 'choice') { run.choose(prefs.find(id => run.choices.some(c => c.id === id)) ?? run.choices[0].id); tick--; continue; }
+    if (run.phase === 'choice') { run.choose(pickCard(run, prefs)); tick--; continue; }
     if (run.phase !== 'running') break;
     if (policy === 'active' && tick % reaction === 0) purchases += act(run);
     const minute = Math.floor(run.elapsed / 60);
@@ -44,6 +46,14 @@ export function playRun({ seed = 1, effects, policy = 'active', build = 'kinetic
   };
 }
 
+/** Evolutions first, then synergies, then the build's preference list; among equals the higher rarity. */
+export function pickCard(run, prefs) {
+  const rank = c => ({ common: 0, uncommon: 1, rare: 2, legendary: 3 })[c.rarity ?? 'common'];
+  const special = run.choices.filter(c => c.kind === 'evolution' || c.kind === 'synergy').sort((a, b) => (b.kind === 'evolution') - (a.kind === 'evolution'));
+  if (special.length) return special[0].id;
+  const scored = run.choices.map(c => ({ c, p: prefs.indexOf(c.id) < 0 ? 99 : prefs.indexOf(c.id) })).sort((a, b) => a.p - b.p || rank(b.c) - rank(a.c));
+  return scored[0].c.id;
+}
 /** Auto-attack DPS of one mercenary kind at a given level (all copies). */
 function kindDps(run, kind, level = run.levels[kind], copies = run.mercenaries.filter(m => m.kind === kind).length) {
   const saved = run.levels[kind]; run.levels[kind] = level;
@@ -60,7 +70,7 @@ function kindDps(run, kind, level = run.levels[kind], copies = run.mercenaries.f
  * or saved for when it is not yet affordable. The barricade is repaired / fortified only when threatened.
  * Returns how many purchases it made.
  */
-function act(run) {
+export function act(run) {
   let bought = 0;
   const front = run.enemies.reduce((best, e) => (!best || e.x > best.x ? e : best), undefined);
   if (front && front.x > 0) run.mercenaries.forEach((m, slot) => { if (m.cooldown <= 0) run.cast(slot, Math.min(front.x, FIELD.wallX - 5), front.y); });
@@ -120,16 +130,17 @@ export function incomeGrowth(earned, from = 2) {
   return (income[last] / income[from]) ** (1 / (last - from));
 }
 
-const NODE_PRIORITY = ['mercenary_damage', 'kinetic_damage', 'barricade_health', 'economy_income', 'attack_speed', 'active_skill_damage', 'active_skill_haste', 'repair_efficiency', 'fire_dot'];
+/** Every node of the star map, original nine first so ties keep the old order. */
+const NODE_PRIORITY = [...LEGACY_NODES, ...TALENTS.map(n => n.id).filter(id => !LEGACY_NODES.includes(id))];
 /** Spend all points: cheapest revealed node first, breakthrough whenever allowed. Mirrors a reasonable player. */
 export function invest(tree, points) {
   tree = structuredClone(tree);
   for (let guard = 0; guard < 10000; guard++) {
     if (canBreakthrough(tree)) { tree.tier++; tree.maxNodeLevel += 10; continue; }
     const options = NODE_PRIORITY.filter(id => isRevealed(tree, id) && (tree.nodes[id] ?? 0) < tree.maxNodeLevel)
-      .sort((a, b) => talentCost(tree.nodes[a] ?? 0) - talentCost(tree.nodes[b] ?? 0));
+      .sort((a, b) => talentCost(tree.nodes[a] ?? 0, a) - talentCost(tree.nodes[b] ?? 0, b));
     const id = options[0]; if (!id) break;
-    const cost = talentCost(tree.nodes[id] ?? 0); if (cost > points) break;
+    const cost = talentCost(tree.nodes[id] ?? 0, id); if (cost > points) break;
     points -= cost; tree.nodes[id] = (tree.nodes[id] ?? 0) + 1;
   }
   return { tree, points };
@@ -162,7 +173,9 @@ export function firstRunStats(count = 128, policy = 'active', build = 'kinetic',
 /** A fixed mid-game talent tree, used to observe a long run's in-run growth curve. */
 export function treeWithLevels(level) {
   const tree = emptyTree(); tree.maxNodeLevel = Math.max(10, Math.ceil(level / 10) * 10); tree.tier = tree.maxNodeLevel / 10;
-  for (const node of TALENTS) tree.nodes[node.id] = level;
+  // The original nine nodes: the long-run targets were calibrated on them. Real progression across the
+  // whole 47-node map is measured by the meta-loop simulator instead.
+  for (const id of LEGACY_NODES) tree.nodes[id] = level;
   return tree;
 }
 

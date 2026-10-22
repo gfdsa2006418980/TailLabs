@@ -7,7 +7,7 @@ import { BUILDS, firstRunStats, playRun, seedFor, treeWithLevels, dpsGrowth, inc
 import { compileTalents } from '../src/tl003/Talents.ts';
 import * as B from '../src/tl003/Balance.ts';
 import { DefenseRun, FIELD } from '../src/tl003/Run.ts';
-import { MERCENARIES } from '../src/tl003/Content.ts';
+import { CARDS, MERCENARIES } from '../src/tl003/Content.ts';
 
 const median = values => { const s = [...values].sort((a, b) => a - b); return s[Math.floor(s.length / 2)]; };
 const runAt = (level, seeds, maxSeconds = 1200) =>
@@ -97,6 +97,7 @@ test('TL003 balance: card bonuses add up instead of compounding', () => {
   const interval = run.intervalFor('rifle'), wall = run.wallMaxHealth;
   for (let i = 0; i < 4; i++) { run.phase = 'choice'; run.choices = [{ id: 'speed', effect: 'speed' }]; run.choose('speed'); }
   for (let i = 0; i < 4; i++) { run.phase = 'choice'; run.choices = [{ id: 'wall', effect: 'wall' }]; run.choose('wall'); }
-  assert.ok(Math.abs(run.intervalFor('rifle') - interval / 2.2) < 1e-9);
-  assert.ok(Math.abs(run.wallMaxHealth - wall * 3) < 1e-9);
+  const speed = CARDS.find(c => c.id === 'speed').value, gain = CARDS.find(c => c.id === 'wall').value;
+  assert.ok(Math.abs(run.intervalFor('rifle') - interval / (1 + 4 * speed)) < 1e-9);
+  assert.ok(Math.abs(run.wallMaxHealth - wall * (1 + 4 * gain)) < 1e-9);
 });

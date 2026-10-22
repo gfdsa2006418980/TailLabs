@@ -1,7 +1,12 @@
 /** One strongest burn per target. Duration is measured in unaccelerated burn seconds. */
 export interface BurnState { burnPower: number; burnDuration: number; burnFlammability: number }
 export const FLAMMABILITY_SPEED_PER_STACK = 0.25;
-export function burnSpeed(state: BurnState) { return 1 + Math.max(0, state.burnFlammability) * FLAMMABILITY_SPEED_PER_STACK; }
+/**
+ * At most ×4 burn speed (2026-10-22 balance): with ~100 cards a run, uncapped stacks reached 100–360
+ * late (×25–×90) and made any burn a win regardless of enemy HP. Fire still kills bosses fastest.
+ */
+export const MAX_FLAMMABILITY = 12;
+export function burnSpeed(state: BurnState) { return 1 + Math.min(MAX_FLAMMABILITY, Math.max(0, state.burnFlammability)) * FLAMMABILITY_SPEED_PER_STACK; }
 
 /** Source/tag bonuses have already been snapshotted into power before comparison. */
 export function applyBurn(state: BurnState, power: number, duration: number): void {
@@ -12,7 +17,7 @@ export function applyBurn(state: BurnState, power: number, duration: number): vo
   }
   state.burnDuration = Math.max(state.burnDuration, duration);
   if (power > state.burnPower) state.burnPower = power;
-  else state.burnFlammability++;
+  else state.burnFlammability = Math.min(MAX_FLAMMABILITY, state.burnFlammability + 1);
 }
 
 /** Acceleration spends the same damage budget faster; never bill beyond remaining duration. */

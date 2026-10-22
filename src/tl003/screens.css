@@ -119,3 +119,46 @@ body:has(dialog[open]:is([data-kind="deploy"], [data-kind="result"], [data-kind=
 
 /* re-shown report: final values, no entrance replay */
 .result-screen.settled *, .result-screen.settled { animation: none !important }
+
+/* ---------- card rarity (2026-10-22: common bone, uncommon purple, rare gold, legendary red) ---------- */
+.pick-card .pick { box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--rarity) 70%, #000) }
+.pick-card .pick:hover:enabled, .pick-card .pick:focus-visible { box-shadow: inset 0 0 0 2px var(--rarity) }
+.pick-rarity { font: 700 10px/1 Consolas, "Microsoft JhengHei", monospace; letter-spacing: 2px; color: var(--rarity) }
+.rarity-uncommon .pick { box-shadow: inset 0 0 0 2px var(--rarity), inset 0 0 0 4px #0b0d0e, inset 0 0 0 5px color-mix(in srgb, var(--rarity) 60%, #000) }
+.rarity-uncommon .pick-art { background: radial-gradient(circle, color-mix(in srgb, var(--rarity) 35%, transparent), transparent 70%) }
+.rarity-rare .pick, .rarity-legendary .pick { box-shadow: inset 0 0 0 3px var(--rarity), inset 0 0 0 5px #0b0d0e, inset 0 0 0 6px color-mix(in srgb, var(--rarity) 50%, #000) }
+.rarity-rare .pick-art, .rarity-legendary .pick-art { background: radial-gradient(circle, color-mix(in srgb, var(--rarity) 45%, transparent), transparent 70%) }
+.rarity-rare .pick-band, .rarity-legendary .pick-band { background: var(--rarity) }
+/* a shine sweeps across rare and legendary cards */
+.rarity-rare .pick::after, .rarity-legendary .pick::after {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(115deg, transparent 35%, #fff4 48%, #fff8 50%, #fff4 52%, transparent 65%) no-repeat;
+  background-size: 300% 100%; animation: card-shine 2.4s ease-in-out .7s infinite;
+}
+@keyframes card-shine { 0% { background-position: 150% 0 } 45%, 100% { background-position: -50% 0 } }
+.rarity-legendary .pick { background: linear-gradient(#2a0f0d, #0b0d0e) }
+.rarity-legendary { filter: drop-shadow(0 0 10px #ff4a3a66); animation: card-in .5s var(--ease-pop) both, legend-glow 1.4s ease-in-out .9s infinite }
+@keyframes legend-glow { 50% { filter: drop-shadow(0 0 18px #ff4a3aaa) } }
+/* legendary cards arrive face-down, then flip open */
+.pick-cover {
+  position: absolute; inset: 0; z-index: 2; display: grid; place-items: center; pointer-events: none;
+  background: repeating-linear-gradient(45deg, #5a0f0b 0 6px, #3a0907 6px 12px); box-shadow: inset 0 0 0 3px #ff4a3a;
+  clip-path: polygon(10px 0, calc(100% - 10px) 0, 100% 10px, 100% calc(100% - 10px), calc(100% - 10px) 100%, 10px 100%, 0 calc(100% - 10px), 0 10px);
+  animation: cover-flip .45s var(--ease-in) .75s both;
+}
+.pick-cover b { font: 900 46px/1 Consolas, monospace; color: #ffb39c; text-shadow: 0 0 14px #ff4a3a }
+@keyframes cover-flip { 60% { transform: scaleX(.05); opacity: 1 } 100% { transform: scaleX(0); opacity: 0 } }
+.kind-evolution .pick-band span, .kind-synergy .pick-band span { letter-spacing: 3px }
+/* reroll */
+.reroll { display: flex; align-items: center; gap: 6px; margin-top: 4px; padding: 10px 18px; min-height: 44px; font: 700 14px/1 Consolas, "Microsoft JhengHei", monospace; color: var(--gold); background: #1d2722ee }
+.reroll:disabled { color: var(--muted); background: #0b0d0ecc }
+html.reduce-motion .pick-cover { display: none }
+/* ---------- black market: five cards, two picks, curses ---------- */
+.choice-screen.market .pick-row { grid-template-columns: repeat(6, minmax(0, 1fr)) }
+.choice-screen.market .pick-card { grid-column: span 2 }
+.choice-screen.market .pick-card:nth-child(4) { grid-column: 2 / span 2 }
+.choice-screen.market .pick { min-height: 196px }
+.picks-left { font: 700 12px/1 Consolas, "Microsoft JhengHei", monospace; letter-spacing: 2px; color: #ff9b82 }
+.kind-curse .pick { background: linear-gradient(#24090c, #0b0d0e); box-shadow: inset 0 0 0 2px #b23a48, inset 0 0 0 4px #0b0d0e, inset 0 0 0 5px #5a1a20 }
+.kind-curse .pick-band { background: #b23a48; color: #ffe3e0 }
+.kind-curse .pick-stat { color: #ffb3a8 }

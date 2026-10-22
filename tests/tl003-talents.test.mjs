@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { LocalMetaMirror, META_KEY, emptyMeta, emptyTree } from '../src/tl003/Meta.ts';
-import { TALENTS, TALENT_LINKS, canBreakthrough, compileTalents, deploymentStats, isRevealed, talentCost, talentMultiplier } from '../src/tl003/Talents.ts';
+import { CORES, TALENTS, TALENT_LINKS, canBreakthrough, compileTalents, coreSlots, deploymentStats, isCoreRevealed, isRevealed, talentCost, talentMultiplier } from '../src/tl003/Talents.ts';
 import { calculateDamage, calculateValue, effectiveCooldown } from '../src/tl003/Combat.ts';
 import { MERCENARIES } from '../src/tl003/Content.ts';
 import { DefenseRun, FIELD, SPAWN_GROWTH_SPEED, spawnIntervalAt } from '../src/tl003/Run.ts';
@@ -24,8 +24,9 @@ function simulate(seed, effects) {
   return run;
 }
 
-test('TL003 star map has nine distinct connected nodes; zero investment reveals only the root', () => {
-  assert.equal(new Set(TALENTS.map(n=>n.id)).size,9);
+test('TL003 star map has 47 distinct connected nodes (the 9 originals kept); zero investment reveals only the root', () => {
+  assert.equal(new Set(TALENTS.map(n=>n.id)).size,47);
+  for(const id of ['mercenary_damage','kinetic_damage','barricade_health','economy_income','fire_dot','repair_efficiency','attack_speed','active_skill_damage','active_skill_haste'])assert.ok(TALENTS.some(n=>n.id===id),id);
   const tree=emptyTree();assert.deepEqual(TALENTS.filter(n=>isRevealed(tree,n.id)).map(n=>n.id),['mercenary_damage']);
   const visited=new Set(['mercenary_damage']);for(let i=0;i<TALENTS.length;i++)for(const[a,b]of TALENT_LINKS){if(visited.has(a))visited.add(b);if(visited.has(b))visited.add(a);}
   assert.equal(visited.size,TALENTS.length);
@@ -33,9 +34,9 @@ test('TL003 star map has nine distinct connected nodes; zero investment reveals 
 test('TL003 the first point reveals every directly adjacent node without requiring level ten', () => {
   const {meta}=mirror(2);assert.equal(meta.buyTalent('mercenary_damage').ok,true);assert.equal(meta.tree.nodes.mercenary_damage,1);
   assert.equal(meta.value.TalentPoints,1);
-  assert.deepEqual(TALENTS.filter(n=>isRevealed(meta.tree,n.id)).map(n=>n.id),['mercenary_damage','kinetic_damage','barricade_health','economy_income']);
-  assert.equal(isRevealed(meta.tree,'fire_dot'),false);
-  assert.equal(meta.buyTalent('kinetic_damage').ok,true);assert.equal(isRevealed(meta.tree,'fire_dot'),true);
+  assert.deepEqual(TALENTS.filter(n=>isRevealed(meta.tree,n.id)).map(n=>n.id),['mercenary_damage','kinetic_damage','fire_dot','corrosion_power','shock_power','attack_speed','active_skill_damage','barricade_health','economy_income']);
+  assert.equal(isRevealed(meta.tree,'crit_rate'),false);
+  assert.equal(meta.buyTalent('kinetic_damage').ok,true);assert.equal(isRevealed(meta.tree,'crit_rate'),true);
 });
 test('TL003 masked, unknown, capped and unaffordable purchases never mutate the save', () => {
   const {meta}=mirror(1);const before=structuredClone(meta.value);
@@ -53,9 +54,9 @@ test('TL003 only an invested node reaching the current cap enables breakthrough'
   assert.equal(canBreakthrough(treeWith({mercenary_damage:9})),false);assert.equal(canBreakthrough(treeWith({mercenary_damage:10})),true);
 });
 test('TL003 breakthrough keeps all levels and points, increases the tier and cap, and allows level eleven', () => {
-  const tree=treeWith({mercenary_damage:10,kinetic_damage:3,barricade_health:4});tree.unlockedCoreTalents=['heavy_ammo'];tree.activeCoreTalents=['heavy_ammo'];
+  const tree=treeWith({mercenary_damage:10,kinetic_damage:3,barricade_health:4});tree.unlockedCoreTalents=['coldsteel'];tree.activeCoreTalents=['coldsteel'];
   const {meta}=mirror(100,tree);assert.equal(meta.breakthrough().ok,true);assert.equal(meta.tree.tier,2);assert.equal(meta.tree.maxNodeLevel,20);assert.equal(meta.value.TalentPoints,100);
-  assert.deepEqual(meta.tree.nodes,tree.nodes);assert.deepEqual(meta.tree.activeCoreTalents,['heavy_ammo']);
+  assert.deepEqual(meta.tree.nodes,tree.nodes);assert.deepEqual(meta.tree.activeCoreTalents,['coldsteel']);
   assert.equal(meta.buyTalent('mercenary_damage').ok,true);assert.equal(meta.tree.nodes.mercenary_damage,11);assert.equal(meta.value.TalentPoints,96);
   assert.equal(meta.breakthrough().ok,false);
 });
@@ -162,4 +163,28 @@ test('TL003 spawn frequency grows at three times its former exponential speed wi
 test('TL003 late-wave spawn growth can produce multiple enemies per simulation step', () => {
   const run=new DefenseRun(1);run.start();run.elapsed=1140;run.advance(FIELD.step);
   assert.ok(run.enemies.length>1);assert.equal(new Set(run.enemies.map(e=>e.id)).size,run.enemies.length);
+});
+
+test('TL003 tactical cores: unlock spends points, forget refunds in full, slots open with the tier, exclusives block', () => {
+  const tip=CORES.find(c=>c.id==='coldsteel').links[0];
+  const {meta}=mirror(200,treeWith({[tip]:1}));assert.equal(isCoreRevealed(meta.tree,'coldsteel'),true);
+  const before=meta.value.TalentPoints;assert.equal(meta.unlockCore('coldsteel').ok,true);assert.equal(meta.value.TalentPoints,before-15);
+  assert.equal(meta.equipCore('coldsteel').ok,true);assert.deepEqual(compileTalents(meta.tree).cores,['coldsteel']);
+  // tier 1 = one slot
+  const other=CORES.find(c=>c.id==='layers');const t2=meta.tree;t2.nodes[other.links[0]]=1;
+  const {meta:m2}=mirror(200,t2);assert.equal(m2.unlockCore('layers').ok,true);assert.equal(m2.equipCore('layers').ok,false,'one slot at tier 1');
+  // exclusives
+  const t3=structuredClone(m2.tree);t3.tier=3;t3.maxNodeLevel=30;for(const id of CORES.find(c=>c.id==='cremation').links)t3.nodes[id]=1;
+  const {meta:m3}=mirror(200,t3);assert.equal(m3.unlockCore('cremation').ok,true);assert.equal(m3.equipCore('cremation').ok,false,'cremation conflicts with cold steel');
+  assert.equal(m3.equipCore('layers').ok,true);assert.equal(coreSlots(m3.tree),3);
+  // forget refunds and unequips
+  const points=m3.value.TalentPoints;assert.equal(m3.forgetCore('coldsteel').ok,true);assert.equal(m3.value.TalentPoints,points+15);assert.ok(!m3.tree.activeCoreTalents.includes('coldsteel'));
+  assert.equal(m3.equipCore('cremation').ok,true);
+  // locked during a run
+  m3.beginRun();assert.equal(m3.unequipCore('cremation').ok,false);
+});
+test('TL003 star map: 16 cores, all reachable; an empty map still compiles to the original four effects', () => {
+  assert.equal(CORES.length,16);assert.equal(new Set(CORES.map(c=>c.id)).size,16);
+  for(const core of CORES)for(const link of core.links)assert.ok(TALENTS.some(n=>n.id===link),`${core.id} links ${link}`);
+  assert.deepEqual(Object.keys(compileTalents(emptyTree())).sort(),['attackSpeed','haste','modifiers','wallHealth']);
 });

@@ -33,52 +33,76 @@ dialog.talent-dialog::backdrop { background: #050607 }
 .talent-wallet strong { font: 700 22px/1 Consolas, ui-monospace, monospace; color: var(--amber); text-shadow: 2px 2px 0 var(--blood) }
 .talent-dialog .deployment-stats { margin: 0 auto }
 
-/* ---------- star map ---------- */
+/* ---------- star map: a large pannable field ---------- */
 .talent-dialog #modal-content > .talent-scroll {
-  position: relative; flex: 1 1 auto; min-height: 150px; overflow: auto; overscroll-behavior: contain; scrollbar-width: none;
+  position: relative; flex: 1 1 auto; min-height: 150px; overflow: auto; overscroll-behavior: contain; scrollbar-width: none; cursor: grab; touch-action: pan-x pan-y;
+  background: radial-gradient(ellipse at 50% 40%, #ffd88410, transparent 70%);
+  clip-path: var(--notch); box-shadow: inset 0 0 0 1px #ffffff12;
+}
+.talent-scroll.dragging { cursor: grabbing }
+.talent-scroll::-webkit-scrollbar { display: none }
+.star-map {
+  position: relative;
   background:
     radial-gradient(1px 1px at 12% 18%, #fff8 50%, transparent 51%), radial-gradient(1px 1px at 78% 12%, #fff6 50%, transparent 51%),
     radial-gradient(1px 1px at 40% 70%, #fff5 50%, transparent 51%), radial-gradient(1px 1px at 88% 64%, #fff7 50%, transparent 51%),
     radial-gradient(1px 1px at 22% 88%, #fff4 50%, transparent 51%), radial-gradient(1px 1px at 63% 40%, #fff6 50%, transparent 51%),
-    radial-gradient(ellipse at 50% 20%, #ffd88412, transparent 70%);
+    radial-gradient(circle at 50% 50%, #ffd88418 0, transparent 22%);
+  background-size: 300px 300px, 300px 300px, 300px 300px, 300px 300px, 300px 300px, 300px 300px, 100% 100%;
 }
-.talent-scroll::-webkit-scrollbar { display: none }
-.talent-map { width: 100%; height: 300px; position: relative; max-width: 420px; margin: 0 auto }
 .talent-links { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible }
-.talent-links line { stroke: #8fa2c428; stroke-width: 1; stroke-dasharray: 2 4 }
-.talent-links line.explored { stroke: #ffd884aa; stroke-width: 1.4; stroke-dasharray: 6 4; animation: link-flow 1.2s linear infinite; filter: drop-shadow(0 0 2px #ffd884) }
+.talent-links line { stroke: #8fa2c428; stroke-width: 1.5; stroke-dasharray: 3 6 }
+.talent-links line.explored { stroke: #ffd884aa; stroke-width: 2; stroke-dasharray: 8 5; animation: link-flow 1.2s linear infinite; filter: drop-shadow(0 0 2px #ffd884) }
+.talent-links line.to-core { stroke: #ff7a5c44 }
+.talent-links line.to-core.explored { stroke: #ff9b7aaa; filter: drop-shadow(0 0 3px #ff7a5c) }
 .talent-links line.fresh { animation: link-draw .6s var(--ease-out) both, link-flow 1.2s linear .6s infinite }
-@keyframes link-flow { to { stroke-dashoffset: -20 } }
-@keyframes link-draw { from { stroke-opacity: 0; stroke-width: 6 } }
+@keyframes link-flow { to { stroke-dashoffset: -26 } }
+@keyframes link-draw { from { stroke-opacity: 0; stroke-width: 8 } }
 
-.talent-node {
-  position: absolute; transform: translate(-50%, -50%); width: 31%; height: 72px; padding: 2px;
+.star-node {
+  position: absolute; transform: translate(-50%, -50%); width: 76px; height: 70px; padding: 2px;
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
   background: transparent; box-shadow: none; clip-path: none; border: 0;
 }
-.talent-node:hover:enabled, .talent-node:active:enabled { background: transparent; box-shadow: none; transform: translate(-50%, -50%) }
-.talent-node .node-symbol, .talent-inspector .node-symbol {
+.star-node:hover:enabled, .star-node:active:enabled { background: transparent; box-shadow: none; transform: translate(-50%, -50%) }
+.star-node .node-symbol, .talent-inspector .node-symbol {
   display: grid; place-items: center; width: 34px; height: 34px; color: #6f7c93; background: #141a26;
   font: 700 18px/1 ui-monospace, Consolas, monospace;
   clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%); box-shadow: inset 0 0 0 2px #3a4560;
   transition: transform .25s var(--ease-pop);
 }
-.talent-node.revealed .node-symbol { color: var(--node-color); box-shadow: inset 0 0 0 2px var(--node-color); background: #1b2230 }
-.talent-node.invested .node-symbol { color: #0b0d0e; background: var(--node-color); box-shadow: inset 0 0 0 2px #fff6; filter: drop-shadow(0 0 6px var(--node-color)) }
-.talent-node.selected .node-symbol { transform: scale(1.22) }
-.talent-node.selected::before { content: ""; position: absolute; top: 50%; left: 50%; width: 34px; height: 34px; margin: -30px 0 0 -17px; border: 1px dashed #fff8; transform: rotate(45deg); animation: select-spin 6s linear infinite; pointer-events: none }
+.star-node.revealed .node-symbol { color: var(--node-color); box-shadow: inset 0 0 0 2px var(--node-color); background: #1b2230 }
+.star-node.invested .node-symbol { color: #0b0d0e; background: var(--node-color); box-shadow: inset 0 0 0 2px #fff6; filter: drop-shadow(0 0 6px var(--node-color)) }
+.star-node.selected .node-symbol { transform: scale(1.22) }
+.star-node.selected::before { content: ""; position: absolute; top: 50%; left: 50%; width: 34px; height: 34px; margin: -29px 0 0 -17px; border: 1px dashed #fff8; transform: rotate(45deg); animation: select-spin 6s linear infinite; pointer-events: none }
 @keyframes select-spin { to { transform: rotate(405deg) } }
 .node-name { color: #5d6880; font-size: 10px; line-height: 1; white-space: nowrap }
-.talent-node.revealed .node-name { color: #dfe4ee }
-.talent-node small { color: var(--gold); font: 700 9px/1 Consolas, monospace; min-height: 9px }
-.talent-node.enter { animation: node-in .4s var(--ease-pop) both }
-.talent-node.just-revealed { animation: node-in .55s var(--ease-pop) .25s both }
-.talent-node.just-bought .node-symbol { animation: node-bought .5s var(--ease-pop) }
-.talent-node.just-bought::after { content: ""; position: absolute; top: 50%; left: 50%; width: 34px; height: 34px; margin: -28px 0 0 -17px; border: 2px solid var(--node-color); clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%); animation: node-burst .6s var(--ease-out) both; pointer-events: none }
+.star-node.revealed .node-name { color: #dfe4ee }
+.star-node small { color: var(--gold); font: 700 9px/1 Consolas, monospace; min-height: 9px }
+/* tactical cores: bigger, hexagonal, red-gold */
+.core-node .node-symbol { width: 44px; height: 44px; font-size: 20px; clip-path: polygon(25% 3%, 75% 3%, 100% 50%, 75% 97%, 25% 97%, 0 50%) }
+.core-node.revealed .node-symbol { background: #2a1512; animation: core-pulse 2s ease-in-out infinite }
+.core-node.unlocked .node-symbol { color: #0b0d0e; background: var(--node-color); animation: none }
+.core-node.equipped .node-symbol { box-shadow: inset 0 0 0 3px #fff; filter: drop-shadow(0 0 10px var(--node-color)) }
+.core-node.revealed .node-name { color: #ffd8c4; font-weight: 700 }
+.core-node.selected::before { width: 44px; height: 44px; margin: -34px 0 0 -22px; transform: none; clip-path: polygon(25% 3%, 75% 3%, 100% 50%, 75% 97%, 25% 97%, 0 50%); border: 0; background: #fff3; animation: none }
+@keyframes core-pulse { 50% { filter: drop-shadow(0 0 8px var(--node-color)) } }
+.star-node.enter { animation: node-in .4s var(--ease-pop) both }
+.star-node.just-revealed { animation: node-in .55s var(--ease-pop) .25s both }
+.star-node.just-bought .node-symbol { animation: node-bought .5s var(--ease-pop) }
+.star-node.just-bought::after { content: ""; position: absolute; top: 50%; left: 50%; width: 34px; height: 34px; margin: -28px 0 0 -17px; border: 2px solid var(--node-color); clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%); animation: node-burst .6s var(--ease-out) both; pointer-events: none }
 @keyframes node-in { from { opacity: 0; transform: translate(-50%, -50%) scale(.4) } }
 @keyframes node-bought { 40% { transform: scale(1.5) } }
 @keyframes node-burst { from { opacity: 1; transform: scale(1) } to { opacity: 0; transform: scale(2.6) } }
 
+/* ---------- core slots: three equipment-like sockets ---------- */
+.core-slots { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px }
+.core-slot { display: flex; align-items: center; justify-content: center; gap: 6px; min-height: 42px; padding: 4px 6px; font-size: 12px; clip-path: polygon(10% 0, 90% 0, 100% 50%, 90% 100%, 10% 100%, 0 50%) }
+.core-slot.locked { color: #5d6880; background: #0b0d0e99; font: 700 10px/1 Consolas, monospace }
+.core-slot.empty { color: #8f9bb0; background: #141a26; box-shadow: inset 0 0 0 2px #3a4560 }
+.core-slot.filled { color: #0b0d0e; font-weight: 700; background: var(--node-color); box-shadow: inset 0 0 0 2px #fff8; animation: slot-in .4s var(--ease-pop) both }
+.core-slot.filled b { font-size: 16px }
+@keyframes slot-in { from { transform: scale(.7); opacity: 0 } }
 /* ---------- inspector ---------- */
 .talent-inspector {
   display: grid; grid-template-columns: 1fr auto; grid-template-areas: "head buy" "effect buy" "desc desc"; gap: 4px 12px; align-items: center;
@@ -91,6 +115,17 @@ dialog.talent-dialog::backdrop { background: #050607 }
 .talent-effect { grid-area: effect; font: 700 14px/1.2 Consolas, ui-monospace, monospace; color: var(--muted) }
 .talent-effect b { color: #f3e2b5; font-weight: 700 } .talent-effect em { color: #bfdc8a; font-style: normal }
 .talent-inspector p { grid-area: desc; margin: 2px 0 0; font-size: 11px; line-height: 1.5; color: #8f9bb0 }
+.talent-inspector .flavor { display: block; color: #6c7790 }
+.core-inspector { grid-template-areas: "head head" "rule rule" "price price" "desc desc" "buttons buttons" }
+.core-inspector .core-rule { grid-area: rule; margin: 0; font-size: 13px; line-height: 1.45; color: #f3eee2 }
+.core-inspector .core-price { grid-area: price; margin: 0; font-size: 12px; line-height: 1.4; color: #ff9b82 }
+.core-inspector p.flavor em { color: #ffb79c; font-style: normal }
+.core-buttons { grid-area: buttons; display: flex; gap: 8px; margin-top: 4px }
+#core-action { flex: 1; display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 46px; font-weight: 700; color: var(--ink); background: var(--gold); box-shadow: inset 2px 2px 0 #fff3cf, inset -3px -3px 0 #b8893f }
+#core-action[data-action="unequip"] { color: var(--bone); background: #3a2a24; box-shadow: inset 0 0 0 2px #ff7a5c }
+#core-action:disabled { color: var(--muted); background: #1d2230; box-shadow: inset 0 0 0 2px #2c3446; filter: none }
+#core-action b, .forget b { display: flex; align-items: center; gap: 3px; font: 700 13px/1 Consolas, monospace }
+.forget { display: flex; align-items: center; gap: 6px; min-height: 46px; padding: 0 12px; font-size: 12px; color: #ffb79c; background: #1a0f0d; box-shadow: inset 0 0 0 1px #ff7a5c66 }
 #talent-buy { grid-area: buy; display: grid; justify-items: center; gap: 3px; min-width: 92px; min-height: 52px; padding: 6px 12px; color: var(--ink); background: var(--gold); box-shadow: inset 2px 2px 0 #fff3cf, inset -3px -3px 0 #b8893f }
 #talent-buy b { display: flex; align-items: center; gap: 3px; font: 700 13px/1 Consolas, monospace }
 #talent-buy span { font-weight: 700; font-size: 13px }

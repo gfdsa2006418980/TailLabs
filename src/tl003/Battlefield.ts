@@ -297,7 +297,7 @@ export class Battlefield {
     for (const e of run.events) {
       if (this.seen.has(e)) continue; this.seen.add(e);
       const p = this.at(e.x, e.y);
-      if (e.kind === 'hit' && e.amount) this.feedback.damage(p.x, p.y - 4 * p.scale, e.amount, e.target ?? 0, !!e.skill);
+      if (e.kind === 'hit' && e.amount) this.feedback.damage(p.x, p.y - 4 * p.scale, e.amount, e.target ?? 0, !!e.skill, !!e.crit);
       if (e.kind === 'kill') {
         if (e.amount) this.feedback.kill(p.x, p.y - 6 * p.scale, e.amount);
         const art = ENEMY_ART[e.enemy ?? ''] ?? ENEMY_ART.walker!, death = `${art.anim}_death`;
@@ -348,6 +348,12 @@ export class Battlefield {
       if (enemy.shockPower > 0 && box.w && Math.floor(real * 20 + enemy.id) % 5 === 0) this.dot(E, p.x + (hash(enemy.id, Math.floor(real * 20)) - 0.5) * box.w, box.top + hash(Math.floor(real * 20), enemy.id) * box.h, '#bff1ea');
     }
 
+    // Core 亡者徵召: raised corpses walk back up the road, lit by a sickly green glow.
+    for (const ally of run.allies) {
+      const p = this.at(ally.x, ally.y), s = p.scale / WALL_SCALE;
+      const box = this.sprite(this.animFrame('zombie_walker', real * 1.4 + ally.id * 0.3), p.x, p.y + 1, s, this.lit(), true);
+      if (box.w) { this.light(p.x, box.top + box.h * 0.4, 20 * s + 6, [0.55, 1, 0.45], 0.9, 8); this.dot(E, p.x, box.top + Math.round(box.h * 0.2), '#bff58a'); }
+    }
     // Barricade: shakes briefly whenever it loses health (aftershock: fast, decaying).
     if (this.lastWall >= 0 && run.wallHealth < this.lastWall - 1e-6) this.wallShake = 0.18;
     this.lastWall = run.wallHealth; this.wallShake = Math.max(0, this.wallShake - realDt);
@@ -454,7 +460,15 @@ export class Battlefield {
     const progress = 1 - e.life / e.maxLife, end = this.at(e.x, e.y), E = this.c.emissive;
     if (e.kind === 'shot' || e.kind === 'flame' || e.kind === 'laser') {
       const slot = run.mercenaries.findIndex((_, i) => mercPosition(i).x === e.fromX && mercPosition(i).y === e.fromY);
-      const merc = run.mercenaries[slot]; if (!merc) return;
+      const merc = run.mercenaries[slot];
+      if (!merc) {
+        // Refraction: a side beam that starts at an enemy.
+        if (e.kind === 'laser' && e.fromX !== undefined) {
+          const from = this.at(e.fromX, e.fromY!), far = this.at(e.x, e.y), fade = progress < 0.7 ? 1 : 1 - (progress - 0.7) / 0.3;
+          if (fade > 0) { this.line(E, from.x, from.y - 6, far.x, far.y, '#56aebb'); this.line(E, from.x, from.y - 6, far.x, far.y, '#bff1ea', 2); this.light(from.x, from.y - 6, 30, CYAN, fade, 10); }
+        }
+        return;
+      }
       const p = this.at(e.fromX!, e.fromY!), f = FRAMES[`merc_${merc.kind}`]!, [mx, my] = MUZZLE[merc.kind];
       const left = Math.round(p.x - f[2] / 2), sx = slot === FLIPPED_SLOT ? left + f[2] - 1 - mx : left + mx, sy = Math.round(p.y - f[3]) + my;
       const ty = end.y - 8 * end.scale / WALL_SCALE;

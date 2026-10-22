@@ -4,7 +4,9 @@
  */
 import './screens.css';
 import { formatNumber } from './Combat.ts';
+import { RARITIES } from './Content.ts';
 import type { UpgradeCard } from './Content.ts';
+import { FRAMES } from './generated/sprites.ts';
 import type { PermanentEffects } from './Talents.ts';
 import { deploymentSummary } from './TalentScreen.ts';
 
@@ -14,7 +16,7 @@ export const clock = (seconds: number) => `${Math.floor(seconds / 60).toString()
 /** Category → small pixel icon shown on the card's colour band. */
 const CATEGORY_ICON: Record<string, string> = {
   動能: 'icon_el_kinetic', 火焰: 'icon_el_fire', 生化: 'icon_el_bio', 電能: 'icon_el_electric',
-  傭兵: 'icon_merc_rifle', 主動技能: 'icon_skill_rifle', 經濟: 'icon_money', 防守: 'icon_fortify',
+  傭兵: 'icon_merc_rifle', 主動技能: 'icon_skill_rifle', 經濟: 'icon_money', 防守: 'icon_fortify', 連動: 'icon_star', 質變: 'icon_star', 詛咒: 'icon_wave',
 };
 
 export function deployScreen(effects: PermanentEffects, talentPoints: number, bestWave: number, showTips: boolean) {
@@ -32,20 +34,37 @@ export function deployScreen(effects: PermanentEffects, talentPoints: number, be
   </div>`;
 }
 
-export function choiceScreen(level: number, cards: readonly UpgradeCard[]) {
-  return `<div class="screen choice-screen">
-    <div class="choice-head"><small>LEVEL UP</small><b id="modal-title">Lv ${level}<span class="sr-only">，選擇一張強化</span></b></div>
-    <div class="pick-row">${cards.map((card, i) => `<div class="pick-card" style="--card-color:${card.color}">
-      <button class="pick" data-card="${card.id}" aria-label="${card.name}：${card.short}。${card.description}">
-        <span class="pick-band">${px(CATEGORY_ICON[card.category] ?? 'icon_el_kinetic', 1)}<span>${card.category}</span></span>
-        <span class="pick-art">${px('icon_card_' + card.id, 4)}</span>
+/** Cards without their own art yet borrow the closest existing icon. */
+const ICON_ALIAS: Record<string, string> = {
+  crit: 'kinetic', critDamage: 'kinetic', pierce: 'kinetic', burnTime: 'burn', acid: 'bio', coil: 'shock', training: 'speed',
+  curse_powder: 'kinetic', curse_fuel: 'fire', curse_salvage: 'income', curse_battery: 'active', curse_contract: 'income', curse_stim: 'crit',
+  airdrop: 'income', haggle: 'income', plating: 'wall', spikes: 'wall', phosphorus: 'burn', acidcore: 'bio', railgun: 'shock',
+  chemfire: 'fire', overheat: 'shock', conductor: 'bio', frag: 'radius', double: 'active', hex: 'active', napalm: 'fire',
+  inferno: 'radius', wildfire: 'burn', overload: 'shock', hifreq: 'haste', refract: 'shock',
+};
+export const cardIcon = (id: string) => FRAMES['icon_card_' + id] ? 'icon_card_' + id : 'icon_card_' + (ICON_ALIAS[id] ?? 'kinetic');
+const KIND_TAG: Record<string, string> = { synergy: '連動', evolution: '質變', curse: '詛咒' };
+export function choiceScreen(level: number, cards: readonly UpgradeCard[], reroll?: { cost: number; affordable: boolean }, picks = 1) {
+  const market = cards.length > 3 || picks > 1;
+  return `<div class="screen choice-screen${market ? ' market' : ''}">
+    <div class="choice-head"><small>${market ? 'BLACK MARKET' : 'LEVEL UP'}</small><b id="modal-title">Lv ${level}<span class="sr-only">，選擇一張強化</span></b>${market ? `<span class="picks-left">再選 ${picks} 張</span>` : ''}</div>
+    <div class="pick-row">${cards.map((card, i) => {
+      const rarity = card.rarity ?? 'common', tag = KIND_TAG[card.kind ?? ''];
+      return `<div class="pick-card rarity-${rarity}${card.kind && card.kind !== 'normal' ? ' kind-' + card.kind : ''}" style="--card-color:${card.color};--rarity:${RARITIES[rarity].color}">
+      <button class="pick" data-card="${card.id}" aria-label="${RARITIES[rarity].name}${tag ? '・' + tag : ''}・${card.name}：${card.short}。${card.description}">
+        <span class="pick-band">${px(CATEGORY_ICON[card.category] ?? 'icon_el_kinetic', 1)}<span>${tag ?? card.category}</span></span>
+        <span class="pick-art">${px(cardIcon(card.id), 4)}</span>
         <strong>${card.name}</strong>
+        <span class="pick-rarity">${RARITIES[rarity].name}</span>
         <span class="pick-stat">${card.short}</span>
         <kbd>${i + 1}</kbd>
       </button>
       <button class="pick-info" data-info="${i}" aria-label="${card.name}的完整說明" aria-expanded="false">i</button>
-    </div>`).join('')}</div>
+      ${rarity === 'legendary' ? '<span class="pick-cover" aria-hidden="true"><b>!</b></span>' : ''}
+    </div>`;
+    }).join('')}</div>
     <p class="pick-detail" id="pick-detail" aria-live="polite"></p>
+    ${reroll ? `<button id="reroll" class="reroll" ${reroll.affordable ? '' : 'disabled'}>重抽 ${reroll.cost === 0 ? '<b>免費</b>' : `${px('icon_money', 1)} ${formatNumber(reroll.cost)}`}</button>` : ''}
   </div>`;
 }
 

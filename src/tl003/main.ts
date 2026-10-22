@@ -6,7 +6,7 @@ import type { Aim } from './Battlefield.ts';
 import { Camera } from './Camera.ts';
 import { MERCENARIES, MERC_KINDS } from './Content.ts';
 import type { MercKind } from './Content.ts';
-import { formatNumber, effectiveCooldown } from './Combat.ts';
+import { formatNumber } from './Combat.ts';
 import { DefenseRun } from './Run.ts';
 import { LocalMetaMirror, META_KEY } from './Meta.ts';
 import { TalentScreen } from './TalentScreen.ts';
@@ -38,7 +38,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
     <div class="hud-wall" aria-label="拒馬生命">${px('icon_fortify', 2)}<div class="hp-bar"><i id="wall-chip" class="hp-chip"></i><i id="wall-fill" class="hp-fill"></i><span id="wall-value">40</span></div></div>
     <div class="hud-clock" aria-label="堅守時間"><strong id="time">00:00</strong><span id="wave">W01</span></div>
     <div class="hud-money" id="money-box" aria-label="資金">${px('icon_money', 2)}<strong id="money">0</strong></div>
-    <div class="hud-buttons"><button id="mute" class="icon-button" aria-label="音效開關" aria-pressed="false"></button><button id="pause" class="icon-button" aria-label="暫停遊戲" disabled>${icon('pause')}</button></div>
+    <div class="hud-buttons"><button id="speed" class="icon-button speed-button" aria-label="遊戲速度" aria-pressed="false">×1</button><button id="mute" class="icon-button" aria-label="音效開關" aria-pressed="false"></button><button id="pause" class="icon-button" aria-label="暫停遊戲" disabled>${icon('pause')}</button></div>
   </header>
   <div class="hud-xp" aria-label="戰術等級"><b id="level">1</b><div class="xp-track"><i id="xp-fill"></i></div></div>
   <div id="boss-banner" class="boss-banner" role="status" hidden>${px('icon_wave', 2)}<div><strong id="boss-title">屍王</strong><div class="boss-track"><i id="boss-fill"></i></div></div><span id="boss-detail"></span></div>
@@ -67,7 +67,7 @@ const el = <T extends HTMLElement = HTMLElement>(id: string) => document.getElem
 const text = (id: string, value: string) => { const node = el(id); if (node.textContent !== value) node.textContent = value; };
 let storage: Storage | undefined;
 try { storage = window.localStorage; } catch { /* Memory-only fallback. */ }
-const MOTION_KEY = 'taillabs.tl003.motion.v1', HINT_KEY = 'taillabs.tl003.hint.v1', TIPS_KEY = 'taillabs.tl003.tips.v1';
+const MOTION_KEY = 'taillabs.tl003.motion.v1', HINT_KEY = 'taillabs.tl003.hint.v1', TIPS_KEY = 'taillabs.tl003.tips.v1', SPEED_KEY = 'taillabs.tl003.speed.v1';
 const readFlag = (key: string) => { try { return storage?.getItem(key) ?? null; } catch { return null; } };
 const writeFlag = (key: string, value: string) => { try { storage?.setItem(key, value); } catch { /* convenience only */ } };
 let reducedMotion = readFlag(MOTION_KEY) === null ? window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false : readFlag(MOTION_KEY) === '1';
@@ -89,9 +89,9 @@ const talents = new TalentScreen(dialog, meta, {
 let displayedPhase = '', previous = performance.now(), uiClock = 0, shownMoney = 0;
 /** A pick can level up again at once: each level's choice is its own screen. */
 let cuedRun: DefenseRun | undefined, cuedKey = '';
-const phaseKey = () => run.phase === 'choice' ? `choice:${run.level}` : run.phase;
+const phaseKey = () => run.phase === 'choice' ? `choice:${run.level}:${run.picksLeft}:${run.choices.length}` : run.phase;
 const clock = (seconds: number) => `${Math.floor(seconds / 60).toString().padStart(2, '0')}:${Math.floor(seconds % 60).toString().padStart(2, '0')}`;
-function newRun() { run = new DefenseRun(undefined, meta.effects); camera.reset(); battlefield.clear(); shownMoney = 0; resetWatchers(); }
+function newRun() { run = new DefenseRun(undefined, meta.effects); camera.reset(); battlefield.clear(); shownMoney = 0; resetWatchers(); applyUnitLook(); }
 function reset() { meta.refresh(); aim = undefined; newRun(); displayedPhase = ''; sync(); }
 function startRun() {
   if (!meta.beginRun()) return;
@@ -109,10 +109,15 @@ function showModal(content: string, kind: string, focusFirst = true) {
   else { const title = el('modal-title'); title.tabIndex = -1; title.focus({ preventScroll: true }); }
 }
 // ---------- level-up choice ----------
-let choiceResolving = false;
+let choiceResolving = false, legendTimer: ReturnType<typeof setTimeout> | undefined;
 function showChoice() {
   choiceResolving = false;
-  showModal(choiceScreen(run.level, run.choices), 'choice', false);
+  showModal(choiceScreen(run.level, run.choices, run.canReroll ? { cost: run.rerollCost, affordable: run.money >= run.rerollCost } : undefined, run.picksLeft), 'choice', false);
+  clearTimeout(legendTimer);
+  if (run.choices.some(c => c.rarity === 'legendary')) legendTimer = setTimeout(() => { if (run.phase === 'choice') { audio.play('bossDown'); camera.shake(0.25); } }, motionReduced() ? 0 : 900);
+  else if (run.choices.some(c => c.rarity === 'rare')) audio.play('ready');
+  const rerollButton = document.getElementById('reroll');
+  if (rerollButton) rerollButton.onclick = () => { if (!choiceResolving && !dialog.querySelector('.choice-screen.locked') && run.reroll()) { audio.play('buy'); showChoice(); } };
   const screen = dialog.querySelector<HTMLElement>('.choice-screen')!, detail = el('pick-detail');
   // Input is locked while the cards fly in, so a tap meant for the battlefield can't pick one.
   screen.classList.add('locked'); setTimeout(() => screen.classList.remove('locked'), motionReduced() ? 0 : 660);
@@ -221,6 +226,22 @@ function syncPhase() {
 }
 
 // ---------- HUD ----------
+/** Which mercenary a HUD unit stands for: its own kind, except that under 制式部隊 the 2nd and 3rd units are extra riflemen. */
+const unitOf = (unit: MercKind) => run.cores.has('uniform') && unit !== 'rifle' ? { kind: 'rifle' as MercKind, copy: unit === 'flame' ? 1 : 2 } : { kind: unit, copy: 0 };
+function slotOf(unit: MercKind) {
+  const { kind, copy } = unitOf(unit); let n = 0;
+  for (let i = 0; i < run.mercenaries.length; i++) if (run.mercenaries[i]!.kind === kind && n++ === copy) return i;
+  return -1;
+}
+/** Under 制式部隊 every unit shows the rifleman's portrait and grenade. */
+function applyUnitLook() {
+  for (const unit of MERC_KINDS) {
+    const { kind } = unitOf(unit), box = el(`skill-${unit}`).parentElement!;
+    box.style.setProperty('--merc-color', MERCENARIES[kind].color);
+    box.querySelector('.orb-face .px-icon')!.setAttribute('data-icon', 'icon_skill_' + kind);
+    box.querySelector('.orb-portrait .px-icon')!.setAttribute('data-icon', 'icon_merc_' + kind);
+  }
+}
 const wasReady: Record<MercKind, boolean> = { rifle: false, flame: false, tesla: false };
 const wasAffordable: Record<MercKind, boolean> = { rifle: false, flame: false, tesla: false };
 let shownWave = 0, shownLevel = 1;
@@ -245,18 +266,24 @@ function sync() {
   if (run.level !== shownLevel) { if (run.level > shownLevel) pop(el('level'), 1.5, 300); shownLevel = run.level; }
   syncBoss();
   for (const kind of MERC_KINDS) {
-    const slot = run.mercenaries.findIndex(m => m.kind === kind), merc = run.mercenaries[slot];
+    const slot = slotOf(kind), merc = run.mercenaries[slot], real = unitOf(kind).kind;
     const buy = el<HTMLButtonElement>(`buy-${kind}`), skill = el<HTMLButtonElement>(`skill-${kind}`), unit = skill.parentElement!;
-    const cost = merc ? run.upgradeCost(kind) : run.recruitCost(kind);
-    const full = !merc && run.mercenaries.length >= 3;
-    text(`level-${kind}`, run.levels[kind].toString());
+    const cost = merc ? run.upgradeCost(real) : run.recruitCost(real);
+    // Closed: the core 孤狼 shut this unit, or another slot already holds this kind.
+    const closed = !merc && !run.canRecruit(real);
+    const full = !merc && (run.mercenaries.length >= 3 || closed);
+    unit.classList.toggle('closed', closed);
+    text(`level-${kind}`, run.levels[real].toString());
     text(`buy-sign-${kind}`, merc ? '▲' : '+'); text(`buy-label-${kind}`, formatNumber(cost));
+    // A thin bar under the chip fills towards the next level milestone.
+    const level = run.levels[real], next = nextMilestone(level), prev = [0, 10, 25, 50, 100].filter(m => m <= level).at(-1) ?? 0;
+    buy.style.setProperty('--milestone', merc && next ? ((level - prev) / (next - prev)).toFixed(3) : '0');
     const affordable = run.phase === 'running' && visibleMoney() >= cost && !full;
     buy.disabled = !affordable;
     if (affordable && !wasAffordable[kind]) pop(buy, 1.12, 220);
     wasAffordable[kind] = affordable;
     unit.classList.toggle('recruited', !!merc); unit.classList.toggle('locked', !merc);
-    const total = effectiveCooldown(MERCENARIES[kind].cooldown, run.haste), ready = run.phase === 'running' && !!merc && merc.cooldown <= 0;
+    const total = Math.max(1e-6, run.skillCooldown(real)), ready = run.phase === 'running' && !!merc && merc.cooldown <= 0;
     skill.disabled = run.phase !== 'running' || (!merc && !affordable);
     skill.classList.toggle('ready', ready); skill.classList.toggle('aiming', !!merc && !!aim && aim.slot === slot);
     skill.style.setProperty('--cd', merc ? (merc.cooldown / total).toFixed(3) : '1');
@@ -267,7 +294,7 @@ function sync() {
   for (const action of ['repair', 'fortify'] as const) {
     const cost = action === 'repair' ? run.repairCost : run.fortifyCost;
     text(`${action}-cost`, formatNumber(cost));
-    el<HTMLButtonElement>(action).disabled = run.phase !== 'running' || visibleMoney() < cost || (action === 'repair' && run.wallHealth >= run.wallMaxHealth);
+    el<HTMLButtonElement>(action).disabled = run.phase !== 'running' || (action === 'repair' && !run.canRepair) || visibleMoney() < cost || (action === 'repair' && run.wallHealth >= run.wallMaxHealth);
   }
 }
 /** The run's money minus coins still flying in: what the counter shows and what buttons offer. */
@@ -316,12 +343,19 @@ window.addEventListener('storage', event => {
   if (event.key !== META_KEY && event.key !== null) return;
   meta.refresh(); if (talents.active) talents.render(); else if (run.phase === 'ready') reset();
 });
-function buyOrRecruit(kind: MercKind) {
-  const had = run.mercenaries.some(m => m.kind === kind);
+/** Mercenary level milestones (spec §18) and their one-line announcements. */
+const MILESTONES: Record<number, string> = { 10: '火力倍增', 25: '射速 ×1.5', 50: '火力 ×3', 100: '專精解鎖' };
+const nextMilestone = (level: number) => [10, 25, 50, 100].find(m => m > level);
+function buyOrRecruit(unit: MercKind) {
+  const kind = unitOf(unit).kind, had = slotOf(unit) >= 0;
   if (had ? run.upgrade(kind) : run.recruit(kind)) {
-    audio.play('buy'); const slot = run.mercenaries.findIndex(m => m.kind === kind);
-    if (had) { battlefield.mercLeveled(slot); pop(el(`level-${kind}`), 1.6, 300); } else battlefield.mercArrived(slot);
-    pop(el(`skill-${kind}`), 1.1, 200);
+    audio.play('buy'); const slot = slotOf(unit);
+    if (had) {
+      battlefield.mercLeveled(slot); pop(el(`level-${unit}`), 1.6, 300);
+      const milestone = MILESTONES[run.levels[kind]];
+      if (milestone) { toast(`<small>${MERCENARIES[kind].name} Lv${run.levels[kind]}</small><b>${milestone}</b>`, 'gold'); audio.play('levelUp'); camera.punch(0.03); }
+    } else battlefield.mercArrived(slot);
+    pop(el(`skill-${unit}`), 1.1, 200);
   }
   sync();
 }
@@ -330,7 +364,7 @@ for (const kind of MERC_KINDS) {
   const button = el<HTMLButtonElement>(`skill-${kind}`); let down: { x: number; y: number; id: number } | undefined;
   button.addEventListener('pointerdown', event => {
     if (event.button !== 0 || button.disabled) return;
-    const slot = run.mercenaries.findIndex(m => m.kind === kind);
+    const slot = slotOf(kind);
     if (slot < 0) { buyOrRecruit(kind); return; }
     if (run.mercenaries[slot]!.cooldown > 0) return;
     event.preventDefault(); down = { x: event.clientX, y: event.clientY, id: event.pointerId }; button.setPointerCapture(event.pointerId);
@@ -348,7 +382,7 @@ for (const kind of MERC_KINDS) {
   button.addEventListener('pointercancel', () => { down = undefined; aim = undefined; sync(); });
   button.addEventListener('click', event => {
     if (event.detail !== 0 || button.disabled) return;
-    const slot = run.mercenaries.findIndex(m => m.kind === kind);
+    const slot = slotOf(kind);
     if (slot < 0) buyOrRecruit(kind);
     else if (run.mercenaries[slot]!.cooldown <= 0) { aim = { slot, x: 470, y: 235, valid: true }; el('battlefield').focus(); sync(); }
   });
@@ -363,7 +397,7 @@ window.addEventListener('keydown', event => {
   }
   if (event.key === 'Escape') { if (aim) aim = undefined; else run.pause(); sync(); return; }
   const index = ['1', '2', '3'].indexOf(event.key);
-  if (index >= 0 && run.phase === 'running') { const kind = MERC_KINDS[index]!, slot = run.mercenaries.findIndex(m => m.kind === kind); if (slot >= 0 && run.mercenaries[slot]!.cooldown <= 0) aim = { slot, x: 470, y: 235, valid: true }; }
+  if (index >= 0 && run.phase === 'running') { const slot = slotOf(MERC_KINDS[index]!); if (slot >= 0 && run.mercenaries[slot]!.cooldown <= 0) aim = { slot, x: 470, y: 235, valid: true }; }
   if (aim && ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Enter', ' '].includes(event.key)) {
     event.preventDefault();
     if (event.key === 'Enter' || event.key === ' ') { cast(aim.slot, aim.x, aim.y); aim = undefined; }
@@ -394,11 +428,12 @@ function react(realDt: number) {
   if (watchedRun !== run) { watchedRun = run; lastWall = run.wallHealth; wasWarning = false; lastBossId = 0; wallLoss = 0; }
   for (const event of run.events) {
     if (heard.has(event)) continue;
-    heard.add(event); const cue = cueFor(event); if (cue) audio.play(cue);
+    // Refraction side beams start at an enemy (x < 800): no extra laser sound or shake.
+    heard.add(event); const cue = event.kind === 'laser' && (event.fromX ?? 0) < 800 ? undefined : cueFor(event); if (cue) audio.play(cue);
     if (event.kind === 'blast') {
       if (event.color === '#e6764b') { camera.shake(0.22); camera.punch(0.02); }
       else { camera.shake(0.45); camera.punch(0.045); camera.freeze(0.05); }
-    } else if (event.kind === 'laser') { camera.shake(0.3); camera.punch(0.03); camera.freeze(0.04); }
+    } else if (event.kind === 'laser' && (event.fromX ?? 0) >= 800) { camera.shake(0.3); camera.punch(0.03); camera.freeze(0.04); }
     else if (event.kind === 'kill') {
       if (event.enemy === 'boss') { camera.freeze(0.15); camera.slowMotion(0.3, 0.9); camera.shake(0.75); camera.flash(0.7); camera.punch(0.07); }
       else if (event.enemy === 'elite') { camera.freeze(0.06); camera.shake(0.15); }
@@ -439,6 +474,11 @@ function toggleMute() {
   saveAudioPreferences(audioPreferences, storage); syncVolume(); audio.play('pick');
 }
 el('mute').onclick = toggleMute;
+// Game speed ×1 / ×2: only battle time runs faster; camera, UI motion and coins keep real time.
+let gameSpeed = readFlag(SPEED_KEY) === '2' ? 2 : 1;
+function syncSpeed() { const b = el('speed'); b.textContent = `×${gameSpeed}`; b.setAttribute('aria-pressed', String(gameSpeed === 2)); b.classList.toggle('fast', gameSpeed === 2); }
+el('speed').onclick = () => { gameSpeed = gameSpeed === 2 ? 1 : 2; writeFlag(SPEED_KEY, String(gameSpeed)); syncSpeed(); pop(el('speed'), 1.2, 180); audio.play('pick'); };
+syncSpeed();
 // Browsers only allow audio after a user gesture; any tap or key unlocks it.
 for (const type of ['pointerdown', 'keydown'] as const) document.addEventListener(type, () => audio.unlock(), { capture: true });
 el('toast').addEventListener('animationend', hideToast);
@@ -455,7 +495,7 @@ function step(now: number) {
   battlefield.useCamera(view);
   if (!aim) aimClient = undefined;
   else if (aimClient) Object.assign(aim, battlefield.point(aimClient.x, aimClient.y));
-  run.advance(realDt * view.timeScale); uiClock += realDt; react(realDt);
+  run.advance(realDt * view.timeScale * gameSpeed); uiClock += realDt; react(realDt);
   if (uiClock >= 0.08 || displayedPhase !== phaseKey()) { sync(); uiClock = 0; }
   tickMoney(realDt); coinTarget();
   battlefield.draw(run, aim, view, realDt);
