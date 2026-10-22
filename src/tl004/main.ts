@@ -144,7 +144,7 @@ function showResult(result: BattleResult): void {
   resultOpen = true;
   updatePause();
   nextButton.hidden = true;
-  resultTitle.textContent = result.won ? '四十塊全打飛了!' : '四十塊還躲在塔裡⋯';
+  resultTitle.textContent = result.won ? '四十塊被打爆了！' : '還有四十塊在外面晃...';
   resultStarsLabel.textContent = `${result.stars} 顆星`;
   const stars = [...resultPanel.querySelectorAll<HTMLSpanElement>('.stars span')];
   stars.forEach((star) => star.classList.remove('lit'));

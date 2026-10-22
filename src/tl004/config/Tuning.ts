@@ -28,6 +28,15 @@ export const PHYSICS = {
   maxStepsPerFrame: 4,
   /** Steps simulated at load so the tower starts in its settled pose, then everything sleeps. */
   presettleSteps: 240,
+  /** A body moving faster than this wakes sleeping bodies it touches (see BattleSim.wakeTouchingMovers). */
+  wakeSpeed: 0.08,
+  wakeAngularSpeed: 0.003,
+  wakeMargin: 4,
+  /**
+   * Steps of near-stillness before Matter puts a block or 四十塊 to sleep (Matter default 60).
+   * Longer, so a post tipping slowly over its corner keeps falling instead of freezing at an angle.
+   */
+  sleepSteps: steps(3),
 } as const;
 
 /** Downward speed gained per step: gravity × scale × step². */
@@ -35,8 +44,11 @@ export const GRAVITY_PER_STEP = PHYSICS.gravityY * PHYSICS.gravityScale * STEP_M
 
 /** The five launched partners (彩燈, 竹筍, 撲克, 薑片, 3D油飯). Outlines are already in display px. */
 export const ATTACKER = {
-  /** Their art is smaller inside its box than the old serpentelas, so density is higher to keep a similar punch. */
-  density: 0.0027,
+  /**
+   * Heavier than the tower so hits carry through. Tuned with a random-aim bot: ≈60% of 5-shot runs clear
+   * level 1 (the difficulty the user approved). Mass does not change the flight path or the aiming preview.
+   */
+  density: 0.0038,
   friction: 0.6,
   frictionStatic: 0.9,
   frictionAir: 0.004,

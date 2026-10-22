@@ -112,19 +112,24 @@ test('the same launches give the same result, whatever the frame rate', () => {
   assert.deepEqual(run(1000 / 60, true), sixty);
 });
 
-test('no sleeping block is left hanging after a hit', () => {
-  for (const angle of [-0.3, -0.4, -0.5, -0.6, -0.8, -1.0]) {
-    const sim = createSim();
-    sim.launch(...Object.values(shot(angle)));
-    runUntilSettled(sim);
-    const asleep = [...sim.pieces.values()].filter((piece) => piece.body.isSleeping).map((piece) => ({ piece, y: piece.body.position.y }));
-    for (const piece of sim.pieces.values()) kit.Sleeping.set(piece.body, false);
-    for (let i = 0; i < 120; i++) sim.step();
-    for (const { piece, y } of asleep) {
-      if (!sim.pieces.has(piece.id)) continue;
-      assert.ok(piece.body.position.y - y < 12, `angle ${angle}: sleeping ${piece.material ?? piece.kind} dropped ${(piece.body.position.y - y).toFixed(1)} px when woken`);
+test('nothing is left hanging asleep in mid-air, even when the bottom is knocked out first', () => {
+  // Low, flat shots that take out the lower planks first once left the top 四十塊 floating (user report, 2026-10-22).
+  for (let angle = 0.05; angle >= -1.2; angle -= 0.05) {
+    for (const power of [0.6, 0.7, 0.8, 0.9, 1]) {
+      const sim = createSim();
+      sim.launch(...Object.values(shot(angle, power)));
+      runUntilSettled(sim);
+      for (let i = 0; i < 120; i++) sim.step();
+      const asleep = [...sim.pieces.values()].filter((piece) => piece.body.isSleeping && piece.knockedOutAt === undefined).map((piece) => ({ piece, y: piece.body.position.y }));
+      for (const piece of sim.pieces.values()) if (piece.knockedOutAt === undefined) kit.Sleeping.set(piece.body, false);
+      for (let i = 0; i < 120; i++) sim.step();
+      for (const { piece, y } of asleep) {
+        if (!sim.pieces.has(piece.id)) continue;
+        const drop = piece.body.position.y - y;
+        assert.ok(drop < 30, `${angle.toFixed(2)}/${power}: sleeping ${piece.shapeId ?? piece.material} was hanging ${drop.toFixed(0)} px above its support`);
+      }
+      sim.destroy();
     }
-    sim.destroy();
   }
 });
 

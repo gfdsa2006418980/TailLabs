@@ -158,9 +158,6 @@ export class BattleSim {
   private readonly ground: SimBody;
   private readonly impacts = new Map<string, ImpactRecord>();
   private readonly onCollision: (event: { pairs: SimPair[] }) => void;
-  private readonly onSeparation: (event: { pairs: SimPair[] }) => void;
-  /** Sleeping bodies whose contact just ended (their support may be gone). */
-  private readonly toWake = new Set<SimBody>();
   private quietSteps = 0;
   private damageEnabled = false;
   private scoring = true;
@@ -180,15 +177,9 @@ export class BattleSim {
       else this.addBlock(spec.material, spec.x, spec.y, spec.w ?? 0, spec.h ?? 0, spec.angle ?? 0);
     }
     this.onCollision = (event) => this.recordImpacts(event.pairs);
-    this.onSeparation = (event) => {
-      for (const pair of event.pairs) {
-        const a = pair.bodyA.parent, b = pair.bodyB.parent;
-        if (a.isSleeping && !b.isStatic) this.toWake.add(a);
-        if (b.isSleeping && !a.isStatic) this.toWake.add(b);
-      }
-    };
+    // Lost supports are handled by wakeTouchingMovers(); Matter's "collisionEnd" is not used because it also
+    // fires when two touching bodies merely fall asleep, which would keep waking resting towers.
     kit.Events.on(engine, 'collisionStart', this.onCollision);
-    kit.Events.on(engine, 'collisionEnd', this.onSeparation);
     this.presettle();
   }
 
@@ -237,8 +228,7 @@ export class BattleSim {
     this.impacts.clear();
     this.kit.Engine.update(this.engine, STEP_MS);
     this.stepCount++;
-    for (const body of this.toWake) if (this.pieces.has(body.id)) this.kit.Sleeping.set(body, false);
-    this.toWake.clear();
+    this.wakeTouchingMovers();
     this.applyImpacts(events);
     this.removeLost(events);
     this.capSpeeds();
@@ -257,7 +247,6 @@ export class BattleSim {
     if (this.destroyed) return;
     this.destroyed = true;
     this.kit.Events.off(this.engine, 'collisionStart', this.onCollision);
-    this.kit.Events.off(this.engine, 'collisionEnd', this.onSeparation);
     for (const piece of this.pieces.values()) this.kit.Composite.remove(this.engine.world, piece.body);
     this.kit.Composite.remove(this.engine.world, this.ground);
     this.pieces.clear();
@@ -265,7 +254,7 @@ export class BattleSim {
 
   private addBlock(material: MaterialId, x: number, y: number, w: number, h: number, angle: number): void {
     const spec = MATERIALS[material];
-    const body = this.kit.Bodies.rectangle(x, y, w, h, { density: spec.density, friction: spec.friction, frictionStatic: spec.frictionStatic, restitution: spec.restitution, angle, label: material });
+    const body = this.kit.Bodies.rectangle(x, y, w, h, { density: spec.density, friction: spec.friction, frictionStatic: spec.frictionStatic, restitution: spec.restitution, angle, label: material, sleepThreshold: PHYSICS.sleepSteps });
     this.kit.Composite.add(this.engine.world, body);
     this.pieces.set(body.id, { id: body.id, kind: 'block', body, material, w, h, anchor: { x: 0, y: 0 }, hp: spec.hp, maxHp: spec.hp, cracked: false });
   }
@@ -276,7 +265,7 @@ export class BattleSim {
     const shape = this.shapes.targets.get(shapeId) as ShapeDefinition;
     const outline = shape.outline.map((p) => ({ x: p.x * TARGET.scale, y: p.y * TARGET.scale }));
     const body = this.kit.Bodies.fromVertices(x, y, outline, {
-      density: spec.density, friction: spec.friction, frictionStatic: spec.frictionStatic, restitution: spec.restitution, label: shapeId,
+      density: spec.density, friction: spec.friction, frictionStatic: spec.frictionStatic, restitution: spec.restitution, label: shapeId, sleepThreshold: PHYSICS.sleepSteps,
     }, true, 0, 0);
     const anchor = anchorFor(body, minOf(outline));
     this.kit.Body.setInertia(body, compoundInertia(body.position, body.parts.slice(1)));
@@ -298,7 +287,6 @@ export class BattleSim {
     }
     this.impacts.clear();
     for (const piece of this.pieces.values()) this.kit.Sleeping.set(piece.body, true);
-    this.toWake.clear();
     this.damageEnabled = true;
     this.scoring = true;
   }
@@ -409,6 +397,27 @@ export class BattleSim {
       const b = other.body.bounds;
       if (b.max.x < min.x - margin || b.min.x > max.x + margin || b.max.y < min.y - margin || b.min.y > max.y + margin) continue;
       this.kit.Sleeping.set(other.body, false);
+    }
+  }
+
+  /**
+   * Any sleeping body touching (or within a few px of) something that is moving wakes up.
+   * Matter reports "collision end" for two sleeping bodies when they fall asleep, not when a support later
+   * slides away, so a sleeping 四十塊 on a plank knocked out from below would otherwise hang in the air.
+   */
+  private wakeTouchingMovers(): void {
+    const margin = PHYSICS.wakeMargin;
+    for (const mover of this.pieces.values()) {
+      const body = mover.body;
+      if (body.isSleeping || mover.knockedOutAt !== undefined) continue;
+      if (body.speed < PHYSICS.wakeSpeed && body.angularSpeed < PHYSICS.wakeAngularSpeed) continue;
+      const { min, max } = body.bounds;
+      for (const other of this.pieces.values()) {
+        if (other === mover || !other.body.isSleeping || other.knockedOutAt !== undefined) continue;
+        const b = other.body.bounds;
+        if (b.max.x < min.x - margin || b.min.x > max.x + margin || b.max.y < min.y - margin || b.min.y > max.y + margin) continue;
+        this.kit.Sleeping.set(other.body, false);
+      }
     }
   }
 
