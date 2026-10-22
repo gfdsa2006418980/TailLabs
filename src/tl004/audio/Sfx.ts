@@ -1,4 +1,5 @@
 import type { MaterialId } from '../config/Materials.ts';
+import type { AbilityId } from '../config/Abilities.ts';
 
 type ImpactMaterial = MaterialId | 'ground' | 'attacker';
 
@@ -123,6 +124,15 @@ export class Sfx {
     if (material === 'glass') { this.burst('highpass', 3500, 0.7, 0.35, 0.18); for (let i = 0; i < 3; i++) this.tone(2400 + i * 500, 2200, 0.12, 0.05, 'triangle', i * 0.04); }
     else if (material === 'stone') { this.burst('lowpass', 900, 0.6, 0.4, 0.3); this.tone(110, 50, 0.3, 0.2); }
     else if (material === 'wood') { this.burst('bandpass', 1500, 1.2, 0.22, 0.25); this.tone(220, 90, 0.16, 0.14, 'triangle'); }
+  }
+
+  ability(ability: AbilityId): void {
+    if (!this.gate(`ability-${ability}`, 120)) return;
+    if (ability === 'firework') { this.burst('lowpass', 700, 0.6, 0.5, 0.35); [660, 880, 1320].forEach((f, i) => this.tone(f, f * 1.5, 0.25, 0.07, 'triangle', 0.05 + i * 0.07)); }
+    else if (ability === 'dash') { this.burst('bandpass', 1800, 1, 0.3, 0.2); this.tone(300, 900, 0.25, 0.1, 'sawtooth'); }
+    else if (ability === 'split') { [1200, 1500, 1800].forEach((f, i) => this.tone(f, f, 0.08, 0.08, 'square', i * 0.05)); }
+    else if (ability === 'bounce') { this.tone(200, 900, 0.3, 0.14, 'sine'); }
+    else { this.tone(500, 90, 0.35, 0.2, 'triangle'); }
   }
 
   /** A 四十塊 knocked out: cartoon "bonk" plus a rising slide-whistle as it flies off. */

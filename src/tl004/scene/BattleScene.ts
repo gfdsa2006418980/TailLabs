@@ -8,6 +8,7 @@ import { BattleSim, SLING_REST } from '../sim/BattleSim.ts';
 import type { MatterKit, Piece, SimEngine, SimEvent } from '../sim/BattleSim.ts';
 import type { LevelData, ShapeLibrary } from '../sim/Level.ts';
 import type { Sfx } from '../audio/Sfx.ts';
+import type { AbilityId } from '../config/Abilities.ts';
 import { CameraRig } from './CameraRig.ts';
 import type { Rect } from './CameraRig.ts';
 import { CREAM, INK, ROSE, ROSE_BROWN } from './Palette.ts';
@@ -26,6 +27,8 @@ export interface BattleHooks {
   /** Partner ids still to fire, sling first. */
   onShots(ids: string[]): void;
   onSkipAvailable(available: boolean): void;
+  /** The ability the player can trigger right now by tapping, or undefined. */
+  onAbilityAvailable(ability: AbilityId | undefined): void;
   onResult(result: BattleResult): void;
 }
 
@@ -89,7 +92,7 @@ export class BattleScene extends Phaser.Scene {
   private currentTrail: Vec[] = [];
   private lastTrail: Vec[] = [];
   private bonuses: number[] = [];
-  private reported = { score: -1, shots: '', skip: false };
+  private reported: { score: number; shots: string; skip: boolean; ability: AbilityId | undefined } = { score: -1, shots: '', skip: false, ability: undefined };
   private resultTimer: Phaser.Time.TimerEvent | undefined;
 
   constructor(hooks: BattleHooks, config: BattleConfig) {
@@ -111,7 +114,7 @@ export class BattleScene extends Phaser.Scene {
     this.sprites = new Map(); this.debris = new Map(); this.queue = [];
     this.started = false; this.paused = false; this.slingReady = false; this.aim = undefined; this.aimPointer = undefined;
     this.hitStopUntil = 0; this.slowUntil = 0; this.slowUsedThisShot = false; this.recoil = undefined;
-    this.currentTrail = []; this.lastTrail = []; this.bonuses = []; this.reported = { score: -1, shots: '', skip: false };
+    this.currentTrail = []; this.lastTrail = []; this.bonuses = []; this.reported = { score: -1, shots: '', skip: false, ability: undefined };
     this.stepper = new FixedStepper(STEP_MS, PHYSICS.maxStepsPerFrame);
 
     buildScenery(this);
@@ -173,6 +176,12 @@ export class BattleScene extends Phaser.Scene {
 
   next(): void { this.handle(this.sim.requestNext()); }
 
+  /** Tap during flight (also the HUD hint button). */
+  useAbility(): void {
+    if (!this.started || this.paused) return;
+    this.handle(this.sim.activateAbility());
+  }
+
   private attackerScale(id: string): number {
     const art = this.config.attackerArt.get(id);
     if (!art) throw new Error(`Missing partner art: ${id}`);
@@ -188,6 +197,8 @@ export class BattleScene extends Phaser.Scene {
     this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
       this.hooks.sfx.unlock();
       if (!this.started || this.paused) return;
+      // Tap anywhere while the partner is flying: use its ability.
+      if (this.sim.canUseAbility) { this.useAbility(); return; }
       if (this.rig.mode === 'tower' && this.sim.phase === 'aiming') { this.toAim(); return; }
       // Start a pull only once the camera has stopped, so the sling does not drift under the finger.
       if (this.aimPointer !== undefined || !this.canAim() || !this.rig.settledOnAim) return;
@@ -206,6 +217,7 @@ export class BattleScene extends Phaser.Scene {
     keyboard.on('keydown', (event: KeyboardEvent) => {
       // Space/Enter belong to the sling while playing; never let them also press a focused HUD button.
       if (this.started && !this.paused && (event.key === ' ' || event.key === 'Enter')) event.preventDefault();
+      if (this.started && !this.paused && (event.key === ' ' || event.key === 'Enter') && this.sim.canUseAbility) { this.useAbility(); return; }
       if (!this.started || this.paused || !this.canAim()) return;
       const k = this.keyAim;
       if (event.key === 'ArrowUp') k.angle = Math.max(-1.45, k.angle - 0.025);
@@ -335,7 +347,7 @@ export class BattleScene extends Phaser.Scene {
   private createSprite(piece: Piece): Phaser.GameObjects.Image {
     let sprite: Phaser.GameObjects.Image;
     if (piece.kind === 'attacker') {
-      const scale = this.attackerScale(piece.shapeId as string);
+      const scale = this.attackerScale(piece.shapeId as string) * (piece.artScale ?? 1);
       sprite = this.add.image(0, 0, attackerKey(piece.shapeId as string)).setOrigin(piece.anchor.x / piece.w, piece.anchor.y / piece.h).setScale(scale).setDepth(20);
       sprite.setData('baseScale', scale);
     } else if (piece.kind === 'target') {
@@ -365,6 +377,7 @@ export class BattleScene extends Phaser.Scene {
         case 'cracked': this.onCracked(event.id); break;
         case 'break': this.onBreak(event, reduced); break;
         case 'launch': this.rig.mode = 'follow'; this.refreshQueue(true); break;
+        case 'ability': this.onAbility(event, reduced); break;
         case 'shotEnd': {
           if (event.chainBonus <= 0) break;
           const bounds = towerBounds(this.sim.pieces.values());
@@ -410,6 +423,39 @@ export class BattleScene extends Phaser.Scene {
     if (!reduced && !this.slowUsedThisShot && this.sim.phase === 'flying' && this.sim.score.breaksThisShot >= FX.slowMotionMinBreaks) {
       this.slowUsedThisShot = true;
       this.slowUntil = this.time.now + FX.slowMotionMs;
+    }
+  }
+
+  /** Visual and sound for each ability; the physics already happened in the simulation. */
+  private onAbility(event: Extract<SimEvent, { type: 'ability' }>, reduced: boolean): void {
+    this.hooks.sfx.ability(event.ability);
+    const sprite = this.sprites.get(event.id);
+    switch (event.ability) {
+      case 'firework':
+        this.sparks.explode(40, event.x, event.y);
+        this.puffs.explode(10, event.x, event.y);
+        if (!reduced) { this.cameras.main.shake(220, 0.008); this.hitStopUntil = this.time.now + FX.hitStopMs; }
+        this.popup(event.x, event.y - 70, '砰!', 0xffd166);
+        break;
+      case 'dash':
+        this.puffs.explode(5, event.x, event.y);
+        sprite?.setTint(0xfff1b8);
+        this.popup(event.x, event.y - 70, '衝!', 0xffffff);
+        break;
+      case 'split':
+        this.puffs.explode(6, event.x, event.y);
+        this.sparks.explode(10, event.x, event.y);
+        break;
+      case 'bounce':
+        sprite?.setTint(0xffc59a);
+        this.sparks.explode(8, event.x, event.y);
+        this.popup(event.x, event.y - 70, '辣!', 0xff9a6b);
+        break;
+      case 'slam':
+        sprite?.setTint(0xd8c8ff);
+        if (sprite && !reduced) this.tweens.add({ targets: sprite, scaleX: (sprite.getData('baseScale') as number) * 1.25, scaleY: (sprite.getData('baseScale') as number) * 1.25, duration: 160, yoyo: true });
+        this.popup(event.x, event.y - 70, '咚!', 0xffffff);
+        break;
     }
   }
 
@@ -493,5 +539,7 @@ export class BattleScene extends Phaser.Scene {
     if (key !== this.reported.shots) { this.reported.shots = key; this.hooks.onShots(waiting); }
     const skip = this.sim.canSkip;
     if (skip !== this.reported.skip) { this.reported.skip = skip; this.hooks.onSkipAvailable(skip); }
+    const ability = this.sim.canUseAbility ? this.sim.currentAbility : undefined;
+    if (ability !== this.reported.ability) { this.reported.ability = ability; this.hooks.onAbilityAvailable(ability); }
   }
 }

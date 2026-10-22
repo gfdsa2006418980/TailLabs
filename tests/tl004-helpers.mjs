@@ -48,3 +48,40 @@ export function playShots(sim, shots, maxSteps = 6000) {
   }
   return events;
 }
+
+/** Distance from the active partner to the nearest block or 四十塊 still in play. */
+function nearest(sim, body) {
+  let best = Infinity;
+  for (const piece of sim.pieces.values()) {
+    if (piece.kind === 'attacker' || piece.knockedOutAt !== undefined) continue;
+    best = Math.min(best, Math.hypot(piece.body.position.x - body.position.x, piece.body.position.y - body.position.y));
+  }
+  return best;
+}
+
+/** A sensible tap time for each ability (used by bots and tests). */
+export function wantsAbility(sim) {
+  if (!sim.canUseAbility) return false;
+  const body = sim.pieces.get(sim.activeAttackerId).body;
+  const d = nearest(sim, body);
+  switch (sim.currentAbility) {
+    case 'firework': return d < 120;
+    case 'dash': return d < 300;
+    case 'split': return d < 520;
+    case 'bounce': return d < 220;
+    case 'slam': return [...sim.pieces.values()].some((p) => p.kind === 'target' && p.knockedOutAt === undefined && Math.abs(p.body.position.x - body.position.x) < 45 && p.body.position.y > body.position.y);
+    default: return false;
+  }
+}
+
+/** Like playShots, but each shot may say `ability: true` to tap at the sensible moment. */
+export function playSmart(sim, shots, maxSteps = 8000) {
+  const events = [];
+  let next = 0, current;
+  for (let i = 0; i < maxSteps && sim.phase !== 'won' && sim.phase !== 'lost'; i++) {
+    if (sim.phase === 'aiming' && next < shots.length) { current = shots[next++]; events.push(...sim.launch(current.vx, current.vy)); }
+    if (current?.ability && wantsAbility(sim)) events.push(...sim.activateAbility());
+    events.push(...sim.step());
+  }
+  return events;
+}

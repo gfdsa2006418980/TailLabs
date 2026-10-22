@@ -3,6 +3,7 @@ import serpentelaData from '../data/serpentelas.generated.json';
 import attackerData from './data/attackers.generated.json';
 import testTower from './levels/test-tower.json';
 import { PHYSICS, VIEW } from './config/Tuning.ts';
+import { ABILITY_INFO, PARTNER_ABILITY } from './config/Abilities.ts';
 import { Sfx } from './audio/Sfx.ts';
 import { BattleScene } from './scene/BattleScene.ts';
 import type { AttackerArt, BattleHooks, BattleResult } from './scene/BattleScene.ts';
@@ -31,6 +32,15 @@ const resultTitle = element('result-title');
 const resultScore = element('result-score');
 const resultStarsLabel = element('result-stars-label');
 const retryButton = element<HTMLButtonElement>('retry-button');
+const menuButton = element<HTMLButtonElement>('menu-button');
+const menuPanel = element('menu-panel');
+const resumeButton = element<HTMLButtonElement>('resume-button');
+const partnersButton = element<HTMLButtonElement>('partners-button');
+const partnersPanel = element('partners-panel');
+const partnersBack = element<HTMLButtonElement>('partners-back');
+const partnerList = element<HTMLUListElement>('partner-list');
+const abilityHint = element<HTMLButtonElement>('ability-hint');
+const abilityName = element('ability-name');
 
 const level = testTower as LevelData;
 const shapes: ShapeLibrary = {
@@ -44,6 +54,7 @@ const sfx = new Sfx();
 
 let started = false;
 let resultOpen = false;
+let menuOpen = false;
 let rollFrame = 0;
 let starTimers: number[] = [];
 
@@ -64,6 +75,10 @@ const hooks: BattleHooks = {
     queue.setAttribute('aria-label', `還有 ${ids.length} 位夥伴:${ids.map((id) => attackerArt.get(id)?.name ?? id).join('、')}`);
   },
   onSkipAvailable: (available) => { nextButton.hidden = !available; },
+  onAbilityAvailable: (ability) => {
+    abilityHint.hidden = !ability;
+    if (ability) abilityName.textContent = ABILITY_INFO[ability].name;
+  },
   onResult: (result) => showResult(result),
 };
 
@@ -89,7 +104,7 @@ fitStage(stage, () => { game.scale.getParentBounds(); game.scale.refresh(); });
 if (import.meta.env.DEV) (window as unknown as { tl004: unknown }).tl004 = { game, scene };
 
 function updatePause(): void {
-  scene.setPaused(!started || document.hidden || portraitQuery.matches || resultOpen);
+  scene.setPaused(!started || document.hidden || portraitQuery.matches || resultOpen || menuOpen);
 }
 document.addEventListener('visibilitychange', updatePause);
 portraitQuery.addEventListener('change', updatePause);
@@ -114,6 +129,7 @@ startButton.addEventListener('click', () => {
 
 function restart(): void {
   sfx.unlock();
+  closeMenu();
   cancelAnimationFrame(rollFrame);
   starTimers.forEach((timer) => window.clearTimeout(timer));
   starTimers = [];
@@ -128,7 +144,7 @@ retryButton.addEventListener('click', restart);
 nextButton.addEventListener('click', () => { sfx.unlock(); scene.next(); });
 
 // Keyboard play uses Space/Enter: drop focus from HUD buttons after a click so those keys never press them again.
-for (const button of [startButton, restartButton, retryButton, nextButton, soundButton]) {
+for (const button of [startButton, restartButton, retryButton, nextButton, soundButton, menuButton, resumeButton, partnersButton, partnersBack, abilityHint]) {
   button.addEventListener('click', () => button.blur());
 }
 
@@ -136,9 +152,46 @@ soundButton.addEventListener('click', () => {
   sfx.unlock();
   sfx.setMuted(!sfx.muted);
   soundButton.setAttribute('aria-pressed', String(sfx.muted));
-  soundButton.setAttribute('aria-label', sfx.muted ? '開啟音效' : '關閉音效');
-  soundButton.classList.toggle('muted', sfx.muted);
+  soundButton.textContent = sfx.muted ? '音效:關' : '音效:開';
 });
+
+abilityHint.addEventListener('click', () => { sfx.unlock(); scene.useAbility(); });
+
+// Partner intro, built from the same data the game uses.
+partnerList.replaceChildren(...attackerData.definitions.map((partner) => {
+  const ability = ABILITY_INFO[PARTNER_ABILITY[partner.id]];
+  const item = document.createElement('li');
+  const image = document.createElement('img');
+  image.src = attackerUrl(partner.id); image.alt = ''; image.width = 64; image.height = 64;
+  const text = document.createElement('div');
+  const name = document.createElement('h3'); name.textContent = partner.name;
+  const abilityLine = document.createElement('p'); abilityLine.className = 'ability-name'; abilityLine.textContent = ability.name;
+  const description = document.createElement('p'); description.textContent = ability.description;
+  text.append(name, abilityLine, description);
+  item.append(image, text);
+  return item;
+}));
+
+function openMenu(): void {
+  menuOpen = true;
+  menuPanel.hidden = false;
+  partnersPanel.hidden = true;
+  menuButton.setAttribute('aria-expanded', 'true');
+  updatePause();
+  resumeButton.focus();
+}
+function closeMenu(): void {
+  menuOpen = false;
+  menuPanel.hidden = true;
+  partnersPanel.hidden = true;
+  menuButton.setAttribute('aria-expanded', 'false');
+  updatePause();
+}
+menuButton.addEventListener('click', () => { sfx.unlock(); if (menuOpen) closeMenu(); else openMenu(); });
+resumeButton.addEventListener('click', closeMenu);
+partnersButton.addEventListener('click', () => { menuPanel.hidden = true; partnersPanel.hidden = false; partnersBack.focus(); });
+partnersBack.addEventListener('click', () => { partnersPanel.hidden = true; menuPanel.hidden = false; resumeButton.focus(); });
+document.addEventListener('keydown', (event) => { if (event.key === 'Escape' && started && !resultOpen) { if (menuOpen) closeMenu(); else openMenu(); } });
 
 function showResult(result: BattleResult): void {
   resultOpen = true;

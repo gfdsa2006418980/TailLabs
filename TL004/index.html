@@ -22,11 +22,28 @@
         <ol id="queue" class="queue" aria-label="剩餘夥伴"></ol>
         <div class="hud-right">
           <div class="score-card"><span>分數</span><strong id="score">0</strong></div>
-          <button id="sound-button" class="icon-button" type="button" aria-label="關閉音效" aria-pressed="false">♪</button>
-          <button id="restart-button" class="icon-button" type="button" aria-label="重新開始">↻</button>
+          <button id="menu-button" class="icon-button" type="button" aria-label="開啟選單" aria-haspopup="dialog" aria-controls="menu-panel" aria-expanded="false">☰</button>
         </div>
+        <button id="ability-hint" class="ability-hint" type="button" hidden>點畫面 · <strong id="ability-name"></strong></button>
         <button id="next-button" class="next-button" type="button" hidden>下一隻 <span aria-hidden="true">›</span></button>
       </div>
+
+      <section id="menu-panel" class="panel menu-panel" aria-labelledby="menu-title" hidden>
+        <h2 id="menu-title">選單</h2>
+        <div class="menu-actions">
+          <button id="resume-button" class="primary-button" type="button">繼續</button>
+          <button id="restart-button" class="secondary-button" type="button">重新開始 <span aria-hidden="true">↻</span></button>
+          <button id="partners-button" class="secondary-button" type="button">夥伴介紹</button>
+          <button id="sound-button" class="secondary-button" type="button" aria-pressed="false">音效:開</button>
+        </div>
+      </section>
+
+      <section id="partners-panel" class="panel partners-panel" aria-labelledby="partners-title" hidden>
+        <h2 id="partners-title">夥伴介紹</h2>
+        <p class="hint">夥伴飛在空中、還沒撞到東西時,點一下畫面就能發動能力。</p>
+        <ul id="partner-list" class="partner-list"></ul>
+        <button id="partners-back" class="primary-button" type="button">返回</button>
+      </section>
 
       <section id="start-panel" class="panel start-panel" aria-labelledby="start-title">
         <p class="eyebrow">TAIL LABS · TL004 · 手感原型</p>

@@ -1,6 +1,8 @@
 import { MATERIALS } from '../config/Materials.ts';
 import type { MaterialId } from '../config/Materials.ts';
 import { ATTACKER, KNOCKOUT, PHYSICS, SHOT, SLING, STEP_MS, TARGET, WORLD } from '../config/Tuning.ts';
+import { ABILITY, PARTNER_ABILITY } from '../config/Abilities.ts';
+import type { AbilityId } from '../config/Abilities.ts';
 import { damageFrom, impactStrength } from '../rules/Damage.ts';
 import { ScoreBook, starsFor } from '../rules/Scoring.ts';
 import { validateLevel } from './Level.ts';
@@ -23,6 +25,8 @@ export interface SimBody {
   isSleeping: boolean;
   bounds: { min: Point; max: Point };
   collisionFilter: { category: number; mask: number; group: number };
+  restitution: number;
+  friction: number;
 }
 
 export interface SimEngine {
@@ -54,6 +58,7 @@ export interface MatterKit {
     setInertia(body: SimBody, inertia: number): void;
     setVelocity(body: SimBody, velocity: Point): void;
     setAngularVelocity(body: SimBody, velocity: number): void;
+    setMass(body: SimBody, mass: number): void;
     setAngle(body: SimBody, angle: number): void;
   };
   Composite: {
@@ -87,6 +92,8 @@ export interface Piece {
   cracked: boolean;
   /** Step at which a 四十塊 was knocked out; it then flies off without colliding. */
   knockedOutAt?: number;
+  /** Extra art scale (split cards are smaller). */
+  artScale?: number;
 }
 
 export type Phase = 'aiming' | 'flying' | 'won' | 'lost';
@@ -96,13 +103,17 @@ export type SimEvent =
   | { type: 'cracked'; id: number }
   | { type: 'break'; id: number; kind: PieceKind; material?: MaterialId; shapeId?: string; x: number; y: number; angle: number; vx: number; points: number }
   | { type: 'launch'; shot: number; id: number }
+  | { type: 'ability'; ability: AbilityId; id: number; x: number; y: number; extraIds: number[] }
   | { type: 'shotEnd'; chainBonus: number }
   | { type: 'ready'; shot: number }
   | { type: 'bonus'; index: number; points: number }
   | { type: 'won'; stars: number; score: number }
   | { type: 'lost'; score: number };
 
-export interface LaunchRecord { step: number; vx: number; vy: number }
+/** Replay of one shot: launch step and velocity, plus the step the ability was used (if any). */
+export interface LaunchRecord { step: number; vx: number; vy: number; abilityStep?: number }
+
+interface Hit { strength: number; source: Point }
 
 interface ImpactRecord { a: SimBody; b: SimBody; strength: number; point: Point }
 
@@ -151,6 +162,8 @@ export class BattleSim {
   activeHasImpacted = false;
   /** Steps since the current shot was launched. */
   shotSteps = 0;
+  /** The current shot's ability has been used. */
+  abilityUsed = false;
 
   private readonly kit: MatterKit;
   private readonly engine: SimEngine;
@@ -159,6 +172,11 @@ export class BattleSim {
   private readonly impacts = new Map<string, ImpactRecord>();
   private readonly onCollision: (event: { pairs: SimPair[] }) => void;
   private quietSteps = 0;
+  /** Breakthrough dash in progress until this step (破竹衝刺). */
+  private dashUntil = -1;
+  private dashVelocity: Point | undefined;
+  /** Body of the partner using 辣勁彈跳 this shot. */
+  private bouncy: SimBody | undefined;
   private damageEnabled = false;
   private scoring = true;
   private destroyed = false;
@@ -190,6 +208,14 @@ export class BattleSim {
   /** No skipping the last shot: a slow collapse may still knock out the final 四十塊. */
   get canSkip(): boolean { return this.phase === 'flying' && !this.isLastShot && this.shotSteps >= SHOT.skipAfterSteps; }
   get currentShapeId(): string | undefined { return this.level.shots[this.shotIndex]; }
+  /** One tap per shot, while the partner is still in the air before touching anything. */
+  get canUseAbility(): boolean {
+    return this.phase === 'flying' && !this.abilityUsed && !this.activeHasImpacted && this.activeAttackerId !== undefined && this.pieces.has(this.activeAttackerId);
+  }
+  get currentAbility(): AbilityId | undefined {
+    const id = this.phase === 'flying' ? this.level.shots[this.shotIndex] : this.currentShapeId;
+    return id ? PARTNER_ABILITY[id] : undefined;
+  }
 
   /** Fire the partner on the sling. Velocity is in px per step. */
   launch(vx: number, vy: number): SimEvent[] {
@@ -204,8 +230,12 @@ export class BattleSim {
     this.kit.Body.setInertia(body, compoundInertia(body.position, body.parts.slice(1)));
     this.kit.Body.setVelocity(body, { x: vx, y: vy });
     this.kit.Composite.add(this.engine.world, body);
-    this.pieces.set(body.id, { id: body.id, kind: 'attacker', body, shapeId, w: shape.width, h: shape.height, anchor, hp: Infinity, maxHp: Infinity, cracked: false });
+    this.pieces.set(body.id, { id: body.id, kind: 'attacker', body, shapeId, w: shape.width, h: shape.height, anchor, hp: Infinity, maxHp: Infinity, cracked: false, artScale: 1 });
     this.launches.push({ step: this.stepCount, vx, vy });
+    this.abilityUsed = false;
+    this.dashUntil = -1;
+    this.dashVelocity = undefined;
+    this.bouncy = undefined;
     this.phase = 'flying';
     this.shotSteps = 0;
     this.quietSteps = 0;
@@ -226,6 +256,8 @@ export class BattleSim {
     if (this.destroyed) return [];
     const events: SimEvent[] = [];
     this.impacts.clear();
+    const dasher = this.dashing();
+    if (dasher) this.dashVelocity = { ...dasher.body.velocity };
     this.kit.Engine.update(this.engine, STEP_MS);
     this.stepCount++;
     this.wakeTouchingMovers();
@@ -308,14 +340,24 @@ export class BattleSim {
 
   private applyImpacts(events: SimEvent[]): void {
     /** Strongest hit each 四十塊 took this step, used to aim its knock-out kick. */
-    const strongest = new Map<number, { strength: number; from: SimBody; point: Point }>();
+    const strongest = new Map<number, Hit>();
+    const dasher = this.dashing();
+    let pierced = false;
     for (const impact of this.impacts.values()) {
       const pa = this.pieces.get(impact.a.id), pb = this.pieces.get(impact.b.id);
       for (const piece of [pa, pb]) {
         if (!piece || piece.kind === 'attacker' || !piece.material || piece.knockedOutAt !== undefined) continue;
-        piece.hp -= damageFrom(impact.strength, MATERIALS[piece.material]);
+        const from = piece === pa ? impact.b : impact.a;
+        if (dasher && from === dasher.body && (piece.material === 'wood' || piece.material === 'glass')) {
+          // 破竹衝刺 punches straight through planks and glass.
+          piece.hp = 0;
+          pierced = true;
+        } else {
+          const factor = this.bouncy && from === this.bouncy ? ABILITY.bounce.damageFactor : 1;
+          piece.hp -= damageFrom(impact.strength * factor, MATERIALS[piece.material]);
+        }
         if (piece.kind === 'target' && (strongest.get(piece.id)?.strength ?? -1) < impact.strength) {
-          strongest.set(piece.id, { strength: impact.strength, from: piece === pa ? impact.b : impact.a, point: impact.point });
+          strongest.set(piece.id, { strength: impact.strength, source: from.isStatic ? impact.point : from.position });
         }
         if (!piece.cracked && piece.hp > 0 && piece.hp <= piece.maxHp / 2) {
           piece.cracked = true;
@@ -324,12 +366,26 @@ export class BattleSim {
       }
       const attacker = [pa, pb].find((piece) => piece?.kind === 'attacker');
       if (attacker && attacker.id === this.activeAttackerId) this.activeHasImpacted = true;
+      if (dasher && attacker === dasher) {
+        const other = attacker === pa ? pb : pa;
+        // The dash ends on stone, the ground or a 四十塊.
+        if (!other || other.material === 'stone' || other.kind === 'target') this.dashUntil = -1;
+      }
       if (impact.strength >= SHOT.impactEventMin) {
         const other = attacker === pa ? pb : pa;
         const material = other?.material ?? (other?.kind === 'attacker' ? 'attacker' : 'ground');
         events.push({ type: 'impact', x: impact.point.x, y: impact.point.y, strength: impact.strength, material, attackerId: attacker?.id });
       }
     }
+    this.resolveDamage(strongest, events);
+    if (pierced && dasher && this.dashVelocity && this.pieces.has(dasher.id)) {
+      const keep = ABILITY.dash.keepAfterPierce;
+      this.kit.Body.setVelocity(dasher.body, { x: this.dashVelocity.x * keep, y: this.dashVelocity.y * keep });
+    }
+  }
+
+  /** Remove broken blocks and knock out 四十塊 whose durability ran out. */
+  private resolveDamage(strongest: ReadonlyMap<number, Hit>, events: SimEvent[]): void {
     for (const piece of [...this.pieces.values()]) {
       if (piece.kind === 'attacker' || piece.knockedOutAt !== undefined || piece.hp > 0) continue;
       if (piece.kind === 'target') this.knockOut(piece, strongest.get(piece.id), events);
@@ -337,11 +393,101 @@ export class BattleSim {
     }
   }
 
+  private dashing(): Piece | undefined {
+    if (this.stepCount >= this.dashUntil || this.activeAttackerId === undefined) return undefined;
+    return this.pieces.get(this.activeAttackerId);
+  }
+
+  /** Tap during flight: use the current partner's ability (once per shot, before its first contact). */
+  activateAbility(): SimEvent[] {
+    if (!this.canUseAbility) return [];
+    const piece = this.pieces.get(this.activeAttackerId as number) as Piece;
+    const ability = PARTNER_ABILITY[piece.shapeId as string];
+    if (!ability) return [];
+    this.abilityUsed = true;
+    const launch = this.launches.at(-1);
+    if (launch) launch.abilityStep = this.shotSteps;
+    const { body } = piece;
+    const at = { x: body.position.x, y: body.position.y };
+    const events: SimEvent[] = [];
+    const extraIds: number[] = [];
+    if (ability === 'firework') {
+      events.push({ type: 'ability', ability, id: piece.id, x: at.x, y: at.y, extraIds });
+      this.removePiece(piece, events);
+      this.explode(at, events);
+      return events;
+    }
+    if (ability === 'dash') {
+      const speed = Math.hypot(body.velocity.x, body.velocity.y) || 1;
+      this.kit.Body.setVelocity(body, { x: (body.velocity.x / speed) * ABILITY.dash.speed, y: (body.velocity.y / speed) * ABILITY.dash.speed });
+      this.dashUntil = this.stepCount + ABILITY.dash.duration;
+    } else if (ability === 'split') {
+      extraIds.push(...this.splitCards(piece));
+    } else if (ability === 'bounce') {
+      for (const part of body.parts) { part.restitution = ABILITY.bounce.restitution; part.friction = ABILITY.bounce.friction; }
+      this.bouncy = body;
+      this.kit.Body.setVelocity(body, { x: body.velocity.x * ABILITY.bounce.boost, y: body.velocity.y * ABILITY.bounce.boost });
+    } else if (ability === 'slam') {
+      this.kit.Body.setMass(body, body.mass * ABILITY.slam.massFactor);
+      this.kit.Body.setVelocity(body, { x: 0, y: ABILITY.slam.speed });
+      this.kit.Body.setAngularVelocity(body, 0);
+    }
+    events.unshift({ type: 'ability', ability, id: piece.id, x: at.x, y: at.y, extraIds });
+    return events;
+  }
+
+  /** 煙火爆炸: push and damage everything nearby, fading with distance. */
+  private explode(center: Point, events: SimEvent[]): void {
+    const { radius, push, strength } = ABILITY.firework;
+    const strongest = new Map<number, Hit>();
+    for (const piece of this.pieces.values()) {
+      if (piece.kind === 'attacker' || piece.knockedOutAt !== undefined || !piece.material) continue;
+      const dx = piece.body.position.x - center.x, dy = piece.body.position.y - center.y;
+      const distance = Math.hypot(dx, dy);
+      if (distance > radius) continue;
+      const falloff = 1 - distance / radius;
+      const ux = distance > 1 ? dx / distance : 0, uy = distance > 1 ? dy / distance : -1;
+      this.kit.Sleeping.set(piece.body, false);
+      this.kit.Body.setVelocity(piece.body, { x: piece.body.velocity.x + ux * push * falloff, y: piece.body.velocity.y + uy * push * falloff });
+      const hit = strength * falloff;
+      piece.hp -= damageFrom(hit, MATERIALS[piece.material]);
+      if (piece.kind === 'target') strongest.set(piece.id, { strength: hit, source: center });
+    }
+    this.resolveDamage(strongest, events);
+  }
+
+  /** 三張牌分身: two smaller cards fan out above and below the original. */
+  private splitCards(piece: Piece): number[] {
+    const { body } = piece;
+    const shape = this.shapes.attackers.get(piece.shapeId as string) as ShapeDefinition;
+    const { spread, scale, offset } = ABILITY.split;
+    const speed = Math.hypot(body.velocity.x, body.velocity.y) || 1;
+    const nx = -body.velocity.y / speed, ny = body.velocity.x / speed;
+    const outline = shape.outline.map((p) => ({ x: p.x * scale, y: p.y * scale }));
+    const ids: number[] = [];
+    for (const side of [-1, 1]) {
+      const angle = side * spread;
+      const cos = Math.cos(angle), sin = Math.sin(angle);
+      const card = this.kit.Bodies.fromVertices(body.position.x + nx * offset * side, body.position.y + ny * offset * side, outline.map((p) => ({ ...p })), {
+        density: ATTACKER.density, friction: ATTACKER.friction, frictionStatic: ATTACKER.frictionStatic,
+        frictionAir: ATTACKER.frictionAir, restitution: ATTACKER.restitution, label: piece.shapeId,
+      }, true, 0, 0);
+      const anchor = anchorFor(card, minOf(outline));
+      this.kit.Body.setInertia(card, compoundInertia(card.position, card.parts.slice(1)));
+      this.kit.Body.setVelocity(card, { x: body.velocity.x * cos - body.velocity.y * sin, y: body.velocity.x * sin + body.velocity.y * cos });
+      this.kit.Body.setAngle(card, body.angle);
+      this.kit.Composite.add(this.engine.world, card);
+      this.pieces.set(card.id, { id: card.id, kind: 'attacker', body: card, shapeId: piece.shapeId, w: shape.width * scale, h: shape.height * scale, anchor, hp: Infinity, maxHp: Infinity, cracked: false, artScale: scale });
+      ids.push(card.id);
+    }
+    return ids;
+  }
+
   /**
    * A 四十塊 is out: score it now, then kick it away from what hit it (always upward) and let physics carry it
    * off screen. It stops colliding, so the flight never disturbs the tower.
    */
-  private knockOut(piece: Piece, hit: { strength: number; from: SimBody; point: Point } | undefined, events: SimEvent[]): void {
+  private knockOut(piece: Piece, hit: Hit | undefined, events: SimEvent[]): void {
     const { body } = piece;
     piece.knockedOutAt = this.stepCount;
     this.targetsLeft--;
@@ -351,7 +497,7 @@ export class BattleSim {
     body.collisionFilter.mask = 0;
     for (const part of body.parts) part.collisionFilter.mask = 0;
     this.kit.Sleeping.set(body, false);
-    const source = hit ? (hit.from.isStatic ? hit.point : hit.from.position) : { x: body.position.x - 1, y: body.position.y + 1 };
+    const source = hit ? hit.source : { x: body.position.x - 1, y: body.position.y + 1 };
     let dx = body.position.x - source.x, dy = body.position.y - source.y;
     const length = Math.hypot(dx, dy) || 1;
     dx /= length; dy /= length;
