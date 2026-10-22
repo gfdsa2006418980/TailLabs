@@ -211,7 +211,7 @@ function syncPhase() {
     if (run.phase === 'over') audio.play('gameOver');
     if (run.phase === 'victory') audio.play('victory');
   }
-  text('announcement', run.phase === 'choice' ? '戰術升級，請選擇一張強化。' : run.phase === 'over' ? '防線失守，本局結束。' : run.phase === 'running' ? '防守開始。' : '');
+  text('announcement', run.phase === 'choice' ? '戰地補給到達，選擇一張。' : run.phase === 'over' ? '防線失守。本局結束。' : run.phase === 'running' ? '防守開始。' : '');
   if (run.phase === 'ready') {
     showModal(deployScreen(meta.effects, meta.value.TalentPoints, meta.value.HighestClearedWave, !readFlag(TIPS_KEY)), 'deploy');
     el('start').onclick = startRun;

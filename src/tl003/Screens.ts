@@ -20,7 +20,7 @@ const CATEGORY_ICON: Record<string, string> = {
 };
 
 export function deployScreen(effects: PermanentEffects, talentPoints: number, bestWave: number, showTips: boolean) {
-  const tips = [['icon_money', '擊殺賺錢'], ['icon_card_kinetic', '升級三選一'], ['icon_skill_rifle', '拖曳技能'], ['icon_wave', '02:00 屍王']];
+  const tips = [['icon_money', '擊殺賺錢'], ['icon_card_kinetic', '戰地補給'], ['icon_skill_rifle', '拖曳技能'], ['icon_wave', '02:00 屍王']];
   return `<div class="screen deploy-screen">
     <div class="deploy-hero" aria-hidden="true"><span class="hero-glow"></span>${px('zombie_walker_0', 3)}${px('merc_rifle', 5)}${px('zombie_runner_1', 3)}</div>
     <h2 id="modal-title" class="logo"><span>無盡防線</span><small>THE LAST LINE</small></h2>
@@ -28,7 +28,7 @@ export function deployScreen(effects: PermanentEffects, talentPoints: number, be
     ${showTips ? `<ul class="deploy-tips">${tips.map(([icon, label]) => `<li>${px(icon, 2)}<span>${label}</span></li>`).join('')}</ul>` : ''}
     <div class="screen-actions">
       <button id="start" class="primary go">部署 <span>▶</span></button>
-      <button id="open-talents" class="camp-button">${px('icon_star', 2)}<b>天賦星盤</b>${talentPoints > 0 ? `<span class="badge">${formatNumber(talentPoints)}</span>` : '<span></span>'}</button>
+      <button id="open-talents" class="camp-button">${px('icon_star', 2)}<b>指揮星圖</b>${talentPoints > 0 ? `<span class="badge">${formatNumber(talentPoints)}</span>` : '<span></span>'}</button>
       ${bestWave > 0 ? `<p class="best">最高 <b>W${bestWave.toString().padStart(2, '0')}</b></p>` : ''}
     </div>
   </div>`;
@@ -47,7 +47,7 @@ const KIND_TAG: Record<string, string> = { synergy: '連動', evolution: '質變
 export function choiceScreen(level: number, cards: readonly UpgradeCard[], reroll?: { cost: number; affordable: boolean }, picks = 1) {
   const market = cards.length > 3 || picks > 1;
   return `<div class="screen choice-screen${market ? ' market' : ''}">
-    <div class="choice-head"><small>${market ? 'BLACK MARKET' : 'LEVEL UP'}</small><b id="modal-title">Lv ${level}<span class="sr-only">，選擇一張強化</span></b>${market ? `<span class="picks-left">再選 ${picks} 張</span>` : ''}</div>
+    <div class="choice-head"><small>${market ? 'BLACK MARKET' : 'FIELD SUPPLY'}</small><b id="modal-title">Lv ${level}<span class="sr-only">，戰地補給，選擇一張</span></b>${market ? `<span class="picks-left">再選 ${picks} 張</span>` : ''}</div>
     <div class="pick-row">${cards.map((card, i) => {
       const rarity = card.rarity ?? 'common', tag = KIND_TAG[card.kind ?? ''];
       return `<div class="pick-card rarity-${rarity}${card.kind && card.kind !== 'normal' ? ' kind-' + card.kind : ''}" style="--card-color:${card.color};--rarity:${RARITIES[rarity].color}">
@@ -84,14 +84,14 @@ export function resultScreen(r: Report) {
       <div>${px('icon_money', 2)}<strong data-count="${r.income}" data-format="number">0</strong><span>收入</span></div>
     </div>
     <div class="result-points">
-      <span>天賦點</span><strong id="result-points">+0</strong>
+      <span>戰功 ★</span><strong id="result-points">+0</strong>
       <small>時間 +${r.timePoints} · 收入 +${r.incomePoints}</small>
       ${record ? `<em class="new-best">新紀錄 W${r.bestWave.toString().padStart(2, '0')}</em>` : ''}
     </div>
     <div class="screen-actions">
-      <button id="result-talents" class="primary go">投資天賦 <span>${px('icon_star', 1)} ${formatNumber(r.points)}</span></button>
+      <button id="result-talents" class="primary go">分配戰功 <span>${px('icon_star', 1)} ${formatNumber(r.points)}</span></button>
       <button id="retry" class="camp-button"><b>再守一次</b><span>→</span></button>
-      ${r.persistent ? '' : '<p class="best warn">瀏覽器無法保存，天賦點只留在此分頁</p>'}
+      ${r.persistent ? '' : '<p class="best warn">無法存檔。戰功只留在此分頁</p>'}
     </div>
   </div>`;
 }

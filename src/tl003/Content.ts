@@ -103,7 +103,7 @@ export const CARD_DEFS: readonly CardDef[] = [
   { id: 'plating', kind: 'normal', name: '鋼板加固', category: '防守', color: B, value: 0.08, effect: 'reduction',
     short: v => `拒馬減傷 +${pct(v)}`, description: v => `拒馬受到的傷害 ×${Number((1 - v).toFixed(2))}，可無限疊乘，永遠不會到 0。`, flavor: '焊上去，別問哪裡拆來的。' },
   { id: 'spikes', kind: 'normal', name: '尖刺拒馬', category: '防守', color: B, value: 0.5, effect: 'thorns',
-    short: v => `反傷 ${pct(v)} 步槍傷害/秒`, description: v => `啃咬拒馬的敵人每秒受到 ${pct(v)} 步槍普攻傷害的動能反傷。`, flavor: '咬下去之前最好想清楚。' },
+    short: v => `每秒反傷 ${pct(v)}`, description: v => `啃咬拒馬的敵人每秒受到 ${pct(v)} 步槍普攻傷害的動能反傷。`, flavor: '咬下去之前最好想清楚。' },
   // Synergies (§37): only drawn once both elements are in the build.
   { id: 'phosphorus', kind: 'synergy', fixedRarity: 'rare', elements: ['動能', '火焰'], name: '白磷彈頭', category: '連動', color: F, value: 0.25, effect: 'synergy',
     short: () => '動能普攻附加燃燒', description: v => `動能普攻命中時，以該發傷害的 ${pct(v)} 附加燃燒。`, flavor: '打中的地方會一直燒。' },
@@ -118,7 +118,7 @@ export const CARD_DEFS: readonly CardDef[] = [
   { id: 'conductor', kind: 'synergy', fixedRarity: 'rare', elements: ['生化', '電能'], name: '腐蝕導體', category: '連動', color: B, value: 0.5, effect: 'synergy',
     short: () => '腐蝕提高感電累積', description: v => `感電累積 ×（1 + ${v} × 腐蝕強度）。`, flavor: '鏽掉的金屬導電最好。' },
   // Evolutions (§24): legendary, guaranteed once the recipe is complete; one variant per skill per run.
-  { id: 'frag', kind: 'evolution', fixedRarity: 'legendary', merc: 'rifle', recipe: ['kinetic', 'kinetic', 'radius'], name: '破片手榴彈', category: '質變', color: K, value: 0.3, effect: 'evolution',
+  { id: 'frag', kind: 'evolution', fixedRarity: 'legendary', merc: 'rifle', recipe: ['kinetic', 'kinetic', 'radius'], name: '集束破片', category: '質變', color: K, value: 0.3, effect: 'evolution',
     short: () => '爆炸噴出 6 枚破片', description: v => `手榴彈爆炸後噴出 6 枚破片，各打最近的敵人，造成 ${pct(v)} 爆炸傷害。`, flavor: '破片會自己找人。' },
   { id: 'double', kind: 'evolution', fixedRarity: 'legendary', merc: 'rifle', recipe: ['haste', 'speed', 'speed'], name: '雙重投擲', category: '質變', color: K, value: 0.7, effect: 'evolution',
     short: () => '一次投兩顆', description: v => `手榴彈一次投出兩顆，單顆傷害 ×${v}。`, flavor: '一顆不夠，那就兩顆。' },
@@ -138,17 +138,17 @@ export const CARD_DEFS: readonly CardDef[] = [
     short: () => '命中後分出 2 道射線', description: v => `雷射命中第一名敵人後分出 2 道副射線，各造成 ${pct(v)} 傷害。`, flavor: '光會轉彎，你只是沒看過。' },
   // Black-market curses (core 黑市補給 only): a strong bonus with a lasting penalty. Bonus = value × level scale × 2.5.
   { id: 'curse_powder', kind: 'curse', fixedRarity: 'rare', name: '血汗火藥', category: '詛咒', color: '#b23a48', value: 0.6, effect: 'curse',
-    short: v => `動能 +${pct(v)}・拒馬上限 ×0.85`, description: v => `所有動能傷害 +${pct(v)}；拒馬最大生命 ×0.85。`, flavor: '工廠沒人敢問這批火藥怎麼來的。' },
+    short: v => `動能 +${pct(v)}・拒馬 ×0.85`, description: v => `所有動能傷害 +${pct(v)}；拒馬最大生命 ×0.85。`, flavor: '工廠沒人敢問這批火藥怎麼來的。' },
   { id: 'curse_fuel', kind: 'curse', fixedRarity: 'rare', name: '劣質燃料', category: '詛咒', color: '#b23a48', value: 0.8, effect: 'curse',
     short: v => `燃燒 +${pct(v)}・攻速 −10%`, description: v => `火焰持續傷害 +${pct(v)}；全隊攻擊速度 −10%。`, flavor: '燒得很旺，也很嗆。' },
   { id: 'curse_salvage', kind: 'curse', fixedRarity: 'rare', name: '腐爛補給', category: '詛咒', color: '#b23a48', value: 0.6, effect: 'curse',
-    short: v => `擊殺獎金 +${pct(v)}・修復 ×0.7`, description: v => `擊殺獎金 +${pct(v)}；修復拒馬的修復量 ×0.7。`, flavor: '過期了，但還能賣。' },
+    short: v => `獎金 +${pct(v)}・修復 ×0.7`, description: v => `擊殺獎金 +${pct(v)}；修復拒馬的修復量 ×0.7。`, flavor: '過期了，但還能賣。' },
   { id: 'curse_battery', kind: 'curse', fixedRarity: 'rare', name: '過載電池', category: '詛咒', color: '#b23a48', value: 0.7, effect: 'curse',
-    short: v => `技能傷害 +${pct(v)}・冷卻 ×1.2`, description: v => `所有主動技能傷害 +${pct(v)}；技能冷卻 ×1.2。`, flavor: '電池在發燙，別抱太緊。' },
+    short: v => `技能 +${pct(v)}・冷卻 ×1.2`, description: v => `所有主動技能傷害 +${pct(v)}；技能冷卻 ×1.2。`, flavor: '電池在發燙，別抱太緊。' },
   { id: 'curse_contract', kind: 'curse', fixedRarity: 'rare', name: '黑市合約', category: '詛咒', color: '#b23a48', value: 0.25, effect: 'curse',
-    short: v => `升級費用 −${pct(v)}・拒馬受傷 ×1.15`, description: v => `傭兵升級費用 ×${Number((1 - v).toFixed(2))}；拒馬受到的傷害 ×1.15。`, flavor: '價錢很好，條款很爛。' },
+    short: v => `升級 −${pct(v)}・受傷 ×1.15`, description: v => `傭兵升級費用 ×${Number((1 - v).toFixed(2))}；拒馬受到的傷害 ×1.15。`, flavor: '價錢很好，條款很爛。' },
   { id: 'curse_stim', kind: 'curse', fixedRarity: 'rare', name: '賭命藥劑', category: '詛咒', color: '#b23a48', value: 0.15, effect: 'curse',
-    short: v => `暴擊率 +${pct(v)}・拒馬上限 ×0.8`, description: v => `暴擊率 +${pct(v)}；拒馬最大生命 ×0.8。`, flavor: '打完這針，手就不會抖了。' },
+    short: v => `暴擊 +${pct(v)}・拒馬 ×0.8`, description: v => `暴擊率 +${pct(v)}；拒馬最大生命 ×0.8。`, flavor: '打完這針，手就不會抖了。' },
 ];
 export const cardDef = (id: string) => CARD_DEFS.find(def => def.id === id);
 /** A definition at a rarity: scaled magnitude, card face and rules text. */

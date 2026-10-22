@@ -59,65 +59,65 @@ export class LocalMetaMirror {
     this.refresh(); this.inRun = true; return true;
   }
   buyTalent(id: string): { ok: boolean; message: string } {
-    if (this.inRun) return { ok: false, message: '請在本局結束後投資天賦。' };
+    if (this.inRun) return { ok: false, message: '戰鬥中。回營再分配戰功。' };
     this.refresh();
     const node = talentById(id), tree = this.tree;
-    if (!node || !isRevealed(tree, node.id)) return { ok: false, message: '先對相鄰節點投入第 1 點，即可探索這個位置。' };
+    if (!node || !isRevealed(tree, node.id)) return { ok: false, message: '區域未偵察。先升級相鄰節點。' };
     const level = tree.nodes[node.id] ?? 0;
-    if (level >= tree.maxNodeLevel) return { ok: false, message: '此節點已達本階上限，突破後可繼續提升。' };
+    if (level >= tree.maxNodeLevel) return { ok: false, message: '已達本階上限。晉階後再升。' };
     const cost = talentCost(level, node.id);
-    if (this.value.TalentPoints < cost) return { ok: false, message: '天賦點不足，再守一局取得更多點數。' };
+    if (this.value.TalentPoints < cost) return { ok: false, message: '戰功不足，再撐一場。' };
     tree.nodes[node.id] = level + 1;
     this.persist({ ...this.value, TalentPoints: this.value.TalentPoints - cost, TalentTreeJson: JSON.stringify(tree) });
-    return { ok: true, message: `${node.name}提升至 Lv.${level + 1}。${level === 0 ? '相鄰節點已揭露。' : '成長將在下一局生效。'}` };
+    return { ok: true, message: `${node.name}升至 Lv${level + 1}。${level === 0 ? '相鄰區域已偵察。' : '下一局生效。'}` };
   }
   // ---------- tactical cores: unlock with points, swap freely between runs, forget for a full refund ----------
   unlockCore(id: string): { ok: boolean; message: string } {
-    if (this.inRun) return { ok: false, message: '戰鬥中無法調整戰術核心。' };
+    if (this.inRun) return { ok: false, message: '戰鬥中。回營再調整核心。' };
     this.refresh(); const core = coreById(id), tree = this.tree;
-    if (!core || !isCoreRevealed(tree, id)) return { ok: false, message: '先投資相鄰節點，才能看到這個核心。' };
-    if (tree.unlockedCoreTalents.includes(id)) return { ok: false, message: '這個核心已經解鎖。' };
-    if (this.value.TalentPoints < core.cost) return { ok: false, message: `戰功不足，還差 ${core.cost - this.value.TalentPoints}。` };
+    if (!core || !isCoreRevealed(tree, id)) return { ok: false, message: '區域未偵察。先升級相鄰節點。' };
+    if (tree.unlockedCoreTalents.includes(id)) return { ok: false, message: '此核心已解鎖。' };
+    if (this.value.TalentPoints < core.cost) return { ok: false, message: `戰功不足，還差 ${core.cost - this.value.TalentPoints} ★。` };
     tree.unlockedCoreTalents.push(id);
     this.persist({ ...this.value, TalentPoints: this.value.TalentPoints - core.cost, TalentTreeJson: JSON.stringify(tree) });
-    return { ok: true, message: `${core.name}已解鎖，裝進槽位才會生效。` };
+    return { ok: true, message: `${core.name}已解鎖。裝上槽位才生效。` };
   }
   forgetCore(id: string): { ok: boolean; message: string } {
-    if (this.inRun) return { ok: false, message: '戰鬥中無法調整戰術核心。' };
+    if (this.inRun) return { ok: false, message: '戰鬥中。回營再調整核心。' };
     this.refresh(); const core = coreById(id), tree = this.tree;
-    if (!core || !tree.unlockedCoreTalents.includes(id)) return { ok: false, message: '這個核心尚未解鎖。' };
+    if (!core || !tree.unlockedCoreTalents.includes(id)) return { ok: false, message: '此核心未解鎖。' };
     tree.unlockedCoreTalents = tree.unlockedCoreTalents.filter(c => c !== id);
     tree.activeCoreTalents = tree.activeCoreTalents.filter(c => c !== id);
     this.persist({ ...this.value, TalentPoints: this.value.TalentPoints + core.cost, TalentTreeJson: JSON.stringify(tree) });
-    return { ok: true, message: `已遺忘${core.name}，退回 ${core.cost} 戰功。` };
+    return { ok: true, message: `已遺忘${core.name}。退回 ${core.cost} 戰功。` };
   }
   equipCore(id: string): { ok: boolean; message: string } {
-    if (this.inRun) return { ok: false, message: '戰鬥中無法調整戰術核心。' };
+    if (this.inRun) return { ok: false, message: '戰鬥中。回營再調整核心。' };
     this.refresh(); const core = coreById(id), tree = this.tree;
-    if (!core || !tree.unlockedCoreTalents.includes(id)) return { ok: false, message: '先解鎖這個核心。' };
-    if (tree.activeCoreTalents.includes(id)) return { ok: false, message: '這個核心已經裝上了。' };
+    if (!core || !tree.unlockedCoreTalents.includes(id)) return { ok: false, message: '先解鎖此核心。' };
+    if (tree.activeCoreTalents.includes(id)) return { ok: false, message: '此核心已裝上。' };
     const conflicts = coreConflicts(tree, id);
-    if (conflicts.length) return { ok: false, message: `和「${conflicts.map(c => coreById(c)!.name).join('、')}」互斥，先卸下。` };
-    if (tree.activeCoreTalents.length >= coreSlots(tree)) return { ok: false, message: '槽位已滿，先卸下一個核心。' };
+    if (conflicts.length) return { ok: false, message: `與「${conflicts.map(c => coreById(c)!.name).join('、')}」互斥，先卸下。` };
+    if (tree.activeCoreTalents.length >= coreSlots(tree)) return { ok: false, message: '此槽已滿，先卸下一個核心。' };
     tree.activeCoreTalents.push(id);
     this.persist({ ...this.value, TalentTreeJson: JSON.stringify(tree) });
-    return { ok: true, message: `${core.name}已裝上，下一局生效。` };
+    return { ok: true, message: `${core.name}已裝上。下一局生效。` };
   }
   unequipCore(id: string): { ok: boolean; message: string } {
-    if (this.inRun) return { ok: false, message: '戰鬥中無法調整戰術核心。' };
+    if (this.inRun) return { ok: false, message: '戰鬥中。回營再調整核心。' };
     this.refresh(); const tree = this.tree;
-    if (!tree.activeCoreTalents.includes(id)) return { ok: false, message: '這個核心沒有裝上。' };
+    if (!tree.activeCoreTalents.includes(id)) return { ok: false, message: '此核心未裝上。' };
     tree.activeCoreTalents = tree.activeCoreTalents.filter(c => c !== id);
     this.persist({ ...this.value, TalentTreeJson: JSON.stringify(tree) });
     return { ok: true, message: `${coreById(id)?.name ?? '核心'}已卸下。` };
   }
   breakthrough(): { ok: boolean; message: string } {
-    if (this.inRun) return { ok: false, message: '請在本局結束後突破星盤。' };
+    if (this.inRun) return { ok: false, message: '戰鬥中。回營再晉階。' };
     this.refresh(); const tree = this.tree;
-    if (!canBreakthrough(tree)) return { ok: false, message: `任一節點達到 Lv.${tree.maxNodeLevel} 後即可突破。` };
+    if (!canBreakthrough(tree)) return { ok: false, message: `任一節點達 Lv${tree.maxNodeLevel} 即可晉階。` };
     tree.tier++; tree.maxNodeLevel += 10;
     this.persist({ ...this.value, TalentTreeJson: JSON.stringify(tree) });
-    return { ok: true, message: `星盤突破至第 ${tree.tier} 階，節點上限 Lv.${tree.maxNodeLevel}。既有等級完整保留。` };
+    return { ok: true, message: `星圖晉階 T${tree.tier}。節點上限 Lv${tree.maxNodeLevel}，等級全數保留。` };
   }
   settle(run: object, points: number, clearedWave: number): boolean {
     if (this.settled.has(run)) return false;

@@ -71,14 +71,14 @@ export class TalentScreen {
     const selected = this.selected.type === 'node' && this.selected.id === id;
     const classes = ['star-node', known ? 'revealed' : 'unexplored', owned ? 'invested' : '', selected ? 'selected' : '',
       this.bought === id ? 'just-bought' : '', this.revealed.has(id) ? 'just-revealed' : ''].filter(Boolean).join(' ');
-    return `<button id="talent-${id}" class="${classes}" data-talent="${id}" data-ring="${this.ringOf(node.x, node.y)}" style="left:${node.x}px;top:${node.y}px;--node-color:${node.color}" aria-label="${known ? `${node.name}，等級 ${owned}，本階上限 ${tree.maxNodeLevel}` : '未探索節點，投資相鄰節點後揭露'}" aria-pressed="${selected}"><span class="node-symbol">${known ? node.glyph : '?'}</span><span class="node-name">${known ? node.name : '???'}</span><small>${known ? `${owned}/${tree.maxNodeLevel}` : ''}</small></button>`;
+    return `<button id="talent-${id}" class="${classes}" data-talent="${id}" data-ring="${this.ringOf(node.x, node.y)}" style="left:${node.x}px;top:${node.y}px;--node-color:${node.color}" aria-label="${known ? `${node.name}，等級 ${owned}，本階上限 ${tree.maxNodeLevel}` : '未偵察節點，升級相鄰節點後揭露'}" aria-pressed="${selected}"><span class="node-symbol">${known ? node.glyph : '?'}</span><span class="node-name">${known ? node.name : '???'}</span><small>${known ? `${owned}/${tree.maxNodeLevel}` : ''}</small></button>`;
   }
   private coreButton(tree: TalentTree, id: string) {
     const core = coreById(id)!, known = isCoreRevealed(tree, id), unlocked = isCoreUnlocked(tree, id), equipped = isCoreActive(tree, id);
     const selected = this.selected.type === 'core' && this.selected.id === id;
     const classes = ['star-node', 'core-node', known ? 'revealed' : 'unexplored', unlocked ? 'unlocked' : '', equipped ? 'equipped' : '', selected ? 'selected' : '',
       this.bought === id ? 'just-bought' : '', this.revealed.has(id) ? 'just-revealed' : ''].filter(Boolean).join(' ');
-    return `<button id="core-${id}" class="${classes}" data-core="${id}" data-ring="${this.ringOf(core.x, core.y)}" style="left:${core.x}px;top:${core.y}px;--node-color:${core.color}" aria-label="${known ? `戰術核心 ${core.name}${equipped ? '，已裝上' : unlocked ? '，已解鎖' : ''}` : '未探索的戰術核心'}" aria-pressed="${selected}"><span class="node-symbol">${known ? '✠' : '?'}</span><span class="node-name">${known ? core.name : '???'}</span><small>${known ? equipped ? '裝備中' : unlocked ? '已解鎖' : `★${core.cost}` : ''}</small></button>`;
+    return `<button id="core-${id}" class="${classes}" data-core="${id}" data-ring="${this.ringOf(core.x, core.y)}" style="left:${core.x}px;top:${core.y}px;--node-color:${core.color}" aria-label="${known ? `戰術核心 ${core.name}${equipped ? '，已裝上' : unlocked ? '，已解鎖' : ''}` : '未偵察的戰術核心'}" aria-pressed="${selected}"><span class="node-symbol">${known ? '✠' : '?'}</span><span class="node-name">${known ? core.name : '???'}</span><small>${known ? equipped ? '裝備中' : unlocked ? '已解鎖' : `★${core.cost}` : ''}</small></button>`;
   }
   private slots(tree: TalentTree) {
     const open = coreSlots(tree);
@@ -94,13 +94,13 @@ export class TalentScreen {
     if (this.selected.type === 'core') {
       const core = coreById(this.selected.id)!, known = isCoreRevealed(tree, core.id), unlocked = isCoreUnlocked(tree, core.id), equipped = isCoreActive(tree, core.id);
       const conflicts = coreConflicts(tree, core.id), full = tree.activeCoreTalents.length >= coreSlots(tree);
-      const action = !known ? '<button id="core-action" disabled><span>未揭露</span></button>'
+      const action = !known ? '<button id="core-action" disabled><span>未偵察</span></button>'
         : !unlocked ? `<button id="core-action" data-action="unlock" ${points >= core.cost ? '' : 'disabled'}>${points >= core.cost ? `<span>解鎖</span><b>${px('icon_star', 1)} ${core.cost}</b>` : `<span>還差 ${core.cost - points}</span>`}</button>`
         : equipped ? '<button id="core-action" data-action="unequip"><span>卸下</span></button>'
         : `<button id="core-action" data-action="equip" ${conflicts.length || full ? 'disabled' : ''}><span>${conflicts.length ? '互斥' : full ? '槽位已滿' : '裝上'}</span></button>`;
       return `<section class="talent-inspector core-inspector" aria-label="所選戰術核心" style="--node-color:${core.color}">
-        <div class="talent-detail-heading"><span class="node-symbol">✠</span><strong>${known ? core.name : '未探索'}</strong><span>${known ? `戰術核心・${core.kind}` : ''}</span></div>
-        ${known ? `<p class="core-rule">${core.rule}</p><p class="core-price">代價：${core.price}</p><p class="flavor">${core.flavor}${core.exclusive.length ? `<br><em>互斥：${core.exclusive.map(e => coreById(e)!.name).join('、')}</em>` : ''}</p>` : '<p>投資相鄰節點即可揭露。</p>'}
+        <div class="talent-detail-heading"><span class="node-symbol">✠</span><strong>${known ? core.name : '未偵察'}</strong><span>${known ? `戰術核心・${core.kind}` : ''}</span></div>
+        ${known ? `<p class="core-rule">${core.rule}</p><p class="core-price">代價：${core.price}</p><p class="flavor">${core.flavor}${core.exclusive.length ? `<br><em>互斥：${core.exclusive.map(e => coreById(e)!.name).join('、')}</em>` : ''}</p>` : '<p>升級相鄰節點即可偵察。</p>'}
         <div class="core-buttons">${action}${unlocked ? `<button id="core-forget" class="forget"><span>遺忘</span><b>${px('icon_star', 1)} +${core.cost}</b></button>` : ''}</div>
       </section>`;
     }
@@ -110,10 +110,10 @@ export class TalentScreen {
     const effect = node.id === 'active_skill_haste'
       ? `急速 <b>${decimal(100 * (multiplier - 1))}</b> → <em>${decimal(100 * (multiplier * node.growth - 1))}</em>`
       : node.growth === 1 ? `等級 <b>${level}</b> → <em>${level + 1}</em>` : `×<b>${decimal(multiplier)}</b> → <em>×${decimal(multiplier * node.growth)}</em>`;
-    const blocked = !revealed ? '未揭露' : atCap ? '本階已滿' : !canBuy ? `還差 ${formatNumber(cost - points)}` : '';
-    return `<section class="talent-inspector" aria-label="所選天賦" style="--node-color:${node.color}">
-      <div class="talent-detail-heading"><span class="node-symbol">${revealed ? node.glyph : '?'}</span><strong>${revealed ? node.name : '未探索'}</strong><span>${revealed ? `${node.category}・Lv ${level}/${tree.maxNodeLevel}` : ''}</span></div>
-      <div class="talent-effect">${revealed ? effect : '投資相鄰節點即可揭露'}</div>
+    const blocked = !revealed ? '未偵察' : atCap ? '本階已滿' : !canBuy ? `還差 ${formatNumber(cost - points)}` : '';
+    return `<section class="talent-inspector" aria-label="所選節點" style="--node-color:${node.color}">
+      <div class="talent-detail-heading"><span class="node-symbol">${revealed ? node.glyph : '?'}</span><strong>${revealed ? node.name : '未偵察'}</strong><span>${revealed ? `${node.category}・Lv ${level}/${tree.maxNodeLevel}` : ''}</span></div>
+      <div class="talent-effect">${revealed ? effect : '升級相鄰節點即可偵察'}</div>
       ${revealed ? `<p>${node.description}。<span class="flavor">${node.flavor}</span></p>` : ''}
       <button id="talent-buy" ${canBuy ? '' : 'disabled'}>${blocked ? `<span>${blocked}</span>` : `<span>▲ 升級</span><b>${px('icon_star', 1)} ${formatNumber(cost)}</b>`}</button>
     </section>`;
@@ -136,7 +136,7 @@ export class TalentScreen {
       <div class="star-scroll talent-scroll" aria-label="可拖曳的指揮星圖"><div class="star-map" style="width:${MAP_SIZE}px;height:${MAP_SIZE}px"><svg class="talent-links" viewBox="0 0 ${MAP_SIZE} ${MAP_SIZE}" aria-hidden="true">${lines}</svg>${TALENTS.map(n => this.nodeButton(tree, n.id)).join('')}${CORES.map(c => this.coreButton(tree, c.id)).join('')}</div></div>
       ${this.inspector(tree)}
       ${breakthrough ? `<button id="talent-breakthrough" class="talent-breakthrough">晉階至第 ${tree.tier + 1} 階 <span>上限 +10${tree.tier < 3 ? '・開放核心槽' : ''} ↗</span></button>` : ''}
-      <p id="talent-notice" class="talent-notice" role="status" aria-live="polite">${this.notice || (this.meta.persistent ? '' : '瀏覽器無法保存，成長只留在此分頁')}</p>
+      <p id="talent-notice" class="talent-notice" role="status" aria-live="polite">${this.notice || (this.meta.persistent ? '' : '無法存檔。戰功只留在此分頁')}</p>
       <button id="talent-deploy" class="primary go">部署下一局 <span>▶</span></button>`;
     if (!this.dialog.open) this.dialog.showModal();
     this.bindMap();
