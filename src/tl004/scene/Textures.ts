@@ -109,6 +109,22 @@ export function puffTexture(scene: Phaser.Scene): string {
   return key;
 }
 
+/**
+ * A round dot baked once into a texture. Trails and the aim preview stamp copies of it instead of drawing
+ * circles with Graphics, which Phaser re-tessellates on every frame.
+ */
+export function dotTexture(scene: Phaser.Scene, key: string, radius: number, fill: number, fillAlpha = 1, stroke?: { width: number; color: number; alpha: number }): string {
+  if (scene.textures.exists(key)) return key;
+  const pad = stroke ? Math.ceil(stroke.width / 2) + 1 : 1;
+  const size = Math.ceil((radius + pad) * 2);
+  const g = scene.make.graphics({}, false);
+  g.fillStyle(fill, fillAlpha).fillCircle(size / 2, size / 2, radius);
+  if (stroke) g.lineStyle(stroke.width, stroke.color, stroke.alpha).strokeCircle(size / 2, size / 2, radius);
+  g.generateTexture(key, size, size);
+  g.destroy();
+  return key;
+}
+
 export function sparkTexture(scene: Phaser.Scene): string {
   const key = 'tl004-spark';
   if (scene.textures.exists(key)) return key;

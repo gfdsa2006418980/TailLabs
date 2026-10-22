@@ -12,9 +12,9 @@ import type { AbilityId } from '../config/Abilities.ts';
 import { CameraRig } from './CameraRig.ts';
 import type { Rect } from './CameraRig.ts';
 import { CREAM, INK, ROSE, ROSE_BROWN } from './Palette.ts';
-import { buildScenery, buildSling } from './Scenery.ts';
+import { bandSegment, buildScenery, buildSling, placeSegment } from './Scenery.ts';
 import type { SlingParts } from './Scenery.ts';
-import { blockTexture, debrisTexture, puffTexture, sparkTexture } from './Textures.ts';
+import { blockTexture, debrisTexture, dotTexture, puffTexture, sparkTexture } from './Textures.ts';
 
 type BlockMaterial = Exclude<MaterialId, 'target'>;
 
@@ -71,10 +71,17 @@ export class BattleScene extends Phaser.Scene {
   private rig!: CameraRig;
   private stepper!: FixedStepper;
   private sling!: SlingParts;
-  private bandBack!: Phaser.GameObjects.Graphics;
-  private bandFront!: Phaser.GameObjects.Graphics;
-  private preview!: Phaser.GameObjects.Graphics;
-  private trails!: Phaser.GameObjects.Graphics;
+  private bandBack!: Phaser.GameObjects.Image;
+  private bandFront!: Phaser.GameObjects.Image;
+  private bandInk!: Phaser.GameObjects.Image;
+  /** Aim preview: a small pool of dot images, moved only when the aim changes. */
+  private aimDots: Phaser.GameObjects.Image[] = [];
+  private aimKey = '';
+  /** Flight trails as Blitter bobs (one draw call each), added as the partner flies. */
+  private trailNow!: Phaser.GameObjects.Blitter;
+  private trailLast!: Phaser.GameObjects.Blitter;
+  /** Finished score popups kept for reuse, keyed by colour and text (no new text texture per break). */
+  private popupPool = new Map<string, Phaser.GameObjects.Text[]>();
   private slingSprite!: Phaser.GameObjects.Image;
   private queue: Phaser.GameObjects.Image[] = [];
   private sprites = new Map<number, Phaser.GameObjects.Image>();
@@ -120,15 +127,16 @@ export class BattleScene extends Phaser.Scene {
     this.sprites = new Map(); this.debris = new Map(); this.queue = [];
     this.started = false; this.paused = false; this.slingReady = false; this.aim = undefined; this.aimPointer = undefined;
     this.hitStopUntil = 0; this.slowUntil = 0; this.slowUsedThisShot = false; this.recoil = undefined;
-    this.currentTrail = []; this.lastTrail = []; this.bonuses = []; this.reported = { score: -1, shots: '', skip: false, ability: undefined, hurry: false };
+    this.currentTrail = []; this.lastTrail = []; this.aimDots = []; this.aimKey = ''; this.popupPool = new Map(); this.bonuses = []; this.reported = { score: -1, shots: '', skip: false, ability: undefined, hurry: false };
     this.stepper = new FixedStepper(STEP_MS, PHYSICS.maxStepsPerFrame);
 
     buildScenery(this);
     this.sling = buildSling(this);
-    this.bandBack = this.add.graphics().setDepth(6);
-    this.bandFront = this.add.graphics().setDepth(30);
-    this.trails = this.add.graphics().setDepth(8);
-    this.preview = this.add.graphics().setDepth(45);
+    this.bandBack = bandSegment(this, ROSE_BROWN, 1, 6);
+    this.bandFront = bandSegment(this, ROSE, 1, 30);
+    this.bandInk = bandSegment(this, INK, 0.6, 30);
+    this.trailLast = this.add.blitter(0, 0, dotTexture(this, 'tl004-trail-last', 5, 0xffffff)).setDepth(8).setAlpha(0.35);
+    this.trailNow = this.add.blitter(0, 0, dotTexture(this, 'tl004-trail-now', 6, 0xffffff)).setDepth(8).setAlpha(0.75);
     for (const material of BLOCK_DEBRIS) {
       this.debris.set(material, this.add.particles(0, 0, debrisTexture(this, material), {
         emitting: false, speed: { min: 160, max: 520 }, angle: { min: 195, max: 345 }, gravityY: 1300,
@@ -170,6 +178,9 @@ export class BattleScene extends Phaser.Scene {
     this.started = true;
     this.time.delayedCall(900, () => { if (this.rig.mode === 'tower' && this.sim.phase === 'aiming') this.toAim(); });
   }
+
+  /** The level is built and drawn (safe to stop the render loop behind a panel). */
+  get ready(): boolean { return this.created; }
 
   /** Switch to another level and start it (fly-by, then the sling). */
   startLevel(level: LevelData): void {
@@ -289,6 +300,9 @@ export class BattleScene extends Phaser.Scene {
     if (id) this.hooks.sfx.wee(id, aim.power);
     this.lastTrail = this.currentTrail;
     this.currentTrail = [];
+    this.trailLast.clear();
+    for (const point of this.lastTrail) this.trailLast.create(point.x - 6, point.y - 6);
+    this.trailNow.clear();
     this.slowUsedThisShot = false;
     this.slingSprite.setVisible(false);
     this.slingReady = false;
@@ -334,12 +348,16 @@ export class BattleScene extends Phaser.Scene {
     for (let i = 0; i < steps; i++) {
       this.handle(this.sim.step());
       const active = this.sim.activeAttackerId !== undefined ? this.sim.pieces.get(this.sim.activeAttackerId) : undefined;
-      if (active && this.sim.stepCount % SLING.trailDotEvery === 0) this.currentTrail.push({ x: active.body.position.x, y: active.body.position.y });
+      if (active && this.sim.stepCount % SLING.trailDotEvery === 0) {
+        const { x, y } = active.body.position;
+        this.currentTrail.push({ x, y });
+        this.trailNow.create(x - 7, y - 7);
+      }
     }
     this.syncSprites();
     this.updateCamera();
     this.drawSling(time);
-    this.drawGuides();
+    this.drawAimPreview();
     this.rig.update(this.paused ? 0 : delta);
     this.report();
   }
@@ -499,18 +517,34 @@ export class BattleScene extends Phaser.Scene {
     }
   }
 
+  /**
+   * Floating score text. Finished labels go back to a pool and are reused for the same text, so a big
+   * collapse does not render a new text texture for every hit.
+   */
   private popup(x: number, y: number, text: string, color: number): void {
-    const label = this.add.text(x, y, text, {
-      fontFamily: '"Zen Maru Gothic", "Hiragino Maru Gothic ProN", "PingFang TC", system-ui, sans-serif', fontSize: '46px', fontStyle: '900',
-      color: Phaser.Display.Color.IntegerToColor(color).rgba, stroke: '#332629', strokeThickness: 10,
-    }).setOrigin(0.5).setDepth(60).setScale(0.4);
+    const key = `${color}|${text}`;
+    let label = this.popupPool.get(key)?.pop();
+    if (label) label.setPosition(x, y).setAlpha(1).setVisible(true);
+    else {
+      label = this.add.text(x, y, text, {
+        fontFamily: '"Zen Maru Gothic", "Hiragino Maru Gothic ProN", "PingFang TC", system-ui, sans-serif', fontSize: '46px', fontStyle: '900',
+        color: Phaser.Display.Color.IntegerToColor(color).rgba, stroke: '#332629', strokeThickness: 10,
+      }).setOrigin(0.5).setDepth(60);
+    }
+    const done = label;
+    const release = () => {
+      done.setVisible(false);
+      const free = this.popupPool.get(key);
+      if (free) free.push(done); else this.popupPool.set(key, [done]);
+    };
     if (this.hooks.reducedMotion()) {
       label.setScale(1);
-      this.tweens.add({ targets: label, alpha: 0, delay: 500, duration: 300, onComplete: () => label.destroy() });
+      this.tweens.add({ targets: label, alpha: 0, delay: 500, duration: 300, onComplete: release });
       return;
     }
+    label.setScale(0.4);
     this.tweens.add({ targets: label, scale: 1, duration: 520, ease: 'Back.easeOut' });
-    this.tweens.add({ targets: label, y: y - 70, alpha: 0, delay: 380, duration: 520, ease: 'Cubic.easeIn', onComplete: () => label.destroy() });
+    this.tweens.add({ targets: label, y: y - 70, alpha: 0, delay: 380, duration: 520, ease: 'Cubic.easeIn', onComplete: release });
   }
 
   private squash(id: number, strength: number): void {
@@ -550,24 +584,25 @@ export class BattleScene extends Phaser.Scene {
     } else if (this.slingSprite.visible && this.slingReady) {
       this.slingSprite.setPosition(SLING_REST.x, SLING_REST.y).setRotation(0).setScale(scale);
     }
-    this.bandBack.clear().lineStyle(thickness, ROSE_BROWN, 1).lineBetween(back.x, back.y, anchor.x, anchor.y);
-    this.bandFront.clear().lineStyle(thickness + 1, ROSE, 1).lineBetween(front.x, front.y, anchor.x, anchor.y);
-    this.bandFront.lineStyle(2, INK, 0.6).lineBetween(front.x, front.y + thickness / 2, anchor.x, anchor.y + thickness / 2);
+    placeSegment(this.bandBack, back.x, back.y, anchor.x, anchor.y, thickness);
+    placeSegment(this.bandFront, front.x, front.y, anchor.x, anchor.y, thickness + 1);
+    placeSegment(this.bandInk, front.x, front.y + thickness / 2, anchor.x, anchor.y + thickness / 2, 2);
   }
 
-  private drawGuides(): void {
-    this.preview.clear();
-    if (this.aim && this.aim.power >= SLING.cancelPower) {
-      const path = predictPath(SLING_REST, this.aim.vx, this.aim.vy, GRAVITY_PER_STEP, ATTACKER.frictionAir, WORLD.groundY);
-      previewDots(path, SLING.previewFraction, SLING.previewDotEvery).forEach((dot, i, all) => {
-        const r = 9 - (i / all.length) * 4;
-        this.preview.fillStyle(CREAM, 0.95).fillCircle(dot.x, dot.y, r);
-        this.preview.lineStyle(3, INK, 0.55).strokeCircle(dot.x, dot.y, r);
-      });
-    }
-    this.trails.clear();
-    for (const point of this.lastTrail) this.trails.fillStyle(0xffffff, 0.35).fillCircle(point.x, point.y, 5);
-    for (const point of this.currentTrail) this.trails.fillStyle(0xffffff, 0.75).fillCircle(point.x, point.y, 6);
+  /** Dotted aim line. The path is only re-simulated and the dots only moved when the aim actually changes. */
+  private drawAimPreview(): void {
+    const aim = this.aim && this.aim.power >= SLING.cancelPower ? this.aim : undefined;
+    const key = aim ? `${aim.vx}|${aim.vy}` : '';
+    if (key === this.aimKey) return;
+    this.aimKey = key;
+    const dots = aim ? previewDots(predictPath(SLING_REST, aim.vx, aim.vy, GRAVITY_PER_STEP, ATTACKER.frictionAir, WORLD.groundY), SLING.previewFraction, SLING.previewDotEvery) : [];
+    const texture = dotTexture(this, 'tl004-aim-dot', 9, CREAM, 0.95, { width: 3, color: INK, alpha: 0.55 });
+    dots.forEach((dot, i) => {
+      let image = this.aimDots[i];
+      if (!image) { image = this.add.image(0, 0, texture).setDepth(45); this.aimDots.push(image); }
+      image.setPosition(dot.x, dot.y).setScale((9 - (i / dots.length) * 4) / 9).setVisible(true);
+    });
+    for (let i = dots.length; i < this.aimDots.length; i++) this.aimDots[i].setVisible(false);
   }
 
   private report(): void {

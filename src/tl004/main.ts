@@ -133,17 +133,61 @@ const game = new Phaser.Game({
     matter: { gravity: { x: 0, y: PHYSICS.gravityY }, enableSleeping: true, autoUpdate: false, debug: false },
   },
   input: { activePointers: 3 },
+  // Sound is synthesised by Sfx; Phaser's own audio system would only open a second AudioContext.
+  audio: { noAudio: true },
   scene: [scene],
 });
+
+type LoopInternals = Phaser.Core.TimeStep & { _limitRate: number };
+
+/**
+ * Physics runs 60 steps a second, so on 120 Hz+ screens every other frame would redraw the same state.
+ * Measure the display once and, if it is that fast, draw about 60 frames a second (cap 64 fps, so normal
+ * 60 Hz screens are never limited by small timing jitter).
+ */
+function capHighRefreshRate(): void {
+  const times: number[] = [];
+  const sample = (time: number) => {
+    times.push(time);
+    if (times.length < 31) { requestAnimationFrame(sample); return; }
+    const gaps = times.slice(1).map((t, i) => t - times[i]).sort((a, b) => a - b);
+    if (gaps[gaps.length >> 1] >= 10) return;
+    const loop = game.loop as LoopInternals;
+    loop.fpsLimit = 64;
+    loop.hasFpsLimit = true;
+    loop._limitRate = 1000 / 64;
+    if (loop.running) { loop.sleep(); wakeLoop(); }
+  };
+  requestAnimationFrame(sample);
+}
+capHighRefreshRate();
+
+/** Restart the render loop without a giant first frame after a pause. */
+function wakeLoop(): void {
+  if (game.loop.running) return;
+  game.loop.wake();
+  game.loop.lastTime = performance.now();
+}
 
 // Phaser only re-reads the parent size inside its own step; read it now so the canvas follows the toolbar at once.
 fitStage(stage, () => { game.scale.getParentBounds(); game.scale.refresh(); });
 
 if (import.meta.env.DEV) (window as unknown as { tl004: unknown }).tl004 = { game, scene, progress, levels, playLevel: (n: number) => playLevel(n - 1) };
 
+let sleepTimer = 0;
+/**
+ * Pause the rules whenever play is not possible, and stop drawing altogether once a panel has covered
+ * the game for a moment (start, level select, menu, result, rotate-your-phone): saves battery on phones.
+ */
 function updatePause(): void {
-  scene.setPaused(!started || document.hidden || portraitQuery.matches || resultOpen || menuOpen || selectOpen);
+  const covered = !started || portraitQuery.matches || resultOpen || menuOpen || selectOpen;
+  scene.setPaused(covered || document.hidden);
+  window.clearTimeout(sleepTimer);
+  if (!covered) { wakeLoop(); return; }
+  // Let the scene finish building and any fade or camera move settle before freezing the picture.
+  sleepTimer = window.setTimeout(() => { if (scene.ready) game.loop.sleep(); else updatePause(); }, 700);
 }
+updatePause();
 document.addEventListener('visibilitychange', updatePause);
 portraitQuery.addEventListener('change', updatePause);
 
