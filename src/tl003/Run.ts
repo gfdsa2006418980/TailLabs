@@ -20,7 +20,11 @@ export interface Enemy {
   corrosionPower: number; corrosionDuration: number; shockPower: number; shockDuration: number; hitFlash: number;
 }
 export interface Mercenary { id: number; kind: MercKind; shotTimer: number; cooldown: number }
-export interface VisualEvent { kind: 'shot' | 'flame' | 'laser' | 'blast' | 'hit' | 'kill'; x: number; y: number; fromX?: number; fromY?: number; color: string; life: number; maxLife: number; radius: number }
+export interface VisualEvent {
+  kind: 'shot' | 'flame' | 'laser' | 'blast' | 'hit' | 'kill'; x: number; y: number; fromX?: number; fromY?: number; color: string; life: number; maxLife: number; radius: number;
+  /** Presentation only: damage dealt ('hit') or money earned ('kill'). */
+  amount?: number; enemy?: EnemyKind; target?: number; skill?: boolean;
+}
 export interface FireZone { x: number; y: number; radius: number; remaining: number; power: number; pulseTimer: number; contacts: Set<number> }
 const mercY = (slot: number) => 130 + slot * 92;
 export const mercPosition = (slot: number) => ({ x: 824 + (slot === 1 ? 26 : 0), y: mercY(slot) });
@@ -138,6 +142,8 @@ export class DefenseRun {
     if (enemy.hp <= 0) return;
     const result = calculateDamage(hit, enemy, this.modifiers);
     enemy.hp -= result.final; enemy.hitFlash = 0.1;
+    if (result.final > 0) this.events.push({ kind: 'hit', x: enemy.x, y: enemy.y, color: '', life: 0.12, maxLife: 0.12, radius: 0,
+      amount: result.final, enemy: enemy.kind, target: enemy.id, skill: hit.tags.includes('Skill.Active') });
     for (const modifier of result.specials) {
       if (modifier.rule === 'ignite') this.burn(enemy, modifier.value, 4, hit.tags);
       if (modifier.rule === 'corrode') { enemy.corrosionPower += modifier.value; enemy.corrosionDuration = 6; }
@@ -146,8 +152,10 @@ export class DefenseRun {
     if (enemy.hp <= 0) this.kill(enemy);
   }
   private kill(enemy: Enemy) {
-    this.kills++; this.earn(calculateValue(enemy.reward, ['Economy.KillReward'], this.modifiers)); this.xp += enemy.xp;
+    const reward = calculateValue(enemy.reward, ['Economy.KillReward'], this.modifiers);
+    this.kills++; this.earn(reward); this.xp += enemy.xp;
     this.visual('kill', enemy.x, enemy.y, ENEMIES[enemy.kind].color, 22);
+    Object.assign(this.events[this.events.length - 1]!, { amount: reward, enemy: enemy.kind, target: enemy.id });
   }
   cast(slot: number, x: number, y: number): boolean {
     const merc = this.mercenaries[slot];

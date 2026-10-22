@@ -18,18 +18,20 @@ export const ENEMIES = {
   boss: { hp: 4000, speed: 30, defense: 40, attack: 60, reward: 150, xp: 12, color: '#d4735f', size: 2.4 },
 } as const;
 
-export interface UpgradeCard { id: string; name: string; category: string; description: string; color: string; modifier?: Modifier; effect?: 'speed' | 'haste' | 'radius' | 'wall' | 'repair' }
+export interface UpgradeCard { id: string; name: string; category: string; description: string; color: string;
+  /** One-line card face (icon + name + this), the full description sits behind the info button. */
+  short: string; modifier?: Modifier; effect?: 'speed' | 'haste' | 'radius' | 'wall' | 'repair' }
 export const CARDS: readonly UpgradeCard[] = [
-  { id: 'kinetic', name: '重型彈頭', category: '動能', description: '所有動能傷害 +45%，包含手榴彈。', color: '#e8c58b', modifier: { kind: 'Add', tags: ['Damage.Kinetic'], value: 0.45 } },
-  { id: 'burn', name: '曳光燃燒彈', category: '火焰', description: '普攻點燃：基礎每秒 4 傷、持續 4 秒。保留最強燃燒；較弱或同強度命中續時，並疊加易燃，每層燒快 25%。', color: '#ec865a', modifier: { kind: 'Special', tags: ['Skill.AutoAttack'], rule: 'ignite', value: 4 } },
-  { id: 'bio', name: '腐蝕彈藥', category: '生化', description: '普攻疊加腐蝕。敵人防禦 ÷（1 + 腐蝕強度）。', color: '#b5cc7f', modifier: { kind: 'Special', tags: ['Skill.AutoAttack'], rule: 'corrode', value: 1 } },
-  { id: 'shock', name: '感電彈藥', category: '電能', description: '普攻疊加感電，提高敵人受到的所有傷害，包含燃燒。', color: '#83c9d4', modifier: { kind: 'Special', tags: ['Skill.AutoAttack'], rule: 'shock', value: 1 } },
-  { id: 'fire', name: '高濃度燃料', category: '火焰', description: '火焰持續傷害 +60%，與其他火焰加成相加。', color: '#ec865a', modifier: { kind: 'Add', tags: ['Damage.Fire', 'Mechanic.DOT'], value: 0.6 } },
-  { id: 'speed', name: '快速供彈', category: '傭兵', description: '全隊攻擊速度 +30%，重複選取相加。', color: '#e8c58b', effect: 'speed' },
-  { id: 'active', name: '軍用炸藥', category: '主動技能', description: '所有主動技能傷害 +60%。', color: '#e8c58b', modifier: { kind: 'Add', tags: ['Skill.Active'], value: 0.6 } },
-  { id: 'haste', name: '軍火調度', category: '主動技能', description: '技能急速 +100。依等比例公式縮短冷卻。', color: '#83c9d4', effect: 'haste' },
-  { id: 'radius', name: '擴散裝藥', category: '主動技能', description: '主動技能範圍 ×1.3。', color: '#ec865a', effect: 'radius' },
-  { id: 'income', name: '戰地回收', category: '經濟', description: '擊殺獎金 +50%。', color: '#b5cc7f', modifier: { kind: 'Add', tags: ['Economy.KillReward'], value: 0.5 } },
-  { id: 'wall', name: '補強支架', category: '防守', description: '拒馬最大生命增加開場上限的 50%，並修復新增的生命；重複選取不複利。', color: '#b5cc7f', effect: 'wall' },
-  { id: 'repair', name: '緊急工兵', category: '防守', description: '修復拒馬 50% 最大生命。', color: '#b5cc7f', effect: 'repair' },
+  { id: 'kinetic', short: '動能傷害 +45%', name: '重型彈頭', category: '動能', description: '所有動能傷害 +45%，包含手榴彈。', color: '#e8c58b', modifier: { kind: 'Add', tags: ['Damage.Kinetic'], value: 0.45 } },
+  { id: 'burn', short: '普攻點燃', name: '曳光燃燒彈', category: '火焰', description: '普攻點燃：基礎每秒 4 傷、持續 4 秒。保留最強燃燒；較弱或同強度命中續時，並疊加易燃，每層燒快 25%。', color: '#ec865a', modifier: { kind: 'Special', tags: ['Skill.AutoAttack'], rule: 'ignite', value: 4 } },
+  { id: 'bio', short: '普攻腐蝕・破防', name: '腐蝕彈藥', category: '生化', description: '普攻疊加腐蝕。敵人防禦 ÷（1 + 腐蝕強度）。', color: '#b5cc7f', modifier: { kind: 'Special', tags: ['Skill.AutoAttack'], rule: 'corrode', value: 1 } },
+  { id: 'shock', short: '普攻感電・增傷', name: '感電彈藥', category: '電能', description: '普攻疊加感電，提高敵人受到的所有傷害，包含燃燒。', color: '#83c9d4', modifier: { kind: 'Special', tags: ['Skill.AutoAttack'], rule: 'shock', value: 1 } },
+  { id: 'fire', short: '火焰持續 +60%', name: '高濃度燃料', category: '火焰', description: '火焰持續傷害 +60%，與其他火焰加成相加。', color: '#ec865a', modifier: { kind: 'Add', tags: ['Damage.Fire', 'Mechanic.DOT'], value: 0.6 } },
+  { id: 'speed', short: '攻速 +30%', name: '快速供彈', category: '傭兵', description: '全隊攻擊速度 +30%，重複選取相加。', color: '#e8c58b', effect: 'speed' },
+  { id: 'active', short: '技能傷害 +60%', name: '軍用炸藥', category: '主動技能', description: '所有主動技能傷害 +60%。', color: '#e8c58b', modifier: { kind: 'Add', tags: ['Skill.Active'], value: 0.6 } },
+  { id: 'haste', short: '技能急速 +100', name: '軍火調度', category: '主動技能', description: '技能急速 +100。依等比例公式縮短冷卻。', color: '#83c9d4', effect: 'haste' },
+  { id: 'radius', short: '技能範圍 ×1.3', name: '擴散裝藥', category: '主動技能', description: '主動技能範圍 ×1.3。', color: '#ec865a', effect: 'radius' },
+  { id: 'income', short: '擊殺獎金 +50%', name: '戰地回收', category: '經濟', description: '擊殺獎金 +50%。', color: '#b5cc7f', modifier: { kind: 'Add', tags: ['Economy.KillReward'], value: 0.5 } },
+  { id: 'wall', short: '拒馬上限 +50%', name: '補強支架', category: '防守', description: '拒馬最大生命增加開場上限的 50%，並修復新增的生命；重複選取不複利。', color: '#b5cc7f', effect: 'wall' },
+  { id: 'repair', short: '立即修復 50%', name: '緊急工兵', category: '防守', description: '修復拒馬 50% 最大生命。', color: '#b5cc7f', effect: 'repair' },
 ];

@@ -1,0 +1,186 @@
+/* TL003 floating HUD over the full-screen battlefield.
+   Motion tokens follow motion-reference vocabulary: snap-in (easeOutExpo), pop (easeOutBack), exit (easeInQuart). */
+:root {
+  --ease-out: cubic-bezier(.16, 1, .3, 1);
+  --ease-pop: cubic-bezier(.34, 1.56, .64, 1);
+  --ease-in: cubic-bezier(.5, 0, .75, 0);
+  --glass: #0b0d0ecc;
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+html, body { height: 100%; overflow: hidden; overscroll-behavior: none }
+body { background: #050607 }
+.stage { position: fixed; inset: 0; width: min(520px, 100%); margin: 0 auto; overflow: hidden; background: #08090a; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none }
+.stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; image-rendering: pixelated }
+.stage canvas:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--gold) }
+
+.icon-button { width: 34px; height: 34px; padding: 0; display: grid; place-items: center; background: var(--glass); box-shadow: inset 0 0 0 2px #ffffff14 }
+.icon-button svg { width: 16px; height: 16px }
+.icon-button:hover:enabled { background: #1d2722ee; box-shadow: inset 0 0 0 2px #ffffff26 }
+
+/* ---------- top bar ---------- */
+.hud-top {
+  position: absolute; left: 0; right: 0; top: 0; z-index: 2; pointer-events: none;
+  display: grid; grid-template-columns: minmax(0, 1.25fr) auto minmax(0, 1fr) auto; align-items: center; gap: 8px;
+  padding: calc(var(--safe-top) + 8px) 10px 0;
+}
+.hud-top > * { pointer-events: auto }
+.hud-wall { display: flex; align-items: center; gap: 4px; min-width: 0; filter: drop-shadow(0 2px 0 #000a) }
+.hp-bar { position: relative; flex: 1; min-width: 0; max-width: 150px; height: 18px; background: var(--glass); clip-path: var(--notch); box-shadow: inset 0 0 0 2px #000 }
+.hp-bar i { position: absolute; left: 2px; top: 2px; bottom: 2px; max-width: calc(100% - 4px) }
+.hp-chip { background: #fff3d6; transition: width .5s var(--ease-in) .3s }
+.hp-fill { background: linear-gradient(#bfdc8a 0 40%, #7f9a55 40%); transition: width .12s linear }
+.hud-wall.critical .hp-fill { background: linear-gradient(#ff9b6b 0 40%, #c8492f 40%); animation: blink .4s steps(2) infinite }
+.hp-bar span { position: absolute; inset: 0; display: grid; place-items: center; font: 700 12px/1 Consolas, ui-monospace, monospace; color: #fff; text-shadow: 1px 1px 0 #000, -1px 0 0 #000 }
+.hud-clock { display: grid; justify-items: center; line-height: 1; text-shadow: 2px 2px 0 #000 }
+.hud-clock strong { font: 700 17px/1 Consolas, ui-monospace, monospace; letter-spacing: 1px }
+.hud-clock span { font: 700 10px/1 Consolas, ui-monospace, monospace; color: var(--sand); margin-top: 3px; letter-spacing: 1px }
+.hud-money { justify-self: end; display: flex; align-items: center; gap: 5px; padding: 4px 9px 4px 6px; background: var(--glass); clip-path: var(--notch); transform-origin: right center }
+.hud-money strong { font: 700 17px/1 Consolas, ui-monospace, monospace; color: var(--gold); text-shadow: 1px 1px 0 var(--blood); min-width: 2ch; text-align: right }
+.hud-buttons { display: flex; gap: 4px }
+
+/* thin XP line under the top bar */
+.hud-xp { position: absolute; z-index: 2; left: 10px; right: 10px; top: calc(var(--safe-top) + 46px); display: flex; align-items: center; gap: 6px; pointer-events: none }
+.hud-xp b { display: grid; place-items: center; min-width: 20px; height: 16px; padding: 0 4px; font: 700 11px/1 Consolas, monospace; color: var(--ink); background: var(--fire); clip-path: var(--notch) }
+.xp-track { flex: 1; height: 4px; background: #0b0d0eaa; box-shadow: 0 0 0 1px #000 }
+.xp-track i { display: block; height: 100%; background: linear-gradient(90deg, var(--fire), var(--gold)); transition: width .35s var(--ease-out); box-shadow: 0 0 6px #ffd88488 }
+
+/* ---------- boss banner ---------- */
+.boss-banner {
+  position: absolute; z-index: 2; left: 50%; top: calc(var(--safe-top) + 56px); width: min(260px, calc(100% - 60px));
+  display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 6px; padding: 3px 8px 3px 4px;
+  background: #1a0b0bcc; clip-path: var(--notch); box-shadow: inset 0 0 0 1px #87372f;
+  transform: translateX(-50%); animation: banner-in .45s var(--ease-out) both; pointer-events: none;
+}
+.boss-banner > .px-icon { --px: 1px !important }
+.boss-banner[hidden] { display: none }
+.boss-banner strong { display: block; color: #ff9b82; font-size: 10px; line-height: 1; letter-spacing: 2px; text-shadow: 1px 1px 0 #000; margin-bottom: 2px }
+.boss-banner > span { font: 700 13px/1 Consolas, monospace; color: #fff; text-shadow: 1px 1px 0 #000 }
+.boss-track { height: 4px; background: #000; box-shadow: 0 0 0 1px #000 }
+.boss-track i { display: block; height: 100%; background: linear-gradient(#ff8a6a 0 50%, #b8402d 50%); transition: width .2s var(--ease-out) }
+.boss-banner.incoming { animation: banner-in .45s var(--ease-out) both, boss-pulse .5s steps(2) infinite .45s }
+.boss-banner.incoming .boss-track { display: none }
+@keyframes banner-in { from { transform: translate(-50%, -24px); opacity: 0 } }
+@keyframes boss-pulse { to { box-shadow: inset 0 0 0 2px #ff9b82 } }
+
+/* ---------- centre announcements (wave, boss) ---------- */
+.toast { position: absolute; z-index: 2; left: 0; right: 0; top: 30%; display: grid; justify-items: center; pointer-events: none; opacity: 0; color: #fff; text-shadow: 3px 3px 0 #000 }
+.toast small { font: 700 12px/1 Consolas, monospace; letter-spacing: 6px; color: var(--sand) }
+.toast b { font: 900 44px/1.1 Consolas, "Microsoft JhengHei", ui-monospace, monospace; letter-spacing: 4px }
+.toast.danger small { color: #ff9b82 } .toast.danger b { color: #ffd2c4; text-shadow: 3px 3px 0 #5a0d08 }
+.toast.gold b { color: var(--gold); text-shadow: 3px 3px 0 var(--blood) }
+.toast.show { animation: toast 1.6s var(--ease-out) both }
+.toast.boss.show { animation-duration: 2s }
+@keyframes toast {
+  0% { opacity: 0; transform: scale(1.6); letter-spacing: 18px }
+  12% { opacity: 1; transform: scale(1); letter-spacing: 4px }
+  80% { opacity: 1; transform: scale(1) }
+  100% { opacity: 0; transform: translateY(-16px) }
+}
+
+/* ---------- bottom thumb bar ---------- */
+.hud-bottom {
+  position: absolute; z-index: 2; left: 0; right: 0; bottom: 0;
+  display: grid; grid-template-columns: 52px 1fr 52px; align-items: end; gap: 6px;
+  padding: 0 8px calc(var(--safe-bottom) + 10px);
+  background: linear-gradient(transparent, #050607b0 45%); padding-top: 26px;
+}
+.squad { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; justify-items: center }
+.unit { display: grid; justify-items: center; gap: 5px; width: 100%; max-width: 92px }
+.orb {
+  position: relative; width: 66px; height: 66px; padding: 0; display: grid; place-items: center;
+  background: #0b0d0ee6; clip-path: polygon(8px 0, calc(100% - 8px) 0, 100% 8px, 100% calc(100% - 8px), calc(100% - 8px) 100%, 8px 100%, 0 calc(100% - 8px), 0 8px);
+  box-shadow: none; touch-action: none; transition: transform .12s var(--ease-out);
+}
+.orb:hover:enabled { background: #141a17f0; box-shadow: none }
+.orb:active:enabled { transform: scale(.93); box-shadow: none }
+.orb:disabled { filter: none }
+/* cooldown: a ring that fills clockwise in the mercenary colour */
+.orb-ring { position: absolute; inset: 0; background: conic-gradient(var(--merc-color) calc((1 - var(--cd, 1)) * 360deg), #ffffff10 0); -webkit-mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0); mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0); padding: 3px; clip-path: inherit }
+.orb-face, .orb-portrait { position: relative; display: grid; place-items: center; transition: opacity .2s, transform .25s var(--ease-pop) }
+.orb-portrait { position: absolute; inset: 0; opacity: 0 }
+.orb-level { position: absolute; right: 3px; bottom: 3px; min-width: 16px; padding: 2px 3px; font: 700 10px/1 Consolas, monospace; color: var(--ink); background: var(--merc-color); clip-path: var(--notch) }
+.orb-time { position: absolute; inset: 0; display: grid; place-items: center; font: 900 20px/1 Consolas, monospace; color: #fff; text-shadow: 2px 2px 0 #000; pointer-events: none }
+.orb-time:empty { display: none }
+.orb:not(.ready) .orb-face { opacity: .45; transform: scale(.9) }
+.orb.ready { animation: orb-ready 1.2s ease-in-out infinite }
+.orb.ready .orb-face { filter: drop-shadow(0 0 4px var(--merc-color)) }
+.orb.aiming { transform: translateY(-6px) scale(1.06); animation: none }
+@keyframes orb-ready { 50% { background: color-mix(in srgb, var(--merc-color) 22%, #0b0d0e) } }
+/* not yet recruited: a dim portrait waiting for money */
+.unit.locked .orb-ring { background: #ffffff12 }
+.unit.locked .orb-face, .unit.locked .orb-level { display: none }
+.unit.locked .orb-portrait { opacity: .35; filter: grayscale(1) }
+.unit.locked .orb:enabled .orb-portrait { opacity: 1; filter: none; animation: recruit-bob .9s var(--ease-out) infinite alternate }
+@keyframes recruit-bob { to { transform: translateY(-3px) } }
+.chip { display: flex; align-items: center; justify-content: center; gap: 3px; width: 66px; height: 24px; padding: 0 4px; font: 700 12px/1 Consolas, monospace; color: var(--gold); background: #1d2722ee; white-space: nowrap }
+.chip:disabled { color: #7d8778; background: #0b0d0ecc; filter: none; box-shadow: inset 0 0 0 2px #ffffff10 }
+.chip-sign { color: var(--bone); font-size: 10px }
+.chip:enabled .chip-sign { color: #bfdc8a }
+.side-action { display: grid; justify-items: center; gap: 3px; width: 52px; padding: 7px 0 5px; background: #0b0d0ee6 }
+.side-action .cost { display: flex; align-items: center; gap: 2px; font: 700 11px/1 Consolas, monospace; color: var(--gold) }
+.side-action:disabled { filter: none; opacity: .55 }
+.side-action:disabled .cost { color: #7d8778 }
+
+/* first-time drag hint */
+.drag-hint { position: absolute; z-index: 3; width: 34px; height: 34px; margin: -6px 0 0 -10px; color: #fff; filter: drop-shadow(2px 2px 0 #000); pointer-events: none; animation: drag-hint 1.6s var(--ease-out) infinite }
+.drag-hint svg { width: 34px; height: 34px }
+.drag-hint[hidden] { display: none }
+@keyframes drag-hint { 0% { transform: translate(0, 0); opacity: 0 } 15% { opacity: 1 } 70% { transform: translate(0, -180px); opacity: 1 } 100% { transform: translate(0, -190px); opacity: 0 } }
+
+/* ---------- pause menu ---------- */
+.pause-build { display: grid; gap: 10px; margin: 16px auto 4px; max-width: 320px }
+.pause-elements { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px }
+.pause-elements span { display: flex; align-items: center; justify-content: center; gap: 6px; padding: 6px; background: var(--ink); clip-path: var(--notch) }
+.pause-elements b { font: 700 15px Consolas, monospace }
+.pause-cards { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px; min-height: 36px }
+.pause-cards span { display: grid; place-items: center; width: 36px; height: 36px; background: var(--ink); clip-path: var(--notch) }
+.pause-cards small { color: var(--sage); align-self: center }
+.settings { display: grid; gap: 8px; max-width: 320px; margin: 14px auto 0 }
+.setting { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 10px; font-size: 13px; background: var(--ink); clip-path: var(--notch) }
+.setting input[type=checkbox] { width: 20px; height: 20px; accent-color: var(--gold) }
+.volume-control { display: flex; align-items: center; gap: 6px }
+.volume-control input { width: 120px; height: 16px; margin: 0; appearance: none; -webkit-appearance: none; background: transparent; cursor: pointer }
+.volume-control input::-webkit-slider-runnable-track { height: 6px; background: linear-gradient(90deg, var(--gold) var(--volume, 70%), #000 var(--volume, 70%)); box-shadow: 0 0 0 2px var(--mid) }
+.volume-control input::-moz-range-track { height: 6px; background: linear-gradient(90deg, var(--gold) var(--volume, 70%), #000 var(--volume, 70%)); box-shadow: 0 0 0 2px var(--mid) }
+.volume-control input::-webkit-slider-thumb { -webkit-appearance: none; width: 10px; height: 14px; margin-top: -4px; background: var(--bone); border: 2px solid var(--ink) }
+.volume-control input::-moz-range-thumb { width: 8px; height: 12px; border-radius: 0; background: var(--bone); border: 2px solid var(--ink) }
+.kinetic { color: var(--sand) } .fire { color: var(--fire) } .bio { color: var(--rot) } .electric { color: var(--cyan) }
+
+/* dialogs float above the HUD with a short rise */
+dialog[open] { animation: dialog-in .32s var(--ease-out) both }
+dialog[open]::backdrop { animation: fade-in .25s ease-out both }
+@keyframes dialog-in { from { opacity: 0; transform: translateY(18px) scale(.97) } }
+@keyframes fade-in { from { opacity: 0 } }
+
+/* ---------- small and short screens ---------- */
+@media (max-width: 360px) {
+  .hud-top { gap: 5px; padding-inline: 6px }
+  .hud-wall > .px-icon, .hud-money > .px-icon { --px: 1.5px !important }
+  .hud-clock strong, .hud-money strong { font-size: 15px }
+  .hud-bottom { grid-template-columns: 44px 1fr 44px; gap: 4px; padding-inline: 4px }
+  .side-action { width: 44px }
+  .orb { width: 58px; height: 58px }
+  .orb .px-icon { --px: 2.5px !important }
+  .chip { width: 58px }
+}
+@media (max-height: 600px) {
+  .orb { width: 54px; height: 54px }
+  .orb .px-icon { --px: 2px !important }
+  .chip { height: 20px }
+  .hud-bottom { padding-top: 14px }
+  .toast b { font-size: 34px }
+}
+html.reduce-motion *, html.reduce-motion *::before, html.reduce-motion *::after { animation-duration: .01ms !important; animation-delay: 0s !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important }
+html.reduce-motion .toast.show { animation-name: toast-fade !important; animation-duration: 1.4s !important }
+@keyframes toast-fade { 10%, 80% { opacity: 1 } }
+@keyframes blink { 50% { opacity: .35 } }
+
+/* ---------- phone held sideways: ask to rotate (the game is portrait-only) ---------- */
+.rotate-hint { display: none }
+@media (orientation: landscape) and (max-height: 500px) and (pointer: coarse) {
+  .rotate-hint { position: fixed; inset: 0; z-index: 10; display: grid; place-content: center; justify-items: center; gap: 18px; background: #050607; color: var(--bone); font-size: 15px; letter-spacing: 2px }
+  .rotate-phone { width: 34px; height: 58px; border: 3px solid var(--gold); border-radius: 6px; box-shadow: inset 0 -6px 0 -3px var(--gold); animation: rotate-phone 2s var(--ease-out) infinite }
+  dialog[open] { visibility: hidden }
+}
+@keyframes rotate-phone { 0%, 20% { transform: rotate(90deg) } 60%, 100% { transform: rotate(0deg) } }

@@ -21,7 +21,7 @@ svg { width: 20px; height: 20px; flex-shrink: 0 }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0) }
 
 /* ---------- pixel frame + buttons ---------- */
-.frame, .telemetry > div, .merc-card, .tactics, .elements > span, .choice, dialog {
+.frame, dialog {
   border: 2px solid var(--ink);
   background: var(--deep);
   box-shadow: inset 0 0 0 2px var(--dark);
@@ -38,6 +38,7 @@ button:hover:enabled { background: var(--light); box-shadow: inset 2px 2px 0 var
 button:active:enabled { transform: translateY(1px); box-shadow: inset 2px 2px 0 var(--dark), inset -2px -2px 0 var(--light) }
 button:disabled { cursor: default; filter: saturate(.35) brightness(.7) }
 button:focus-visible, canvas:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px }
+.quiet-button { width: 32px; height: 32px; padding: 0; display: grid; place-items: center; font-size: 15px; font-weight: 700 }
 .primary {
   display: flex; align-items: center; justify-content: space-between;
   width: 100%; max-width: 340px; margin: 20px auto 0; padding: 13px 18px;
@@ -47,292 +48,24 @@ button:focus-visible, canvas:focus-visible { outline: 2px solid var(--gold); out
 .primary:hover:enabled { background: var(--bone); box-shadow: inset 2px 2px 0 #fff6dc, inset -3px -3px 0 var(--sand) }
 html .camp-button { box-shadow: inset 2px 2px 0 var(--light), inset -2px -2px 0 var(--dark); border-radius: 0 }
 
-/* ---------- page grid ---------- */
-.command {
-  width: min(520px, 100%); height: 100dvh; max-height: 1100px; min-height: 0;
-  margin: 0 auto; padding: 10px 12px;
-  display: grid; gap: 8px;
-  grid-template-rows: 38px 58px minmax(170px, 1fr) 24px 178px 44px 14px;
-}
-
-/* ---------- masthead ---------- */
-.masthead { display: flex; align-items: center; justify-content: space-between; min-height: 0 }
-.brand { display: flex; align-items: center; gap: 10px }
-.brand-mark {
-  position: relative; width: 34px; height: 34px; display: grid; place-content: center;
-  font: 700 22px Georgia, serif; color: var(--ink); background: var(--fire);
-  box-shadow: inset 2px 2px 0 var(--gold), inset -2px -2px 0 var(--ember); border: 2px solid var(--ink); clip-path: var(--notch);
-}
-.brand-mark span { position: absolute; right: 5px; bottom: 2px; font-size: 14px }
-.brand > div { line-height: 1 }
-.eyebrow { font-size: 10px; color: var(--sage); letter-spacing: 1px }
-.brand .eyebrow { display: block }
-h1 { font-size: 20px; letter-spacing: 3px; margin-top: 3px; text-shadow: 2px 2px 0 var(--ink), 0 0 0 transparent }
-h1 span { display: none }
-.header-actions { display: flex; gap: 8px; align-items: center }
-.live-label { font-size: 11px; color: var(--sage) }
-.live-label i, .battle-top i { width: 6px; height: 6px; background: var(--rot); display: inline-block; margin-right: 6px; animation: blink 1.2s steps(2) infinite }
-.quiet-button { width: 32px; height: 32px; padding: 0; display: grid; place-items: center; font-size: 15px; font-weight: 700 }
-
-/* volume control (sound by the balance session; keep ids #mute / #volume) */
-.volume-control { display: flex; align-items: center; gap: 6px }
-.volume-control .quiet-button { display: grid; place-items: center; padding: 0 }
-.volume-control svg { width: 16px; height: 16px }
-.volume-control input { width: 76px; height: 16px; margin: 0; appearance: none; -webkit-appearance: none; background: transparent; cursor: pointer }
-.volume-control input::-webkit-slider-runnable-track { height: 6px; background: linear-gradient(90deg, var(--gold) var(--volume, 70%), var(--ink) var(--volume, 70%)); box-shadow: 0 0 0 2px var(--mid) }
-.volume-control input::-moz-range-track { height: 6px; background: linear-gradient(90deg, var(--gold) var(--volume, 70%), var(--ink) var(--volume, 70%)); box-shadow: 0 0 0 2px var(--mid) }
-.volume-control input::-webkit-slider-thumb { -webkit-appearance: none; width: 10px; height: 14px; margin-top: -4px; background: var(--bone); border: 2px solid var(--ink) }
-.volume-control input::-moz-range-thumb { width: 8px; height: 12px; border-radius: 0; background: var(--bone); border: 2px solid var(--ink) }
-.volume-control input:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px }
-
-/* ---------- status bar ---------- */
-.telemetry { display: grid; grid-template-columns: 1.5fr 1fr 1fr 1fr; gap: 6px; min-height: 0 }
-.telemetry > div { display: flex; align-items: center; gap: 8px; padding: 6px 8px; min-width: 0 }
-.telemetry > div > div { min-width: 0; flex: 1 }
-.label { display: block; color: var(--sage); font-size: 11px; line-height: 1; margin-bottom: 5px; white-space: nowrap }
-.telemetry strong { font: var(--num); font-size: 19px; white-space: nowrap; text-shadow: 2px 2px 0 var(--ink) }
-.telemetry strong small { font-size: 11px; color: var(--sage); text-shadow: none }
-.kill-metric { display: none !important }
-.money { color: var(--gold) }
-.wall-track, .xp-track { position: relative; background: var(--ink); overflow: hidden; box-shadow: 0 0 0 1px var(--mid) }
-.wall-track { height: 6px; margin-top: 5px }
-.wall-track i, .xp-track i { display: block; height: 100%; background: repeating-linear-gradient(90deg, currentColor 0 5px, transparent 5px 6px) }
-.wall-track { color: var(--rot) }
-.wall-track .critical { color: var(--fire); animation: blink .5s steps(2) infinite }
-
-/* ---------- battlefield ---------- */
-.battle-wrap { position: relative; min-height: 0; overflow: hidden; background: var(--ink); border: 2px solid var(--ink); box-shadow: 0 0 0 2px var(--mid), 4px 4px 0 2px var(--ink) }
-.battle-wrap canvas { width: 100%; height: 100%; display: block; touch-action: none; image-rendering: pixelated }
-.battle-top { position: absolute; pointer-events: none; top: 8px; left: 8px; right: 8px; display: flex; justify-content: space-between; gap: 8px; font-size: 11px; line-height: 1 }
-.battle-top > span { background: #121619c0; padding: 4px 7px; color: var(--bone) }
-.battle-top > span:last-child { color: var(--sand); max-width: 170px; text-align: right }
-.battle-bottom { display: none }
-/* boss banner (driven by syncBoss in main.ts) */
-.boss-banner {
-  position: absolute; pointer-events: none; top: 34px; left: 50%; transform: translateX(-50%);
-  width: min(76%, 280px); display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; align-items: baseline;
-  padding: 7px 10px 8px; color: var(--bone); background: #2a1413ee;
-  border: 2px solid var(--ink); box-shadow: inset 0 0 0 2px var(--blood); clip-path: var(--notch);
-}
-.boss-banner[hidden] { display: none }
-.boss-banner strong { color: #ff9b82; font-size: 14px; letter-spacing: 2px; text-shadow: 2px 2px 0 var(--ink) }
-.boss-banner span { font: 700 13px Consolas, monospace }
-.boss-track { grid-column: 1 / -1; height: 6px; background: var(--ink); box-shadow: 0 0 0 1px var(--blood) }
-.boss-track i { display: block; height: 100%; background: repeating-linear-gradient(90deg, #d4735f 0 5px, transparent 5px 6px) }
-.boss-banner.incoming { animation: boss-pulse .5s steps(2) infinite }
-.boss-banner.incoming .boss-track { display: none }
-@keyframes boss-pulse { from { box-shadow: inset 0 0 0 2px var(--blood) } to { box-shadow: inset 0 0 0 2px #ff9b82 } }
-
-/* ---------- XP ---------- */
-.tactics { display: grid; grid-template-columns: auto 1fr; gap: 10px; align-items: center; padding: 0 10px; min-height: 0; box-shadow: none; background: transparent; border: 0; clip-path: none }
-.tactics > div:first-child { display: flex; gap: 10px; align-items: baseline; white-space: nowrap }
-.tactics .eyebrow { font-size: 12px; color: var(--bone); letter-spacing: 0 }
-.tactics b { font: var(--num); font-size: 14px; color: var(--fire); margin-left: 4px }
-#xp-label { font: 700 11px Consolas, monospace; color: var(--sage) }
-.xp-track { height: 8px; color: var(--fire) }
-.tactics-hint { display: none }
-
-/* ---------- squad ---------- */
-.squad-section { min-height: 0; display: flex; flex-direction: column }
-.section-heading { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; flex-shrink: 0 }
-.section-heading h2 { font-size: 13px; letter-spacing: 1px }
-.section-heading h2 span { font: 700 12px Consolas, monospace; color: var(--sage); margin-left: 6px }
-.section-heading > span { font-size: 11px; color: var(--sage) }
-.squad { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; flex: 1; min-height: 0 }
-.merc-card { display: flex; flex-direction: column; gap: 6px; padding: 8px 7px 7px; min-width: 0; box-shadow: inset 0 0 0 2px var(--dark), inset 0 4px 0 0 var(--merc-color) }
-.merc-heading { display: flex; gap: 7px; align-items: center; min-height: 36px }
-.portrait { position: relative; display: grid; place-items: center; width: 38px; height: 38px; flex-shrink: 0; background: color-mix(in srgb, var(--merc-color) 22%, var(--ink)); box-shadow: inset 0 0 0 2px var(--ink) }
-.unit-number { position: absolute; right: -3px; bottom: -3px; font: 700 10px/1 Consolas, monospace; color: var(--ink); background: var(--merc-color); padding: 2px 3px }
-.merc-heading > div { min-width: 0 }
-.merc-heading h3 { font-size: 14px; line-height: 1.15; white-space: nowrap; text-shadow: 2px 2px 0 var(--ink) }
-.merc-heading h3 span { display: block; font: 700 12px Consolas, monospace; color: var(--gold); text-shadow: none }
-.merc-heading small { display: block; font-size: 10px; color: var(--sage); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
-.unit-state { display: none }
-.merc-actions { display: grid; grid-template-rows: 30px minmax(50px, 1fr); gap: 6px; flex: 1 }
-.purchase { display: flex; align-items: center; justify-content: center; gap: 6px; font: 700 12px Consolas, "Microsoft JhengHei", monospace; white-space: nowrap; padding: 0 4px }
-.purchase:enabled { color: var(--gold) }
-.skill { position: relative; display: flex; gap: 7px; align-items: center; padding: 6px; text-align: left; overflow: hidden; touch-action: none; user-select: none; min-width: 0; background: var(--dark) }
-.skill-icon { display: grid; place-items: center; width: 36px; height: 36px; flex-shrink: 0; background: var(--ink); box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--merc-color) 60%, var(--ink)) }
-.skill b { display: block; font-size: 12px; white-space: nowrap }
-.skill small { display: block; font: 700 10px/1.4 Consolas, monospace; color: var(--sage); white-space: nowrap }
-/* cooldown: a dark veil that drains from the top as the skill recharges */
-.skill::after { content: ""; position: absolute; left: 0; right: 0; top: 0; height: var(--cooldown, 0%); background: #12161999; pointer-events: none }
-.skill.ready { background: color-mix(in srgb, var(--merc-color) 26%, var(--dark)); animation: ready-glow 1s steps(2) infinite }
-.skill.ready small { color: var(--bone) }
-.skill.aiming { outline: 2px solid var(--merc-color); outline-offset: -4px }
-@keyframes ready-glow { from { box-shadow: inset 2px 2px 0 var(--light), inset -2px -2px 0 var(--dark) } to { box-shadow: inset 0 0 0 2px var(--merc-color) } }
-.key { display: none }
-
-/* ---------- support row ---------- */
-.support { display: grid; grid-template-columns: 1fr 1.2fr; gap: 6px; align-items: stretch; min-width: 0 }
-.wall-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 6px }
-.wall-actions button { display: flex; align-items: center; justify-content: center; gap: 5px; padding: 4px 6px; font-size: 12px; font-weight: 700; white-space: nowrap }
-.wall-actions span[id] { color: var(--gold); font: 700 12px Consolas, monospace }
-.elements { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px }
-.elements > span { display: flex; align-items: center; justify-content: center; gap: 4px; padding: 4px; font-size: 11px; white-space: nowrap; box-shadow: inset 0 0 0 2px var(--dark) }
-.elements b { font: 700 14px Consolas, monospace; color: var(--bone) }
-.element-name { display: none }
-.kinetic { color: var(--sand) } .fire { color: var(--fire) } .bio { color: var(--rot) } .electric { color: var(--cyan) }
-
-footer { display: flex; justify-content: space-between; gap: 8px; min-width: 0; color: var(--hi); font-size: 10px; line-height: 1 }
-footer > span:first-child { white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
-footer > span:last-child { white-space: nowrap }
-footer i { padding: 0 3px; font-style: normal }
-
 /* ---------- dialogs ---------- */
 dialog { color: var(--bone); padding: 24px 22px 22px; width: min(480px, calc(100% - 20px)); max-height: calc(100dvh - 20px); overflow: auto; box-shadow: inset 0 0 0 2px var(--mid), inset 0 0 0 4px var(--ink), inset 0 6px 0 4px var(--fire) }
 dialog::backdrop { background: #121619d8 }
 #modal-content { text-align: center }
 .modal-kicker { display: inline-block; margin-bottom: 14px; padding: 4px 10px; font-size: 12px; font-weight: 700; letter-spacing: 2px; color: var(--ink); background: var(--fire); clip-path: var(--notch) }
-.hero-art { display: flex; justify-content: center; align-items: flex-end; gap: 18px; height: 140px; margin: 2px auto 14px; padding-bottom: 10px; background: linear-gradient(var(--dark), var(--dark)) bottom / 70% 4px no-repeat }
-.hero-art .px-icon:first-child { transform: translateY(-14px) }
-.hero-art .px-icon:last-child { transform: translateY(-20px) scaleX(-1) }
 dialog h2 { font-size: 24px; letter-spacing: 1px; line-height: 1.4; text-shadow: 3px 3px 0 var(--ink) }
 dialog p { font-size: 13px; color: #c7d0b8; line-height: 1.7; margin: 10px auto 0 }
-.briefing { max-width: 340px; margin: 18px auto; text-align: left; display: grid; gap: 9px }
-.briefing span { display: flex; gap: 10px; align-items: center; font-size: 13px; color: var(--bone) }
-.briefing b { display: grid; place-items: center; width: 24px; height: 24px; flex-shrink: 0; font: 700 11px Consolas, monospace; color: var(--ink); background: var(--sand); clip-path: var(--notch) }
-.fine-print { font-size: 11px !important; color: var(--sage) !important; line-height: 1.7 !important }
-.meta-strip { display: flex; justify-content: center; gap: 7px; margin-top: 16px; padding-top: 12px; border-top: 2px solid var(--dark); font-size: 12px; color: var(--sage) }
-.meta-strip b { color: var(--gold); font: 700 13px Consolas, monospace }
-.meta-strip > span { margin-left: 10px }
 
-/* three-choice cards */
-.choice-grid { display: grid; grid-template-columns: 1fr; gap: 8px; margin-top: 16px }
-.choice {
-  display: grid; grid-template-columns: 64px 1fr; grid-template-rows: auto auto 1fr; gap: 2px 12px; align-items: start;
-  padding: 12px; text-align: left; min-width: 0;
-  background: var(--deep); box-shadow: inset 0 0 0 2px var(--dark), inset 4px 0 0 0 var(--card-color);
-}
-.choice:hover:enabled { background: var(--dark); box-shadow: inset 0 0 0 2px var(--card-color), inset 4px 0 0 0 var(--card-color); transform: translateY(-2px) }
-.choice-icon { grid-row: 1 / 4; display: grid; place-items: center; width: 64px; height: 64px; background: color-mix(in srgb, var(--card-color) 20%, var(--ink)); box-shadow: inset 0 0 0 2px var(--ink), inset 0 0 0 4px color-mix(in srgb, var(--card-color) 45%, var(--ink)) }
-.choice-category { display: flex; justify-content: space-between; color: var(--card-color); font-size: 12px; font-weight: 700 }
-.choice-category small { font: 700 11px Consolas, monospace; color: var(--ink); background: var(--card-color); padding: 1px 5px }
-.choice > strong { font-size: 17px; text-shadow: 2px 2px 0 var(--ink) }
-.choice-description { font-size: 12px; line-height: 1.6; color: #c7d0b8 }
-.choice-pick { display: none }
-
-/* results */
-.result-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin: 18px auto }
-.result-stats > div { padding: 10px 6px; background: var(--ink); clip-path: var(--notch) }
-.result-stats span { display: block; font-size: 11px; color: var(--sage); margin-bottom: 6px }
-.result-stats strong { font: var(--num); font-size: 22px }
-.earned { padding: 14px; background: var(--ink); box-shadow: inset 0 0 0 2px var(--fire); clip-path: var(--notch) }
-.earned > span { display: block; font-size: 12px; color: var(--sage) }
-.earned strong { font: 700 40px/1.3 Consolas, monospace; color: var(--gold); text-shadow: 3px 3px 0 var(--blood) }
-.earned small { display: block; font-size: 11px; color: var(--sage) }
-.score-note { font-size: 11px !important }
-
-@keyframes blink { 50% { opacity: .35 } }
-@media (prefers-reduced-motion: reduce) {
-  .boss-banner.incoming, .skill.ready, .wall-track .critical, .live-label i, .battle-top i { animation: none }
-}
-
-/* ---------- wide screens: three choice cards side by side ---------- */
-@media (min-width: 720px) and (min-height: 560px) {
-  dialog:has(.choice-grid) { width: min(760px, calc(100% - 40px)) }
-  .choice-grid { grid-template-columns: repeat(3, 1fr); gap: 10px }
-  .choice { display: flex; flex-direction: column; align-items: center; text-align: center; padding: 16px 12px 14px; gap: 8px; box-shadow: inset 0 0 0 2px var(--dark), inset 0 4px 0 0 var(--card-color) }
-  .choice:hover:enabled { box-shadow: inset 0 0 0 2px var(--card-color), inset 0 4px 0 0 var(--card-color) }
-  .choice-icon { grid-row: auto; width: 80px; height: 80px }
-  .choice-icon .px-icon { --px: 4px !important }
-  .choice-category { width: 100% }
-  .choice-pick { display: block; width: 100%; margin-top: auto; padding: 6px; font-size: 13px; font-weight: 700; color: var(--ink); background: var(--card-color); clip-path: var(--notch) }
-}
-
-/* ---------- phones ---------- */
-@media (max-width: 430px) {
-  .command { padding: 8px }
-  .live-label, .brand .eyebrow { display: none }
-  .telemetry { grid-template-columns: 1.35fr 1fr .95fr 1.05fr; gap: 4px }
-  .telemetry > div { padding: 5px 6px; gap: 5px }
-  .telemetry > div > .px-icon { --px: 1.5px !important }
-  .telemetry strong { font-size: 16px; letter-spacing: -.5px }
-  .telemetry strong small { display: none }
-  .label { font-size: 10px; margin-bottom: 4px }
-  .wall-actions .action-name { display: none }
-  .wall-actions button { gap: 4px; padding: 4px }
-  .elements > span { padding: 3px }
-  .section-heading > span { display: none }
-  .skill { gap: 5px; padding: 5px }
-  .skill-icon { width: 30px; height: 30px }
-  .skill-icon .px-icon { --px: 1.5px !important }
-  .skill > span:last-of-type { min-width: 0 }
-  .skill b, .skill small { overflow: hidden; text-overflow: ellipsis }
-}
-/* ---------- narrow phones ---------- */
+/* ---------- dialogs on small screens ---------- */
 @media (max-width: 380px) {
-  .volume-control input { width: 56px }
-  .live-label { display: none }
-  .telemetry { grid-template-columns: 1.4fr 1fr 1fr 1fr; gap: 4px }
-  .telemetry > div { padding: 5px; gap: 5px }
-  .telemetry > div > .px-icon { display: none }
-  .telemetry strong { font-size: 16px }
-  .merc-card { padding: 7px 5px 5px }
-  .portrait { width: 30px; height: 30px }
-  .portrait .px-icon { --px: 1.5px !important }
-  .merc-heading h3 { font-size: 12px }
-  .merc-heading small { display: none }
-  .skill-icon { width: 28px; height: 28px }
-  .skill-icon .px-icon { --px: 1.5px !important }
-  .skill b { font-size: 11px }
-  .skill small { font-size: 9px }
-  .wall-actions .action-name { display: none }
   dialog { padding: 20px 14px }
   dialog h2 { font-size: 20px }
-  .hero-art { height: 110px }
 }
-
-/* ---------- short screens ---------- */
 @media (max-height: 650px) {
-  .command { padding: 6px 10px; gap: 5px; grid-template-rows: 32px 48px minmax(140px, 1fr) 18px 150px 38px }
-  .brand-mark { width: 28px; height: 28px; font-size: 18px }
-  h1 { font-size: 17px }
-  .quiet-button { width: 28px; height: 28px }
-  .telemetry > div { padding: 4px 7px }
-  .label { font-size: 10px; margin-bottom: 3px }
-  .telemetry strong { font-size: 16px }
-  .wall-track { height: 4px; margin-top: 3px }
-  .section-heading { margin-bottom: 4px }
-  .section-heading > span { display: none }
-  .merc-card { gap: 4px; padding: 6px 6px 5px }
-  .merc-heading { min-height: 30px }
-  .portrait { width: 32px; height: 32px }
-  .merc-heading small { display: none }
-  .merc-actions { grid-template-rows: 26px minmax(42px, 1fr); gap: 4px }
-  .skill-icon { width: 30px; height: 30px }
-  footer { display: none }
-  .hero-art { height: 100px; margin-bottom: 8px }
-  .hero-art .px-icon { --px: 2px !important }
-  .briefing { margin: 12px auto; gap: 6px }
   .primary { margin-top: 12px; padding: 10px 16px }
 }
 @media (max-height: 450px) {
-  .command { width: min(430px, 100%); grid-template-rows: 26px 38px minmax(90px, 1fr) 12px 96px 28px; gap: 4px; padding: 4px 10px }
-  .telemetry > div > .px-icon, .label { display: none }
-  .telemetry strong { font-size: 14px }
-  .section-heading, .tactics .eyebrow, #xp-label { display: none }
-  .tactics { grid-template-columns: 1fr; padding: 0 }
-  .portrait, .merc-heading small { display: none }
-  .merc-heading { min-height: 18px }
-  .merc-heading h3 { font-size: 11px }
-  .merc-heading h3 span { display: inline; margin-left: 4px; font-size: 10px }
-  .merc-actions { grid-template-rows: 20px minmax(28px, 1fr); gap: 3px }
-  .skill { padding: 3px }
-  .skill-icon { width: 24px; height: 24px }
-  .skill-icon .px-icon { --px: 1px !important }
-  .wall-actions button, .elements > span { font-size: 10px; padding: 2px 4px }
-  .wall-actions .px-icon, .elements .px-icon { --px: 1px !important }
   dialog { padding: 14px 18px }
-  .hero-art { display: none }
   dialog h2 { font-size: 18px }
   dialog p { font-size: 11px; margin-top: 6px }
-  .choice-grid { gap: 6px; margin-top: 10px }
-  .choice { padding: 8px; grid-template-columns: 44px 1fr }
-  .choice-icon { width: 44px; height: 44px }
-  .choice-icon .px-icon { --px: 2px !important }
-  .choice > strong { font-size: 14px }
-  .choice-description { font-size: 11px }
-  .result-stats { margin: 10px auto }
-  .earned strong { font-size: 28px }
 }

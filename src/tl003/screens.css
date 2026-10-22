@@ -1,0 +1,121 @@
+/* Full-screen overlays: deploy, level-up choice, battle report. The battlefield stays visible behind. */
+dialog[data-kind="deploy"], dialog[data-kind="choice"], dialog[data-kind="result"] {
+  width: min(520px, 100%); max-width: 100%; height: 100dvh; max-height: 100dvh; margin: 0 auto; overflow: auto;
+  padding: calc(env(safe-area-inset-top, 0px) + 20px) 14px calc(env(safe-area-inset-bottom, 0px) + 18px);
+  background: transparent; border: 0; box-shadow: none; clip-path: none;
+}
+dialog[data-kind="deploy"]::backdrop { background: linear-gradient(#050607cc, #05060755 45%, #050607ee 80%) }
+dialog[data-kind="choice"]::backdrop { background: radial-gradient(ellipse at 50% 45%, #0b0d0eb0, #050607f2 75%) }
+dialog[data-kind="result"]::backdrop { background: #050607e6 }
+dialog[data-kind="choice"][open], dialog[data-kind="deploy"][open], dialog[data-kind="result"][open] { animation: none }
+:is(dialog[data-kind="deploy"], dialog[data-kind="choice"], dialog[data-kind="result"]) #modal-content { height: 100% }
+.screen { display: flex; flex-direction: column; align-items: center; min-height: 100%; text-align: center }
+.screen-actions { width: 100%; margin-top: auto; padding-top: 18px; display: grid; justify-items: center }
+.screen-actions .primary { margin-top: 0 }
+.primary.go { max-width: 340px; min-height: 56px; font-size: 18px; letter-spacing: 4px }
+.primary.go span { display: flex; align-items: center; gap: 6px; font-size: 14px; letter-spacing: 0 }
+.primary.go:enabled { animation: go-pulse 1.6s ease-in-out infinite }
+@keyframes go-pulse { 50% { box-shadow: inset 2px 2px 0 var(--bone), inset -3px -3px 0 #8a7b5a, 0 0 0 4px #ffd88440 } }
+.best { margin: 12px 0 0 !important; font-size: 12px !important; color: var(--sage) !important }
+.best b { color: var(--gold); font: 700 14px Consolas, monospace }
+.best.warn { color: #ffb79c !important }
+
+/* ---------- deploy ---------- */
+.deploy-hero { position: relative; display: flex; justify-content: center; align-items: flex-end; gap: 22px; height: 190px; margin-top: 6vh }
+.deploy-hero .px-icon { position: relative; animation: hero-bob 2.4s ease-in-out infinite }
+.deploy-hero .px-icon:nth-child(2) { animation-delay: -.8s; transform-origin: bottom }
+.deploy-hero .px-icon:nth-child(3) { animation-name: hero-bob-merc; animation-duration: 3s }
+.deploy-hero .px-icon:last-child { animation-delay: -1.6s; transform: scaleX(-1) }
+@keyframes hero-bob { 50% { translate: 0 -5px } }
+@keyframes hero-bob-merc { 50% { translate: 0 -2px } }
+.hero-glow { position: absolute; left: 50%; bottom: -10px; width: 240px; height: 120px; transform: translateX(-50%); background: radial-gradient(ellipse at 50% 80%, #ee9d4f55, transparent 65%); animation: glow-flicker 3s ease-in-out infinite }
+@keyframes glow-flicker { 30% { opacity: .75 } 55% { opacity: 1 } 70% { opacity: .85 } }
+.logo { display: grid; justify-items: center; gap: 6px; margin-top: 18px; text-shadow: none }
+.logo span { font-size: 46px; font-weight: 900; letter-spacing: 6px; line-height: 1; color: #fff1d0; text-shadow: 0 3px 0 #87372f, 0 6px 0 #2b120f, 0 0 24px #ee9d4f66 }
+.logo small { font: 700 11px/1 Consolas, monospace; letter-spacing: 8px; color: var(--fire) }
+.deploy-tips { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; width: 100%; max-width: 360px; margin: 16px 0 0; padding: 0; list-style: none }
+.deploy-tips li { display: grid; justify-items: center; gap: 6px; padding: 8px 2px; font-size: 11px; color: var(--bone); background: #0b0d0eb0; clip-path: var(--notch) }
+
+/* ---------- level-up choice ---------- */
+.choice-screen { justify-content: center; gap: 18px }
+.choice-head { display: grid; justify-items: center; gap: 4px }
+.choice-head small { font: 700 12px/1 Consolas, monospace; letter-spacing: 8px; color: var(--fire) }
+.choice-head b { font: 900 40px/1 Consolas, ui-monospace, monospace; color: #fff1d0; text-shadow: 0 3px 0 #87372f, 0 0 20px #ffd88455 }
+.pick-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; width: 100%; max-width: 480px }
+.pick-card { position: relative; min-width: 0 }
+.pick {
+  position: relative; display: flex; flex-direction: column; align-items: center; gap: 8px; width: 100%; min-height: 228px; padding: 0 6px 14px;
+  color: var(--bone); background: linear-gradient(#141a17, #0b0d0e); clip-path: polygon(10px 0, calc(100% - 10px) 0, 100% 10px, 100% calc(100% - 10px), calc(100% - 10px) 100%, 10px 100%, 0 calc(100% - 10px), 0 10px);
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--card-color) 55%, #000);
+  transition: transform .18s var(--ease-out), box-shadow .18s;
+}
+.pick:hover:enabled, .pick:focus-visible { background: linear-gradient(#1c2420, #0b0d0e); box-shadow: inset 0 0 0 2px var(--card-color), 0 0 0 0 transparent; transform: translateY(-6px); outline: none }
+.pick:active:enabled { transform: translateY(-2px) scale(.98); box-shadow: inset 0 0 0 2px var(--card-color) }
+.pick-band { display: flex; align-items: center; justify-content: center; gap: 4px; align-self: stretch; margin: 0 -6px; padding: 6px 4px; font-size: 11px; font-weight: 700; color: var(--ink); background: var(--card-color) }
+.pick-art { display: grid; place-items: center; width: 80px; height: 80px; margin-top: 6px; background: radial-gradient(circle, color-mix(in srgb, var(--card-color) 30%, transparent), transparent 70%) }
+.pick strong { font-size: 15px; line-height: 1.2; text-shadow: 2px 2px 0 #000; word-break: keep-all }
+.pick-stat { margin-top: auto; padding: 5px 6px; font: 700 12px/1.25 Consolas, "Microsoft JhengHei", monospace; color: var(--gold); background: #000a; clip-path: var(--notch) }
+.pick kbd { position: absolute; left: 8px; bottom: 6px; display: none; font: 700 10px Consolas, monospace; color: var(--muted) }
+.pick-info { position: absolute; top: 32px; right: 4px; width: 30px; height: 30px; padding: 0; font: 700 13px/1 Consolas, monospace; color: var(--bone); background: #000a; box-shadow: inset 0 0 0 1px #ffffff30 }
+.pick-info[aria-expanded="true"] { color: var(--ink); background: var(--card-color) }
+.pick-detail { min-height: 48px; max-width: 420px; margin: 0 !important; padding: 0 6px; font-size: 13px !important; line-height: 1.6 !important; color: #d9dfcc !important }
+/* entrance: cards fly up one after another (easeOutBack), input locked until they land */
+.choice-screen .pick-card { animation: card-in .5s var(--ease-pop) both }
+.choice-screen .pick-card:nth-child(2) { animation-delay: 80ms } .choice-screen .pick-card:nth-child(3) { animation-delay: 160ms }
+.choice-head { animation: head-in .4s var(--ease-out) both }
+@keyframes card-in { from { opacity: 0; transform: translateY(70px) rotate(var(--tilt, -3deg)) scale(.85) } }
+@keyframes head-in { from { opacity: 0; transform: scale(1.6) } }
+.choice-screen.locked .pick-card { pointer-events: none }
+/* resolution: the pick lifts and glows, the others fall away */
+.choice-screen.resolved .pick-card { pointer-events: none }
+.pick-card.chosen { animation: card-chosen .42s var(--ease-out) both; z-index: 1 }
+.pick-card.chosen .pick { box-shadow: inset 0 0 0 3px var(--card-color), 0 0 0 0 transparent; background: linear-gradient(color-mix(in srgb, var(--card-color) 35%, #141a17), #0b0d0e) }
+.pick-card.dismissed { animation: card-out .26s var(--ease-in) both }
+@keyframes card-chosen { 0% { transform: none } 45% { transform: translateY(-18px) scale(1.1) } 100% { transform: translateY(-40px) scale(.7); opacity: 0 } }
+@keyframes card-out { to { opacity: 0; transform: translateY(40px) scale(.9) } }
+
+/* ---------- report ---------- */
+.result-screen { justify-content: center; gap: 14px }
+.result-kicker { font: 700 12px/1 Consolas, monospace; letter-spacing: 8px; color: #ff9b82 }
+.result-screen.victory .result-kicker { color: var(--gold) }
+.result-title { font-size: 44px !important; font-weight: 900; letter-spacing: 6px; color: #fff1d0; text-shadow: 0 4px 0 #5a0d08, 0 0 30px #c8492f66 !important; animation: title-slam .55s var(--ease-pop) both }
+.result-screen.victory .result-title { text-shadow: 0 4px 0 #87372f, 0 0 30px #ffd88477 !important }
+@keyframes title-slam { from { opacity: 0; transform: scale(2.2); filter: blur(4px) } }
+.result-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; width: 100%; max-width: 360px; margin-top: 6px }
+.result-row > div { display: grid; justify-items: center; gap: 6px; padding: 12px 4px 10px; background: #0b0d0ee0; clip-path: var(--notch); animation: card-in .45s var(--ease-pop) both }
+.result-row > div:nth-child(1) { animation-delay: .25s } .result-row > div:nth-child(2) { animation-delay: .35s } .result-row > div:nth-child(3) { animation-delay: .45s }
+.result-row strong { font: 700 20px/1 Consolas, ui-monospace, monospace; color: #f3e2b5 }
+.result-row span { font-size: 10px; color: var(--muted); letter-spacing: 1px }
+.result-points { position: relative; display: grid; justify-items: center; gap: 4px; width: 100%; max-width: 360px; padding: 16px 12px 14px; background: radial-gradient(ellipse at 50% 0%, #ee9d4f33, transparent 70%), #0b0d0ee8; clip-path: var(--notch); box-shadow: inset 0 0 0 2px #c8613a; animation: card-in .5s var(--ease-pop) .6s both }
+.result-points > span { font-size: 11px; letter-spacing: 2px; color: var(--muted) }
+.result-points strong { font: 900 56px/1 Consolas, ui-monospace, monospace; color: var(--gold); text-shadow: 0 4px 0 var(--blood), 0 0 24px #ffd88466 }
+.result-points small { font: 700 11px Consolas, monospace; color: var(--muted) }
+.new-best { position: absolute; top: -2px; right: 8px; padding: 4px 8px; font: 700 11px/1 Consolas, "Microsoft JhengHei", monospace; font-style: normal; color: var(--ink); background: #bfdc8a; clip-path: var(--notch); transform: rotate(4deg); animation: card-in .45s var(--ease-pop) 1.6s both }
+.result-screen .screen-actions { margin-top: 10px; animation: card-in .4s var(--ease-out) 1s both }
+
+@media (min-width: 720px) { .pick kbd { display: block } }
+@media (max-height: 640px) {
+  .deploy-hero { height: 120px; margin-top: 0 }
+  .deploy-hero .px-icon { --px: 2px !important }
+  .deploy-hero .px-icon:nth-child(3) { --px: 3px !important }
+  .logo span { font-size: 34px }
+  .pick { min-height: 190px }
+  .pick-art { width: 56px; height: 56px }
+  .pick-art .px-icon { --px: 3px !important }
+  .result-title { font-size: 34px !important }
+  .result-points strong { font-size: 42px }
+}
+@media (max-width: 360px) {
+  .pick strong { font-size: 13px }
+  .pick-stat { font-size: 11px }
+  .logo span { font-size: 38px; letter-spacing: 3px }
+}
+html.reduce-motion .pick-card.chosen, html.reduce-motion .pick-card.dismissed { animation: none; opacity: 0 }
+/* The battle HUD steps aside while a full-screen menu is open (the choice keeps it: level and money matter there). */
+.hud-top, .hud-xp, .hud-bottom, .boss-banner { transition: opacity .25s ease-out, transform .3s var(--ease-out) }
+body:has(dialog[open]:is([data-kind="deploy"], [data-kind="result"], [data-kind="talents"])) :is(.hud-top, .hud-xp, .boss-banner) { opacity: 0; transform: translateY(-12px) }
+body:has(dialog[open]:is([data-kind="deploy"], [data-kind="result"], [data-kind="talents"])) .hud-bottom { opacity: 0; transform: translateY(16px) }
+#modal-title:focus { outline: none }
+
+/* re-shown report: final values, no entrance replay */
+.result-screen.settled *, .result-screen.settled { animation: none !important }

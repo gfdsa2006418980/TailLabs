@@ -1,123 +1,125 @@
+/* TL003 star map and the shared camp buttons. */
 .camp-button {
-  display:flex; align-items:center; justify-content:space-between;
-  width:100%; max-width:320px; min-height:44px; margin:9px auto 0;
-  padding:10px 16px; font-size:11px; border-color:#b6c39255;
+  display: flex; align-items: center; gap: 8px;
+  width: 100%; max-width: 320px; min-height: 46px; margin: 10px auto 0;
+  padding: 10px 16px; font-size: 14px; background: #1d2722e6;
 }
-.camp-button span { color:var(--amber); font-size:10px; }
-.deployment-stats {
-  display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); width:100%;
-  gap:8px; padding:10px 0; margin:12px auto 0;
-  border-top:1px solid var(--line); border-bottom:1px solid var(--line);
+.camp-button b { flex: 1; text-align: left; font-weight: 700 }
+.camp-button > span { color: var(--amber); font: 700 13px/1 Consolas, monospace }
+.camp-button .badge { min-width: 22px; padding: 4px 6px; color: var(--ink); background: var(--gold); clip-path: var(--notch); animation: badge-glow 1.4s ease-in-out infinite }
+@keyframes badge-glow { 50% { background: #fff1c4 } }
+
+/* next-run stats: icon, number, two-character label */
+.deployment-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; width: 100%; max-width: 340px; margin: 14px auto 0 }
+.deployment-stats > div { display: grid; justify-items: center; gap: 4px; padding: 8px 4px; background: #0b0d0ecc; clip-path: var(--notch); min-width: 0 }
+.deployment-stats strong { font: 700 18px/1 Consolas, ui-monospace, monospace; color: #f3e2b5; text-shadow: 2px 2px 0 #000 }
+.deployment-stats span { font-size: 10px; color: var(--muted); letter-spacing: 1px }
+
+/* ---------- dialog shell ---------- */
+dialog.talent-dialog {
+  width: min(520px, 100%); max-width: 100%; height: 100dvh; max-height: 100dvh; margin: 0 auto; overflow: hidden;
+  padding: calc(env(safe-area-inset-top, 0px) + 12px) 14px calc(env(safe-area-inset-bottom, 0px) + 12px);
+  background: radial-gradient(ellipse at 50% 30%, #1a2234, #07090f 75%); box-shadow: none; border: 0; clip-path: none;
 }
-.deployment-stats>div { min-width:0; }
-.deployment-stats span { display:block; font-size:8px; color:var(--muted); margin-bottom:4px; }
-.deployment-stats strong { font:17px/1.1 ui-monospace,Consolas,monospace; color:#e3d0a3; }
-.talent-dialog {
-  width:min(650px,calc(100% - 20px)); height:min(790px,calc(100dvh - 20px));
-  max-height:calc(100dvh - 20px); padding:18px; overflow:hidden;
+dialog.talent-dialog::backdrop { background: #050607 }
+.talent-dialog #modal-content { display: flex; flex-direction: column; gap: 10px; height: 100%; min-height: 0; text-align: left }
+.talent-dialog #modal-content > * { flex-shrink: 0 }
+.talent-heading { display: flex; align-items: center; gap: 10px; min-height: 40px }
+.talent-heading h2 { font-size: 20px; line-height: 1; white-space: nowrap }
+@media (max-width: 360px) { .talent-tier { display: none } .talent-heading { gap: 8px } }
+.talent-heading .quiet-button { width: 38px; height: 38px; font-size: 20px; background: #0b0d0ecc }
+.talent-tier { font: 700 10px/1 Consolas, monospace; color: var(--muted); padding: 4px 6px; background: #0b0d0e99; clip-path: var(--notch) }
+.talent-wallet { margin-left: auto; display: flex; align-items: center; gap: 6px; padding: 5px 10px 5px 7px; background: #0b0d0ecc; clip-path: var(--notch) }
+.talent-wallet strong { font: 700 22px/1 Consolas, ui-monospace, monospace; color: var(--amber); text-shadow: 2px 2px 0 var(--blood) }
+.talent-dialog .deployment-stats { margin: 0 auto }
+
+/* ---------- star map ---------- */
+.talent-dialog #modal-content > .talent-scroll {
+  position: relative; flex: 1 1 auto; min-height: 150px; overflow: auto; overscroll-behavior: contain; scrollbar-width: none;
+  background:
+    radial-gradient(1px 1px at 12% 18%, #fff8 50%, transparent 51%), radial-gradient(1px 1px at 78% 12%, #fff6 50%, transparent 51%),
+    radial-gradient(1px 1px at 40% 70%, #fff5 50%, transparent 51%), radial-gradient(1px 1px at 88% 64%, #fff7 50%, transparent 51%),
+    radial-gradient(1px 1px at 22% 88%, #fff4 50%, transparent 51%), radial-gradient(1px 1px at 63% 40%, #fff6 50%, transparent 51%),
+    radial-gradient(ellipse at 50% 20%, #ffd88412, transparent 70%);
 }
-.talent-dialog #modal-content {
-  display:flex; flex-direction:column; gap:7px; height:100%; min-height:0; overflow:auto;
-  text-align:left;
-}
-.talent-dialog #modal-content>* { flex-shrink:0; }
-.talent-heading { display:flex; align-items:center; gap:12px; min-height:40px; }
-.talent-heading .modal-kicker { display:block; margin:0 0 3px; font-size:7px; letter-spacing:1.4px; }
-.talent-heading h2 { font-size:21px; line-height:1.2; }
-.talent-heading .quiet-button { width:40px; height:40px; }
-.talent-wallet { margin-left:auto; text-align:right; }
-.talent-wallet span { font-size:9px; color:var(--muted); display:block; }
-.talent-wallet strong { font:25px/1.1 ui-monospace,Consolas,monospace; color:var(--amber); }
-.talent-dialog .deployment-stats { margin:0; padding:7px 0; text-align:center; }
-.talent-tier { display:flex; justify-content:space-between; gap:8px; font-size:9px; color:#bdcbaa; line-height:1.4; }
-.talent-tier b { font-weight:400; margin:0 4px; color:var(--muted); }
-.talent-tier>span:last-child { color:#98ac88; font-size:8px; }
-.talent-dialog #modal-content>.talent-scroll {
-  flex:1 1 auto; min-height:72px; overflow:auto; overscroll-behavior:contain;
-  border:1px solid #a6bd7c1c; background:radial-gradient(ellipse at 50% 10%,#6c815c22,transparent 80%);
-  scrollbar-width:thin; scrollbar-color:#778c5966 transparent;
-}
-.talent-map { width:100%; height:288px; position:relative; max-width:440px; margin:0 auto; }
-.talent-links { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; }
-.talent-links line { stroke:#a1b98528; stroke-width:1; stroke-dasharray:3 4; }
-.talent-links line.explored { stroke:#d4bc7c77; stroke-width:1.2; stroke-dasharray:none; }
+.talent-scroll::-webkit-scrollbar { display: none }
+.talent-map { width: 100%; height: 300px; position: relative; max-width: 420px; margin: 0 auto }
+.talent-links { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible }
+.talent-links line { stroke: #8fa2c428; stroke-width: 1; stroke-dasharray: 2 4 }
+.talent-links line.explored { stroke: #ffd884aa; stroke-width: 1.4; stroke-dasharray: 6 4; animation: link-flow 1.2s linear infinite; filter: drop-shadow(0 0 2px #ffd884) }
+.talent-links line.fresh { animation: link-draw .6s var(--ease-out) both, link-flow 1.2s linear .6s infinite }
+@keyframes link-flow { to { stroke-dashoffset: -20 } }
+@keyframes link-draw { from { stroke-opacity: 0; stroke-width: 6 } }
+
 .talent-node {
-  position:absolute; transform:translate(-50%,-50%); width:30%; height:66px;
-  display:flex; align-items:center; justify-content:center; flex-direction:column;
-  gap:3px; padding:3px 2px; border:0; background:transparent; border-radius:4px;
+  position: absolute; transform: translate(-50%, -50%); width: 31%; height: 72px; padding: 2px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+  background: transparent; box-shadow: none; clip-path: none; border: 0;
 }
-.talent-node:hover:enabled { border:0; background:#d0dba00a; }
-.node-symbol {
-  width:29px; height:29px; display:grid; place-content:center; flex-shrink:0;
-  border:1px solid #8ba26a77; background:#233322; border-radius:50%;
-  color:#7a8e6a; font:19px/1 ui-monospace,Consolas,monospace;
+.talent-node:hover:enabled, .talent-node:active:enabled { background: transparent; box-shadow: none; transform: translate(-50%, -50%) }
+.talent-node .node-symbol, .talent-inspector .node-symbol {
+  display: grid; place-items: center; width: 34px; height: 34px; color: #6f7c93; background: #141a26;
+  font: 700 18px/1 ui-monospace, Consolas, monospace;
+  clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%); box-shadow: inset 0 0 0 2px #3a4560;
+  transition: transform .25s var(--ease-pop);
 }
-.talent-node.revealed .node-symbol { border-color:var(--node-color); color:var(--node-color); }
-.talent-node.invested .node-symbol { box-shadow:0 0 0 3px #cbb67916; background:#45523b; }
-.talent-node.selected .node-symbol { outline:1px solid #e9d4a0; outline-offset:3px; }
-.node-name { color:#7c9270; font-size:9px; line-height:1; }
-.talent-node.revealed .node-name { color:#d4ddc5; }
-.talent-node small { color:#91a47c; font:8px/1 ui-monospace,Consolas,monospace; }
-.talent-inspector { border:1px solid var(--line); border-left:2px solid #cfb879; padding:10px 11px; }
-.talent-detail-heading { display:flex; justify-content:space-between; gap:8px; align-items:baseline; }
-.talent-detail-heading strong { font-size:13px; font-weight:500; }
-.talent-detail-heading span { font:9px ui-monospace,Consolas,monospace; color:var(--muted); }
-.talent-dialog .talent-inspector p { margin:5px 0; font-size:10px; line-height:1.5; color:#acbe9a; }
-.talent-effect { font:11px ui-monospace,Consolas,monospace; color:#e7cca0; line-height:1.4; }
-.talent-purchase-row { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-top:7px; }
-.talent-purchase-row>span { font-size:9px; line-height:1.5; color:#9fb58b; max-width:55%; }
-.talent-purchase-row button { min-height:44px; padding:8px 14px; font-size:11px; color:#efd39b; border-color:#dfc78d77; background:#e1c0870b; white-space:nowrap; }
-.talent-breakthrough { display:flex; gap:10px; align-items:center; }
-.talent-breakthrough button { min-height:36px; padding:7px 10px; font-size:10px; white-space:nowrap; }
-.talent-breakthrough>span { font-size:8px; color:#a4b88f; line-height:1.5; }
-.talent-dialog p.talent-notice { font-size:9px; line-height:1.4; min-height:24px; margin:0; color:#c2d2ad; }
-.talent-dialog .primary { margin:0; max-width:none; min-height:44px; }
-@media(max-width:380px) {
-  .talent-dialog { padding:12px; }
-  .talent-dialog #modal-content { gap:5px; }
-  .talent-heading { gap:8px; min-height:36px; }
-  .talent-heading h2 { font-size:19px; }
-  .talent-heading .quiet-button { width:36px; height:36px; }
-  .talent-wallet strong { font-size:22px; }
-  .talent-dialog .deployment-stats { padding:5px 0; }
-  .talent-dialog .deployment-stats strong { font-size:15px; }
-  .talent-dialog .deployment-stats span { font-size:7px; margin-bottom:2px; }
-  .talent-tier { font-size:8px; }
-  .talent-tier>span:last-child { font-size:7px; }
-  .talent-inspector { padding:7px 8px; }
-  .talent-detail-heading strong { font-size:12px; }
-  .talent-dialog .talent-inspector p { font-size:9px; margin:3px 0; }
-  .talent-effect { font-size:10px; }
-  .talent-purchase-row { margin-top:5px; gap:6px; }
-  .talent-purchase-row>span { font-size:8px; }
-  .talent-purchase-row button { font-size:10px; padding:7px 10px; }
-  .talent-breakthrough button { min-height:32px; padding:6px 8px; font-size:9px; }
-  .talent-breakthrough>span { font-size:7px; }
-  .talent-dialog p.talent-notice { font-size:8px; min-height:22px; }
+.talent-node.revealed .node-symbol { color: var(--node-color); box-shadow: inset 0 0 0 2px var(--node-color); background: #1b2230 }
+.talent-node.invested .node-symbol { color: #0b0d0e; background: var(--node-color); box-shadow: inset 0 0 0 2px #fff6; filter: drop-shadow(0 0 6px var(--node-color)) }
+.talent-node.selected .node-symbol { transform: scale(1.22) }
+.talent-node.selected::before { content: ""; position: absolute; top: 50%; left: 50%; width: 34px; height: 34px; margin: -30px 0 0 -17px; border: 1px dashed #fff8; transform: rotate(45deg); animation: select-spin 6s linear infinite; pointer-events: none }
+@keyframes select-spin { to { transform: rotate(405deg) } }
+.node-name { color: #5d6880; font-size: 10px; line-height: 1; white-space: nowrap }
+.talent-node.revealed .node-name { color: #dfe4ee }
+.talent-node small { color: var(--gold); font: 700 9px/1 Consolas, monospace; min-height: 9px }
+.talent-node.enter { animation: node-in .4s var(--ease-pop) both }
+.talent-node.just-revealed { animation: node-in .55s var(--ease-pop) .25s both }
+.talent-node.just-bought .node-symbol { animation: node-bought .5s var(--ease-pop) }
+.talent-node.just-bought::after { content: ""; position: absolute; top: 50%; left: 50%; width: 34px; height: 34px; margin: -28px 0 0 -17px; border: 2px solid var(--node-color); clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%); animation: node-burst .6s var(--ease-out) both; pointer-events: none }
+@keyframes node-in { from { opacity: 0; transform: translate(-50%, -50%) scale(.4) } }
+@keyframes node-bought { 40% { transform: scale(1.5) } }
+@keyframes node-burst { from { opacity: 1; transform: scale(1) } to { opacity: 0; transform: scale(2.6) } }
+
+/* ---------- inspector ---------- */
+.talent-inspector {
+  display: grid; grid-template-columns: 1fr auto; grid-template-areas: "head buy" "effect buy" "desc desc"; gap: 4px 12px; align-items: center;
+  padding: 10px 12px; background: #0b0d0ee0; clip-path: var(--notch); box-shadow: inset 3px 0 0 var(--node-color)
 }
-@media(max-height:650px) and (min-width:600px) {
-  .talent-dialog { width:min(680px,calc(100% - 20px)); padding:12px; }
-  .talent-dialog #modal-content { display:grid; grid-template-columns:1fr 1fr; grid-template-rows:36px 38px 1fr 32px 22px 40px; gap:5px 12px; }
-  .talent-heading { grid-column:1/-1; min-height:0; }
-  .talent-heading h2 { font-size:18px; }
-  .talent-heading .quiet-button { height:34px; width:34px; }
-  .talent-dialog .deployment-stats { grid-column:1/-1; padding:3px 0; }
-  .talent-dialog .deployment-stats span { margin-bottom:2px; font-size:7px; }
-  .talent-dialog .deployment-stats strong { font-size:14px; }
-  .talent-tier { grid-column:1; grid-row:3; align-self:start; font-size:7px; }
-  .talent-tier>span:last-child { display:none; }
-  .talent-dialog #modal-content>.talent-scroll { grid-column:1; grid-row:3/7; min-height:0; margin-top:15px; }
-  .talent-inspector { grid-column:2; grid-row:3; padding:7px; }
-  .talent-dialog .talent-inspector p { font-size:8px; line-height:1.3; margin:3px 0; }
-  .talent-detail-heading strong { font-size:11px; }
-  .talent-detail-heading span { font-size:8px; }
-  .talent-effect { font-size:9px; }
-  .talent-purchase-row { margin-top:4px; gap:5px; }
-  .talent-purchase-row>span { font-size:7px; }
-  .talent-purchase-row button { min-height:32px; padding:5px 7px; font-size:9px; }
-  .talent-breakthrough { grid-column:2; grid-row:4; gap:6px; }
-  .talent-breakthrough button { min-height:30px; font-size:8px; padding:5px; }
-  .talent-breakthrough>span { font-size:7px; }
-  .talent-dialog p.talent-notice { grid-column:2; grid-row:5; font-size:7px; min-height:0; }
-  .talent-dialog .primary { grid-column:2; grid-row:6; min-height:36px; padding:8px 10px; font-size:10px; }
+.talent-detail-heading { grid-area: head; display: flex; align-items: center; gap: 8px; min-width: 0 }
+.talent-inspector .node-symbol { width: 24px; height: 24px; font-size: 13px; color: #0b0d0e; background: var(--node-color); box-shadow: none }
+.talent-detail-heading strong { font-size: 15px }
+.talent-detail-heading > span:last-child { font: 700 11px Consolas, monospace; color: var(--muted) }
+.talent-effect { grid-area: effect; font: 700 14px/1.2 Consolas, ui-monospace, monospace; color: var(--muted) }
+.talent-effect b { color: #f3e2b5; font-weight: 700 } .talent-effect em { color: #bfdc8a; font-style: normal }
+.talent-inspector p { grid-area: desc; margin: 2px 0 0; font-size: 11px; line-height: 1.5; color: #8f9bb0 }
+#talent-buy { grid-area: buy; display: grid; justify-items: center; gap: 3px; min-width: 92px; min-height: 52px; padding: 6px 12px; color: var(--ink); background: var(--gold); box-shadow: inset 2px 2px 0 #fff3cf, inset -3px -3px 0 #b8893f }
+#talent-buy b { display: flex; align-items: center; gap: 3px; font: 700 13px/1 Consolas, monospace }
+#talent-buy span { font-weight: 700; font-size: 13px }
+#talent-buy:enabled { animation: buy-ready 1.6s ease-in-out infinite }
+#talent-buy:disabled { color: var(--muted); background: #1d2230; box-shadow: inset 0 0 0 2px #2c3446; filter: none }
+@keyframes buy-ready { 50% { box-shadow: inset 2px 2px 0 #fff3cf, inset -3px -3px 0 #b8893f, 0 0 0 3px #ffd88455 } }
+.talent-breakthrough { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; min-height: 44px; padding: 8px 14px; font-weight: 700; color: #ffe9b8; background: linear-gradient(90deg, #5a3a1a, #87372f); animation: buy-ready 1.2s ease-in-out infinite }
+.talent-breakthrough span { font: 700 11px Consolas, monospace; color: var(--gold) }
+.talent-dialog p.talent-notice { min-height: 14px; margin: 0; font-size: 11px; line-height: 1.3; color: #ffb79c; text-align: center }
+.talent-dialog p.talent-notice:empty { min-height: 0 }
+.talent-dialog .primary { margin: 0; max-width: none; min-height: 50px }
+
+@media (max-height: 460px) {
+  dialog.talent-dialog { overflow-y: auto }
+  .talent-dialog #modal-content { height: auto; min-height: 100% }
+  .talent-dialog #modal-content > .talent-scroll { min-height: 90px; flex-basis: 140px }
+}
+@media (max-height: 640px) {
+  .talent-dialog #modal-content { gap: 6px }
+  .talent-dialog .deployment-stats > div { padding: 5px 4px; grid-template-columns: auto auto; gap: 2px 6px; align-items: center }
+  .talent-dialog .deployment-stats span { display: none }
+  .talent-inspector p { display: none }
+  .talent-dialog .primary { min-height: 42px }
+}
+@media (min-width: 600px) and (max-height: 640px) {
+  dialog.talent-dialog { width: min(760px, 100%) }
+  .talent-dialog #modal-content { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: auto auto 1fr auto auto; gap: 8px 14px }
+  .talent-heading, .talent-dialog .deployment-stats { grid-column: 1 / -1 }
+  .talent-dialog #modal-content > .talent-scroll { grid-column: 1; grid-row: 3 / 6 }
+  .talent-inspector { grid-column: 2; grid-row: 3; align-self: start }
+  .talent-dialog .primary { grid-column: 2; grid-row: 5 }
 }
