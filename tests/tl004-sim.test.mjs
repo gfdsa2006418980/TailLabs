@@ -4,13 +4,13 @@ import { createSim, playShots, runUntilSettled, kit, testTower } from './tl004-h
 import { FixedStepper } from '../src/tl004/rules/FixedStepper.ts';
 import { predictPath } from '../src/tl004/rules/Launch.ts';
 import { SLING_REST } from '../src/tl004/sim/BattleSim.ts';
-import { GRAVITY_PER_STEP, SERPENTELA, SHOT, SLING, STEP_MS, WORLD } from '../src/tl004/config/Tuning.ts';
+import { ATTACKER, GRAVITY_PER_STEP, SHOT, SLING, STEP_MS, WORLD } from '../src/tl004/config/Tuning.ts';
 
 const shot = (angle, power = 1) => ({ vx: Math.cos(angle) * SLING.maxLaunchSpeed * power, vy: Math.sin(angle) * SLING.maxLaunchSpeed * power });
 
 test('the test tower starts settled, asleep and completely still', () => {
   const sim = createSim();
-  assert.equal(sim.crystalsLeft, 3);
+  assert.equal(sim.targetsLeft, 3);
   assert.ok([...sim.pieces.values()].every((piece) => piece.body.isSleeping));
   const before = [...sim.pieces.values()].map((piece) => ({ ...piece.body.position }));
   const events = [];
@@ -23,7 +23,7 @@ test('the test tower starts settled, asleep and completely still', () => {
 test('the aiming preview matches the real flight', () => {
   const sim = createSim();
   const launch = shot(-0.6, 0.8);
-  const predicted = predictPath(SLING_REST, launch.vx, launch.vy, GRAVITY_PER_STEP, SERPENTELA.frictionAir, WORLD.groundY);
+  const predicted = predictPath(SLING_REST, launch.vx, launch.vy, GRAVITY_PER_STEP, ATTACKER.frictionAir, WORLD.groundY);
   const [event] = sim.launch(launch.vx, launch.vy);
   const body = sim.pieces.get(event.id).body;
   for (let i = 0; i < 40; i++) {
@@ -60,7 +60,7 @@ test('"next" is only allowed after the skip delay', () => {
 });
 
 test('the last shot cannot be skipped, so a slow collapse can still win', () => {
-  const sim = createSim({ ...testTower, shots: ['serpentela-w50-01'] });
+  const sim = createSim({ ...testTower, shots: ['caideng'] });
   sim.launch(...Object.values(shot(-0.5)));
   for (let i = 0; i < SHOT.skipAfterSteps + 5; i++) sim.step();
   assert.equal(sim.isLastShot, true);
@@ -73,13 +73,15 @@ test('broken level data is rejected before building', () => {
   const broken = (block) => ({ ...testTower, blocks: [block] });
   assert.throws(() => createSim(broken({ material: 'wod', x: 0, y: 0, w: 10, h: 10 })), /unknown material/);
   assert.throws(() => createSim(broken({ material: 'wood', x: 0, y: 0 })), /needs w and h/);
-  assert.throws(() => createSim(broken({ material: 'crystal', x: 0, y: 0, angle: 0.3 })), /cannot be rotated/);
-  assert.throws(() => createSim({ ...testTower, shots: ['nobody'] }), /Unknown serpentela/);
+  assert.throws(() => createSim(broken({ material: 'target', x: 0, y: 0, shape: 'serpentela-w50-01', angle: 0.3 })), /cannot be rotated/);
+  assert.throws(() => createSim(broken({ material: 'target', x: 0, y: 0, shape: 'nobody' })), /known serpentela/);
+  assert.throws(() => createSim({ ...testTower, blocks: [{ material: 'wood', x: 0, y: 0, w: 10, h: 10 }] }), /no targets/);
+  assert.throws(() => createSim({ ...testTower, shots: ['nobody'] }), /unknown partner/);
 });
 
-test('missing every crystal with all serpentelas loses the level', () => {
+test('missing every 四十塊 with all partners loses the level', () => {
   const sim = createSim();
-  const events = playShots(sim, [shot(-1.45, 0.3), shot(-1.45, 0.3), shot(-1.45, 0.3), shot(-1.45, 0.3)]);
+  const events = playShots(sim, testTower.shots.map(() => shot(-1.45, 0.3)));
   assert.equal(sim.phase, 'lost');
   assert.equal(sim.stars, 0);
   assert.ok(events.some((event) => event.type === 'lost'));
@@ -87,7 +89,7 @@ test('missing every crystal with all serpentelas loses the level', () => {
 });
 
 test('the same launches give the same result, whatever the frame rate', () => {
-  const replay = [shot(-0.5), shot(-0.7, 0.95), shot(-0.35), shot(-0.9)];
+  const replay = [shot(-0.5), shot(-0.7, 0.95), shot(-0.35), shot(-0.9), shot(-0.6, 0.8)];
   function run(frameMs, jitter) {
     const sim = createSim();
     const stepper = new FixedStepper(STEP_MS, 8);
@@ -127,7 +129,7 @@ test('no sleeping block is left hanging after a hit', () => {
 });
 
 test('the first level stays easy: wood only, and most reasonable shots hit something', () => {
-  assert.ok(testTower.blocks.every((block) => block.material === 'wood' || block.material === 'crystal'));
+  assert.ok(testTower.blocks.every((block) => block.material === 'wood' || block.material === 'target'));
   let total = 0, hits = 0;
   for (let angle = -0.1; angle >= -1.2; angle -= 0.1) {
     for (const power of [0.7, 0.8, 0.9, 1]) {
@@ -135,11 +137,11 @@ test('the first level stays easy: wood only, and most reasonable shots hit somet
       sim.launch(...Object.values(shot(angle, power)));
       runUntilSettled(sim);
       total++;
-      if (sim.crystalsLeft < 3) hits++;
+      if (sim.targetsLeft < 3) hits++;
       sim.destroy();
     }
   }
-  assert.ok(hits / total >= 0.3, `only ${hits}/${total} first shots broke a crystal`);
+  assert.ok(hits / total >= 0.3, `only ${hits}/${total} first shots knocked out a 四十塊`);
 });
 
 test('a simple aiming bot can clear the test tower', () => {
@@ -147,18 +149,18 @@ test('a simple aiming bot can clear the test tower', () => {
   for (let angle = -0.15; angle >= -1.1; angle -= 0.05) for (const power of [0.85, 1]) candidates.push(shot(angle, power));
   const chosen = [];
   let best;
-  for (let shotIndex = 0; shotIndex < 4; shotIndex++) {
+  for (let shotIndex = 0; shotIndex < testTower.shots.length; shotIndex++) {
     best = undefined;
     for (const candidate of candidates) {
       const sim = createSim();
       playShots(sim, [...chosen, candidate]);
       while (sim.phase === 'flying') sim.step();
-      const value = (3 - sim.crystalsLeft) * 1e6 + sim.score.total;
-      if (!best || value > best.value) best = { candidate, value, phase: sim.phase, crystals: sim.crystalsLeft };
+      const value = (3 - sim.targetsLeft) * 1e6 + sim.score.total;
+      if (!best || value > best.value) best = { candidate, value, phase: sim.phase, targets: sim.targetsLeft };
       sim.destroy();
     }
     chosen.push(best.candidate);
     if (best.phase === 'won') break;
   }
-  assert.equal(best.phase, 'won', `bot left ${best.crystals} crystal(s) after ${chosen.length} shots`);
+  assert.equal(best.phase, 'won', `bot left ${best.targets} 四十塊 after ${chosen.length} shots`);
 });

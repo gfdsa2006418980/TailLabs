@@ -1,7 +1,7 @@
 {
-  "name": "蛇貂大反擊 · TailLabs TL004",
-  "short_name": "蛇貂大反擊",
-  "description": "拉開彈弓,把蛇貂射向複製魔法塔。",
+  "name": "爆打四十塊 · TailLabs TL004",
+  "short_name": "爆打四十塊",
+  "description": "拉開彈弓,派出五位夥伴,把躲進塔裡的四十塊全部打飛!",
   "lang": "zh-Hant",
   "start_url": "./",
   "scope": "./",
@@ -10,8 +10,21 @@
   "background_color": "#fbeee2",
   "theme_color": "#f6e2da",
   "icons": [
-    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
-    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
-    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+    {
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "icons/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
   ]
 }

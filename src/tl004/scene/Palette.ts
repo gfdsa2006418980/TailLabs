@@ -8,7 +8,6 @@ export const MATERIAL_COLORS = {
   wood: { base: 0xd29a66, light: 0xe8bb88, dark: 0x9c6844 },
   stone: { base: 0xb1a7ad, light: 0xd2cacf, dark: 0x857b82 },
   glass: { base: 0xdcc6ef, light: 0xffffff, dark: 0x8b6fa8 },
-  crystal: { base: 0xc995e6, light: 0xf6e3ff, dark: 0x8a57b0 },
 } as const;
 
 export const SCENERY = {

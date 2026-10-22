@@ -1,11 +1,12 @@
 import Phaser from 'phaser';
-import manifest from '../data/serpentelas.generated.json';
+import serpentelaData from '../data/serpentelas.generated.json';
+import attackerData from './data/attackers.generated.json';
 import testTower from './levels/test-tower.json';
 import { PHYSICS, VIEW } from './config/Tuning.ts';
 import { Sfx } from './audio/Sfx.ts';
 import { BattleScene } from './scene/BattleScene.ts';
-import type { BattleHooks, BattleResult } from './scene/BattleScene.ts';
-import type { LevelData, SerpentelaShape } from './sim/Level.ts';
+import type { AttackerArt, BattleHooks, BattleResult } from './scene/BattleScene.ts';
+import type { LevelData, ShapeDefinition, ShapeLibrary } from './sim/Level.ts';
 import { enterLandscapeFullscreen, fitStage, platform, portraitQuery, reducedMotionQuery } from './platform/Platform.ts';
 import './style.css';
 
@@ -32,8 +33,13 @@ const resultStarsLabel = element('result-stars-label');
 const retryButton = element<HTMLButtonElement>('retry-button');
 
 const level = testTower as LevelData;
-const shapes = new Map<string, SerpentelaShape>(manifest.definitions.map((d) => [d.id, d]));
-const textureUrl = (id: string) => `${import.meta.env.BASE_URL}assets/serpentelas/${id}.webp`;
+const shapes: ShapeLibrary = {
+  attackers: new Map<string, ShapeDefinition>(attackerData.definitions.map((d) => [d.id, d])),
+  targets: new Map<string, ShapeDefinition>(serpentelaData.definitions.map((d) => [d.id, d])),
+};
+const attackerArt = new Map<string, AttackerArt>(attackerData.definitions.map((d) => [d.id, { name: d.name, textureScale: d.textureScale }]));
+const attackerUrl = (id: string) => `${import.meta.env.BASE_URL}assets/attackers/${id}.webp`;
+const targetUrl = (id: string) => `${import.meta.env.BASE_URL}assets/serpentelas/${id}.webp`;
 const sfx = new Sfx();
 
 let started = false;
@@ -49,18 +55,19 @@ const hooks: BattleHooks = {
     queue.replaceChildren(...ids.map((id, i) => {
       const item = document.createElement('li');
       const image = document.createElement('img');
-      image.src = textureUrl(id); image.alt = ''; image.width = 44; image.height = 44;
+      image.src = attackerUrl(id); image.alt = ''; image.width = 44; image.height = 44;
+      item.title = attackerArt.get(id)?.name ?? '';
       item.append(image);
       if (i === 0) item.classList.add('current');
       return item;
     }));
-    queue.setAttribute('aria-label', `剩餘 ${ids.length} 隻蛇貂`);
+    queue.setAttribute('aria-label', `還有 ${ids.length} 位夥伴:${ids.map((id) => attackerArt.get(id)?.name ?? id).join('、')}`);
   },
   onSkipAvailable: (available) => { nextButton.hidden = !available; },
   onResult: (result) => showResult(result),
 };
 
-const scene = new BattleScene(hooks, { level, shapes, textureUrl });
+const scene = new BattleScene(hooks, { level, shapes, attackerArt, attackerUrl, targetUrl });
 
 const game = new Phaser.Game({
   type: Phaser.AUTO,
@@ -137,7 +144,7 @@ function showResult(result: BattleResult): void {
   resultOpen = true;
   updatePause();
   nextButton.hidden = true;
-  resultTitle.textContent = result.won ? '過關!' : '水晶還在⋯';
+  resultTitle.textContent = result.won ? '四十塊全打飛了!' : '四十塊還躲在塔裡⋯';
   resultStarsLabel.textContent = `${result.stars} 顆星`;
   const stars = [...resultPanel.querySelectorAll<HTMLSpanElement>('.stars span')];
   stars.forEach((star) => star.classList.remove('lit'));

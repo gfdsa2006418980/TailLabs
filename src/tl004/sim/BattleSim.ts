@@ -1,10 +1,10 @@
 import { MATERIALS } from '../config/Materials.ts';
 import type { MaterialId } from '../config/Materials.ts';
-import { PHYSICS, SERPENTELA, SHOT, SLING, STEP_MS, WORLD } from '../config/Tuning.ts';
+import { ATTACKER, PHYSICS, SHOT, SLING, STEP_MS, TARGET, WORLD } from '../config/Tuning.ts';
 import { damageFrom, impactStrength } from '../rules/Damage.ts';
 import { ScoreBook, starsFor } from '../rules/Scoring.ts';
-import { CRYSTAL_SHAPE, validateLevel } from './Level.ts';
-import type { LevelData, Point, SerpentelaShape } from './Level.ts';
+import { validateLevel } from './Level.ts';
+import type { LevelData, Point, ShapeDefinition, ShapeLibrary } from './Level.ts';
 import { compoundInertia } from './CompoundInertia.ts';
 
 /** The parts of a Matter body the simulation reads. */
@@ -65,18 +65,20 @@ export interface MatterKit {
   Sleeping: { set(body: SimBody, isSleeping: boolean): void };
 }
 
-export type PieceKind = 'block' | 'crystal' | 'serpentela';
+/** block = wood/stone/glass, target = a 四十塊, attacker = a launched partner. */
+export type PieceKind = 'block' | 'target' | 'attacker';
 
 export interface Piece {
   id: number;
   kind: PieceKind;
   body: SimBody;
   material?: MaterialId;
-  /** Serpentela art id. */
+  /** Art id: partner id for attackers, serpentela id for targets. */
   shapeId?: string;
+  /** Size of the art box in world px. */
   w: number;
   h: number;
-  /** Where the body's centre of mass sits in the art's local coordinates (rectangles: 0,0 = middle). */
+  /** Where the body's centre of mass sits in the art box (rectangles: 0,0 = middle). */
   anchor: Point;
   hp: number;
   maxHp: number;
@@ -86,9 +88,9 @@ export interface Piece {
 export type Phase = 'aiming' | 'flying' | 'won' | 'lost';
 
 export type SimEvent =
-  | { type: 'impact'; x: number; y: number; strength: number; material: MaterialId | 'ground' | 'serpentela'; serpentelaId?: number }
+  | { type: 'impact'; x: number; y: number; strength: number; material: MaterialId | 'ground' | 'attacker'; attackerId?: number }
   | { type: 'cracked'; id: number }
-  | { type: 'break'; id: number; kind: PieceKind; material?: MaterialId; x: number; y: number; points: number }
+  | { type: 'break'; id: number; kind: PieceKind; material?: MaterialId; shapeId?: string; x: number; y: number; angle: number; vx: number; points: number }
   | { type: 'launch'; shot: number; id: number }
   | { type: 'shotEnd'; chainBonus: number }
   | { type: 'ready'; shot: number }
@@ -136,18 +138,19 @@ export class BattleSim {
   /** Index of the shot on the sling (or last fired once the level ends). */
   shotIndex = 0;
   stepCount = 0;
-  crystalsLeft = 0;
+  /** 四十塊 still in play. */
+  targetsLeft = 0;
   stars = 0;
-  /** Serpentela currently in flight for the camera; cleared at shot end. */
-  activeSerpentelaId: number | undefined;
-  /** Whether the active serpentela has touched anything yet. */
+  /** Partner currently in flight, for the camera; cleared at shot end. */
+  activeAttackerId: number | undefined;
+  /** Whether the active partner has touched anything yet. */
   activeHasImpacted = false;
   /** Steps since the current shot was launched. */
   shotSteps = 0;
 
   private readonly kit: MatterKit;
   private readonly engine: SimEngine;
-  private readonly shapes: ReadonlyMap<string, SerpentelaShape>;
+  private readonly shapes: ShapeLibrary;
   private readonly ground: SimBody;
   private readonly impacts = new Map<string, ImpactRecord>();
   private readonly onCollision: (event: { pairs: SimPair[] }) => void;
@@ -159,17 +162,19 @@ export class BattleSim {
   private scoring = true;
   private destroyed = false;
 
-  constructor(kit: MatterKit, engine: SimEngine, level: LevelData, shapes: ReadonlyMap<string, SerpentelaShape>) {
+  constructor(kit: MatterKit, engine: SimEngine, level: LevelData, shapes: ShapeLibrary) {
     this.kit = kit;
     this.engine = engine;
     this.level = level;
     this.shapes = shapes;
-    validateLevel(level);
-    for (const id of level.shots) this.shape(id);
+    validateLevel(level, shapes);
     configureEngine(engine);
     this.ground = kit.Bodies.rectangle(1800, WORLD.groundY + 300, 12000, 600, { isStatic: true, friction: 0.9, frictionStatic: 1, label: 'ground' });
     kit.Composite.add(engine.world, this.ground);
-    for (const spec of level.blocks) this.addBlock(spec.material, spec.x, spec.y, spec.w ?? 0, spec.h ?? 0, spec.angle ?? 0);
+    for (const spec of level.blocks) {
+      if (spec.material === 'target') this.addTarget(spec.shape as string, spec.x, spec.y);
+      else this.addBlock(spec.material, spec.x, spec.y, spec.w ?? 0, spec.h ?? 0, spec.angle ?? 0);
+    }
     this.onCollision = (event) => this.recordImpacts(event.pairs);
     this.onSeparation = (event) => {
       for (const pair of event.pairs) {
@@ -184,42 +189,32 @@ export class BattleSim {
   }
 
   get shotsTotal(): number { return this.level.shots.length; }
-  /** Serpentelas still waiting, including the one on the sling while aiming. */
+  /** Partners still waiting, including the one on the sling while aiming. */
   get shotsLeft(): number { return this.phase === 'aiming' ? this.shotsTotal - this.shotIndex : Math.max(0, this.shotsTotal - this.shotIndex - 1); }
   get isLastShot(): boolean { return this.shotIndex + 1 >= this.shotsTotal; }
-  /** No skipping the last shot: a slow collapse may still break the final crystal. */
+  /** No skipping the last shot: a slow collapse may still knock out the final 四十塊. */
   get canSkip(): boolean { return this.phase === 'flying' && !this.isLastShot && this.shotSteps >= SHOT.skipAfterSteps; }
   get currentShapeId(): string | undefined { return this.level.shots[this.shotIndex]; }
 
-  shape(id: string): SerpentelaShape {
-    const shape = this.shapes.get(id);
-    if (!shape) throw new Error(`Unknown serpentela shape: ${id}`);
-    return shape;
-  }
-
-  /** Fire the serpentela on the sling. Velocity is in px per step. */
+  /** Fire the partner on the sling. Velocity is in px per step. */
   launch(vx: number, vy: number): SimEvent[] {
     if (this.phase !== 'aiming') return [];
     const shapeId = this.level.shots[this.shotIndex];
-    const shape = this.shape(shapeId);
-    const scaled = shape.outline.map((p) => ({ x: p.x * SERPENTELA.scale, y: p.y * SERPENTELA.scale }));
-    const body = this.kit.Bodies.fromVertices(SLING_REST.x, SLING_REST.y, scaled, {
-      density: SERPENTELA.density, friction: SERPENTELA.friction, frictionStatic: SERPENTELA.frictionStatic,
-      frictionAir: SERPENTELA.frictionAir, restitution: SERPENTELA.restitution, label: shapeId,
+    const shape = this.shapes.attackers.get(shapeId) as ShapeDefinition;
+    const body = this.kit.Bodies.fromVertices(SLING_REST.x, SLING_REST.y, shape.outline.map((p) => ({ ...p })), {
+      density: ATTACKER.density, friction: ATTACKER.friction, frictionStatic: ATTACKER.frictionStatic,
+      frictionAir: ATTACKER.frictionAir, restitution: ATTACKER.restitution, label: shapeId,
     }, true, 0, 0);
-    const anchor = anchorFor(body, minOf(scaled));
+    const anchor = anchorFor(body, minOf(shape.outline));
     this.kit.Body.setInertia(body, compoundInertia(body.position, body.parts.slice(1)));
     this.kit.Body.setVelocity(body, { x: vx, y: vy });
     this.kit.Composite.add(this.engine.world, body);
-    this.pieces.set(body.id, {
-      id: body.id, kind: 'serpentela', body, shapeId, w: shape.width * SERPENTELA.scale, h: shape.height * SERPENTELA.scale,
-      anchor, hp: Infinity, maxHp: Infinity, cracked: false,
-    });
+    this.pieces.set(body.id, { id: body.id, kind: 'attacker', body, shapeId, w: shape.width, h: shape.height, anchor, hp: Infinity, maxHp: Infinity, cracked: false });
     this.launches.push({ step: this.stepCount, vx, vy });
     this.phase = 'flying';
     this.shotSteps = 0;
     this.quietSteps = 0;
-    this.activeSerpentelaId = body.id;
+    this.activeAttackerId = body.id;
     this.activeHasImpacted = false;
     this.score.beginShot(this.stepCount);
     return [{ type: 'launch', shot: this.shotIndex, id: body.id }];
@@ -248,7 +243,7 @@ export class BattleSim {
       this.quietSteps = this.isQuiet() ? this.quietSteps + 1 : 0;
       const limit = this.isLastShot ? SHOT.forceLastSteps : SHOT.forceNextSteps;
       if (this.quietSteps >= SHOT.settleSteps || this.shotSteps >= limit) events.push(...this.endShot());
-    } else if (this.phase === 'aiming' && this.crystalsLeft === 0) {
+    } else if (this.phase === 'aiming' && this.targetsLeft === 0) {
       events.push(...this.finishWon());
     }
     return events;
@@ -266,18 +261,27 @@ export class BattleSim {
 
   private addBlock(material: MaterialId, x: number, y: number, w: number, h: number, angle: number): void {
     const spec = MATERIALS[material];
-    const options = { density: spec.density, friction: spec.friction, frictionStatic: spec.frictionStatic, restitution: spec.restitution, angle, label: material };
-    let body: SimBody, anchor: Point = { x: 0, y: 0 }, width = w, height = h;
-    if (material === 'crystal') {
-      body = this.kit.Bodies.fromVertices(x, y, CRYSTAL_SHAPE.map((p) => ({ ...p })), options);
-      anchor = anchorFor(body, minOf(CRYSTAL_SHAPE));
-      width = 54; height = 94;
-      this.crystalsLeft++;
-    } else {
-      body = this.kit.Bodies.rectangle(x, y, w, h, options);
-    }
+    const body = this.kit.Bodies.rectangle(x, y, w, h, { density: spec.density, friction: spec.friction, frictionStatic: spec.frictionStatic, restitution: spec.restitution, angle, label: material });
     this.kit.Composite.add(this.engine.world, body);
-    this.pieces.set(body.id, { id: body.id, kind: material === 'crystal' ? 'crystal' : 'block', body, material, w: width, h: height, anchor, hp: spec.hp, maxHp: spec.hp, cracked: false });
+    this.pieces.set(body.id, { id: body.id, kind: 'block', body, material, w, h, anchor: { x: 0, y: 0 }, hp: spec.hp, maxHp: spec.hp, cracked: false });
+  }
+
+  /** A 四十塊 with its real concave outline (TL001 collider data). */
+  private addTarget(shapeId: string, x: number, y: number): void {
+    const spec = MATERIALS.target;
+    const shape = this.shapes.targets.get(shapeId) as ShapeDefinition;
+    const outline = shape.outline.map((p) => ({ x: p.x * TARGET.scale, y: p.y * TARGET.scale }));
+    const body = this.kit.Bodies.fromVertices(x, y, outline, {
+      density: spec.density, friction: spec.friction, frictionStatic: spec.frictionStatic, restitution: spec.restitution, label: shapeId,
+    }, true, 0, 0);
+    const anchor = anchorFor(body, minOf(outline));
+    this.kit.Body.setInertia(body, compoundInertia(body.position, body.parts.slice(1)));
+    this.kit.Composite.add(this.engine.world, body);
+    this.targetsLeft++;
+    this.pieces.set(body.id, {
+      id: body.id, kind: 'target', body, material: 'target', shapeId, w: shape.width * TARGET.scale, h: shape.height * TARGET.scale,
+      anchor, hp: spec.hp, maxHp: spec.hp, cracked: false,
+    });
   }
 
   /** Let the hand-placed tower drop into its resting pose before play, then put it to sleep. */
@@ -314,24 +318,23 @@ export class BattleSim {
     for (const impact of this.impacts.values()) {
       const pa = this.pieces.get(impact.a.id), pb = this.pieces.get(impact.b.id);
       for (const piece of [pa, pb]) {
-        if (!piece || piece.kind === 'serpentela' || !piece.material) continue;
-        const spec = MATERIALS[piece.material];
-        piece.hp -= damageFrom(impact.strength, spec);
+        if (!piece || piece.kind === 'attacker' || !piece.material) continue;
+        piece.hp -= damageFrom(impact.strength, MATERIALS[piece.material]);
         if (!piece.cracked && piece.hp > 0 && piece.hp <= piece.maxHp / 2) {
           piece.cracked = true;
           events.push({ type: 'cracked', id: piece.id });
         }
       }
-      const serpentela = [pa, pb].find((piece) => piece?.kind === 'serpentela');
-      if (serpentela && serpentela.id === this.activeSerpentelaId) this.activeHasImpacted = true;
+      const attacker = [pa, pb].find((piece) => piece?.kind === 'attacker');
+      if (attacker && attacker.id === this.activeAttackerId) this.activeHasImpacted = true;
       if (impact.strength >= SHOT.impactEventMin) {
-        const other = serpentela === pa ? pb : pa;
-        const material = other?.material ?? (other?.kind === 'serpentela' ? 'serpentela' : 'ground');
-        events.push({ type: 'impact', x: impact.point.x, y: impact.point.y, strength: impact.strength, material, serpentelaId: serpentela?.id });
+        const other = attacker === pa ? pb : pa;
+        const material = other?.material ?? (other?.kind === 'attacker' ? 'attacker' : 'ground');
+        events.push({ type: 'impact', x: impact.point.x, y: impact.point.y, strength: impact.strength, material, attackerId: attacker?.id });
       }
     }
     for (const piece of [...this.pieces.values()]) {
-      if (piece.kind !== 'serpentela' && piece.hp <= 0) this.removePiece(piece, events);
+      if (piece.kind !== 'attacker' && piece.hp <= 0) this.removePiece(piece, events);
     }
   }
 
@@ -346,14 +349,15 @@ export class BattleSim {
     this.kit.Composite.remove(this.engine.world, piece.body);
     this.pieces.delete(piece.id);
     this.wakeAround(piece.body);
-    if (piece.kind === 'serpentela') {
-      if (piece.id === this.activeSerpentelaId) this.activeHasImpacted = true;
+    if (piece.kind === 'attacker') {
+      if (piece.id === this.activeAttackerId) this.activeHasImpacted = true;
       return;
     }
-    if (piece.kind === 'crystal') this.crystalsLeft--;
+    if (piece.kind === 'target') this.targetsLeft--;
     const base = piece.material ? MATERIALS[piece.material].score : 0;
     const points = this.scoring && this.phase !== 'won' && this.phase !== 'lost' ? this.score.addBreak(base, this.stepCount) : 0;
-    events.push({ type: 'break', id: piece.id, kind: piece.kind, material: piece.material, x: piece.body.position.x, y: piece.body.position.y, points });
+    const { body } = piece;
+    events.push({ type: 'break', id: piece.id, kind: piece.kind, material: piece.material, shapeId: piece.shapeId, x: body.position.x, y: body.position.y, angle: body.angle, vx: body.velocity.x, points });
   }
 
   /** Sleeping bodies act as fixed supports; wake everything that touched a removed body so nothing hangs in the air. */
@@ -388,10 +392,10 @@ export class BattleSim {
 
   private endShot(): SimEvent[] {
     const events: SimEvent[] = [{ type: 'shotEnd', chainBonus: this.score.endShot() }];
-    this.activeSerpentelaId = undefined;
+    this.activeAttackerId = undefined;
     // No forced sleep here: a slowly tipping plank looks "quiet" but must keep falling.
     // Matter's own sleeping (sustained low motion) and the separation wake-up handle rest.
-    if (this.crystalsLeft === 0) return [...events, ...this.finishWon()];
+    if (this.targetsLeft === 0) return [...events, ...this.finishWon()];
     if (this.shotIndex + 1 >= this.shotsTotal) {
       this.phase = 'lost';
       this.stars = 0;

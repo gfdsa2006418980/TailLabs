@@ -7,19 +7,19 @@
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <meta name="apple-mobile-web-app-title" content="蛇貂大反擊" />
-    <meta name="description" content="TailLabs TL004:拉開彈弓,把蛇貂射向複製魔法塔。手感原型。" />
+    <meta name="apple-mobile-web-app-title" content="爆打四十塊" />
+    <meta name="description" content="TailLabs TL004:拉開彈弓,派出五位夥伴,把躲進塔裡的四十塊全部打飛!" />
     <link rel="manifest" href="./manifest.webmanifest" />
     <link rel="icon" type="image/png" href="./icons/icon-192.png" />
     <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png" />
-    <title>蛇貂大反擊 · TailLabs TL004</title>
+    <title>爆打四十塊 · TailLabs TL004</title>
   </head>
   <body>
     <div id="stage">
       <div id="game"></div>
 
       <div id="hud" hidden>
-        <ol id="queue" class="queue" aria-label="剩餘蛇貂"></ol>
+        <ol id="queue" class="queue" aria-label="剩餘夥伴"></ol>
         <div class="hud-right">
           <div class="score-card"><span>分數</span><strong id="score">0</strong></div>
           <button id="sound-button" class="icon-button" type="button" aria-label="關閉音效" aria-pressed="false">♪</button>
@@ -30,14 +30,14 @@
 
       <section id="start-panel" class="panel start-panel" aria-labelledby="start-title">
         <p class="eyebrow">TAIL LABS · TL004 · 手感原型</p>
-        <h1 id="start-title">蛇貂大反擊</h1>
-        <p class="lead">拉開彈弓,打碎塔裡的複製水晶。</p>
+        <h1 id="start-title">爆打四十塊</h1>
+        <p class="lead">四十塊逃家躲進塔裡了!拉開彈弓,派夥伴把牠們全部打飛。</p>
         <button id="start-button" class="primary-button" type="button">開始 <span aria-hidden="true">→</span></button>
         <p id="install-hint" class="hint" hidden></p>
       </section>
 
       <section id="result-panel" class="panel result-panel" aria-labelledby="result-title" hidden>
-        <h2 id="result-title">過關!</h2>
+        <h2 id="result-title">四十塊全打飛了!</h2>
         <div class="stars" aria-hidden="true"><span>★</span><span>★</span><span>★</span></div>
         <p id="result-stars-label" class="sr-only"></p>
         <p class="result-score"><span>分數</span><strong id="result-score">0</strong></p>

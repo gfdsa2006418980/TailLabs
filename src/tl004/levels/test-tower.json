@@ -1,25 +1,20 @@
 {
   "id": "m1-wood-hut",
   "name": "木造小工坊",
-  "shots": [
-    "serpentela-w50-01",
-    "serpentela-w50-02",
-    "serpentela-w50-03",
-    "serpentela-w50-04"
-  ],
+  "shots": ["caideng", "zhusun", "poker", "jiangpian", "youfan3d"],
   "stars": {
-    "two": 25000,
-    "three": 35000
+    "two": 35000,
+    "three": 45000
   },
   "blocks": [
-    { "material": "wood", "x": 1310, "y": 860, "w": 30, "h": 160 },
-    { "material": "wood", "x": 1510, "y": 860, "w": 30, "h": 160 },
-    { "material": "crystal", "x": 1410, "y": 892 },
-    { "material": "wood", "x": 1410, "y": 767, "w": 260, "h": 26 },
-    { "material": "wood", "x": 1360, "y": 704, "w": 28, "h": 100 },
-    { "material": "wood", "x": 1460, "y": 704, "w": 28, "h": 100 },
-    { "material": "crystal", "x": 1410, "y": 706 },
-    { "material": "wood", "x": 1410, "y": 642, "w": 160, "h": 24 },
-    { "material": "crystal", "x": 1410, "y": 582 }
+    { "material": "wood", "x": 1280, "y": 865, "w": 30, "h": 150 },
+    { "material": "wood", "x": 1540, "y": 865, "w": 30, "h": 150 },
+    { "material": "target", "x": 1410, "y": 895, "shape": "serpentela-w50-02" },
+    { "material": "wood", "x": 1410, "y": 777, "w": 300, "h": 26 },
+    { "material": "wood", "x": 1335, "y": 709, "w": 28, "h": 110 },
+    { "material": "wood", "x": 1485, "y": 709, "w": 28, "h": 110 },
+    { "material": "target", "x": 1410, "y": 718, "shape": "serpentela-w20-01" },
+    { "material": "wood", "x": 1410, "y": 642, "w": 200, "h": 24 },
+    { "material": "target", "x": 1410, "y": 588, "shape": "serpentela-w5-01" }
   ]
 }

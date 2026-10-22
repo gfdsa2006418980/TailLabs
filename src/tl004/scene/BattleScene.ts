@@ -1,19 +1,21 @@
 import Phaser from 'phaser';
-import { FX, GRAVITY_PER_STEP, PHYSICS, SERPENTELA, SLING, STEP_MS, WORLD } from '../config/Tuning.ts';
+import { ATTACKER, FX, GRAVITY_PER_STEP, PHYSICS, SLING, STEP_MS, TARGET, WORLD } from '../config/Tuning.ts';
 import type { MaterialId } from '../config/Materials.ts';
 import { FixedStepper } from '../rules/FixedStepper.ts';
 import { launchFromPull, predictPath, previewDots } from '../rules/Launch.ts';
 import type { Launch, Vec } from '../rules/Launch.ts';
 import { BattleSim, SLING_REST } from '../sim/BattleSim.ts';
 import type { MatterKit, Piece, SimEngine, SimEvent } from '../sim/BattleSim.ts';
-import type { LevelData, SerpentelaShape } from '../sim/Level.ts';
+import type { LevelData, ShapeLibrary } from '../sim/Level.ts';
 import type { Sfx } from '../audio/Sfx.ts';
 import { CameraRig } from './CameraRig.ts';
 import type { Rect } from './CameraRig.ts';
 import { CREAM, INK, ROSE, ROSE_BROWN } from './Palette.ts';
 import { buildScenery, buildSling } from './Scenery.ts';
 import type { SlingParts } from './Scenery.ts';
-import { CRYSTAL_PAD, blockTexture, crystalTexture, debrisTexture, glowTexture, puffTexture, sparkTexture } from './Textures.ts';
+import { blockTexture, debrisTexture, puffTexture, sparkTexture } from './Textures.ts';
+
+type BlockMaterial = Exclude<MaterialId, 'target'>;
 
 export interface BattleResult { won: boolean; stars: number; score: number; bonuses: number[] }
 
@@ -21,24 +23,31 @@ export interface BattleHooks {
   sfx: Sfx;
   reducedMotion(): boolean;
   onScore(total: number): void;
-  /** Serpentela art ids still to fire, sling first. */
+  /** Partner ids still to fire, sling first. */
   onShots(ids: string[]): void;
   onSkipAvailable(available: boolean): void;
   onResult(result: BattleResult): void;
 }
 
+/** Display data for a partner texture (from attackers.generated.json). */
+export interface AttackerArt { name: string; textureScale: number }
+
 export interface BattleConfig {
   level: LevelData;
-  shapes: ReadonlyMap<string, SerpentelaShape>;
-  textureUrl(id: string): string;
+  shapes: ShapeLibrary;
+  attackerArt: ReadonlyMap<string, AttackerArt>;
+  attackerUrl(id: string): string;
+  targetUrl(id: string): string;
 }
 
-const MATERIALS_WITH_DEBRIS: MaterialId[] = ['wood', 'stone', 'glass', 'crystal'];
+const BLOCK_DEBRIS: BlockMaterial[] = ['wood', 'stone', 'glass'];
+const attackerKey = (id: string) => `atk-${id}`;
+const targetKey = (id: string) => `tgt-${id}`;
 
 function towerBounds(pieces: Iterable<Piece>): Rect {
   const rect = { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity };
   for (const piece of pieces) {
-    if (piece.kind === 'serpentela') continue;
+    if (piece.kind === 'attacker') continue;
     rect.minX = Math.min(rect.minX, piece.body.bounds.min.x); rect.maxX = Math.max(rect.maxX, piece.body.bounds.max.x);
     rect.minY = Math.min(rect.minY, piece.body.bounds.min.y); rect.maxY = Math.max(rect.maxY, piece.body.bounds.max.y);
   }
@@ -60,8 +69,7 @@ export class BattleScene extends Phaser.Scene {
   private slingSprite!: Phaser.GameObjects.Image;
   private queue: Phaser.GameObjects.Image[] = [];
   private sprites = new Map<number, Phaser.GameObjects.Image>();
-  private glows = new Map<number, Phaser.GameObjects.Image>();
-  private debris = new Map<MaterialId, Phaser.GameObjects.Particles.ParticleEmitter>();
+  private debris = new Map<BlockMaterial, Phaser.GameObjects.Particles.ParticleEmitter>();
   private puffs!: Phaser.GameObjects.Particles.ParticleEmitter;
   private sparks!: Phaser.GameObjects.Particles.ParticleEmitter;
   private started = false;
@@ -92,12 +100,15 @@ export class BattleScene extends Phaser.Scene {
 
   preload(): void {
     for (const id of new Set(this.config.level.shots)) {
-      if (!this.textures.exists(id)) this.load.image(id, this.config.textureUrl(id));
+      if (!this.textures.exists(attackerKey(id))) this.load.image(attackerKey(id), this.config.attackerUrl(id));
+    }
+    for (const block of this.config.level.blocks) {
+      if (block.material === 'target' && block.shape && !this.textures.exists(targetKey(block.shape))) this.load.image(targetKey(block.shape), this.config.targetUrl(block.shape));
     }
   }
 
   create(): void {
-    this.sprites = new Map(); this.glows = new Map(); this.debris = new Map(); this.queue = [];
+    this.sprites = new Map(); this.debris = new Map(); this.queue = [];
     this.started = false; this.paused = false; this.slingReady = false; this.aim = undefined; this.aimPointer = undefined;
     this.hitStopUntil = 0; this.slowUntil = 0; this.slowUsedThisShot = false; this.recoil = undefined;
     this.currentTrail = []; this.lastTrail = []; this.bonuses = []; this.reported = { score: -1, shots: '', skip: false };
@@ -109,8 +120,7 @@ export class BattleScene extends Phaser.Scene {
     this.bandFront = this.add.graphics().setDepth(30);
     this.trails = this.add.graphics().setDepth(8);
     this.preview = this.add.graphics().setDepth(45);
-    glowTexture(this);
-    for (const material of MATERIALS_WITH_DEBRIS) {
+    for (const material of BLOCK_DEBRIS) {
       this.debris.set(material, this.add.particles(0, 0, debrisTexture(this, material), {
         emitting: false, speed: { min: 160, max: 520 }, angle: { min: 195, max: 345 }, gravityY: 1300,
         lifespan: { min: 650, max: 1100 }, rotate: { start: 0, end: 540 }, scale: { start: 1.2, end: 0.7 }, alpha: { start: 1, end: 0 },
@@ -120,7 +130,7 @@ export class BattleScene extends Phaser.Scene {
       emitting: false, speed: { min: 30, max: 120 }, lifespan: 600, scale: { start: 1.3, end: 2.4 }, alpha: { start: 0.75, end: 0 },
     }).setDepth(49);
     this.sparks = this.add.particles(0, 0, sparkTexture(this), {
-      emitting: false, speed: { min: 120, max: 380 }, lifespan: 520, scale: { start: 1.1, end: 0 }, tint: [0xffffff, 0xf6e3ff, 0xffd9e0],
+      emitting: false, speed: { min: 120, max: 380 }, lifespan: 520, scale: { start: 1.1, end: 0 }, tint: [0xffffff, 0xffe9a8, 0xffd9e0],
     }).setDepth(52);
 
     const Matter = (Phaser.Physics.Matter as unknown as { Matter: MatterKit }).Matter;
@@ -128,7 +138,8 @@ export class BattleScene extends Phaser.Scene {
     this.sim = new BattleSim(Matter, this.matter.world.engine as unknown as SimEngine, this.config.level, this.config.shapes);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => { this.created = false; this.sim.destroy(); });
 
-    this.slingSprite = this.add.image(SLING_REST.x, SLING_REST.y, this.config.level.shots[0]).setDepth(20).setScale(SERPENTELA.scale).setVisible(false);
+    const first = this.config.level.shots[0];
+    this.slingSprite = this.add.image(SLING_REST.x, SLING_REST.y, attackerKey(first)).setDepth(20).setScale(this.attackerScale(first)).setVisible(false);
     this.syncSprites();
     this.rig = new CameraRig(this.cameras.main, towerBounds(this.sim.pieces.values()));
     this.rig.mode = 'tower';
@@ -161,6 +172,12 @@ export class BattleScene extends Phaser.Scene {
   }
 
   next(): void { this.handle(this.sim.requestNext()); }
+
+  private attackerScale(id: string): number {
+    const art = this.config.attackerArt.get(id);
+    if (!art) throw new Error(`Missing partner art: ${id}`);
+    return art.textureScale;
+  }
 
   private toAim(): void {
     this.rig.mode = 'aim';
@@ -198,8 +215,7 @@ export class BattleScene extends Phaser.Scene {
       else if (event.key === ' ' || event.key === 'Enter') { if (this.aim) this.release(); return; }
       else return;
       event.preventDefault();
-      const full = 1;
-      this.setAim(launchFromPull(-Math.cos(k.angle) * k.power * full, -Math.sin(k.angle) * k.power * full, full, SLING.maxLaunchSpeed));
+      this.setAim(launchFromPull(-Math.cos(k.angle) * k.power, -Math.sin(k.angle) * k.power, 1, SLING.maxLaunchSpeed));
     });
   }
 
@@ -234,8 +250,7 @@ export class BattleScene extends Phaser.Scene {
     const aim = this.aim;
     this.cancelAim();
     if (!aim || aim.power < SLING.cancelPower || !this.canAim()) return;
-    const pull = this.pullWorld(aim);
-    this.recoil = { from: pull, start: this.time.now };
+    this.recoil = { from: this.pullWorld(aim), start: this.time.now };
     this.hooks.sfx.launch(aim.power);
     this.lastTrail = this.currentTrail;
     this.currentTrail = [];
@@ -245,7 +260,7 @@ export class BattleScene extends Phaser.Scene {
     this.handle(this.sim.launch(aim.vx, aim.vy));
   }
 
-  /** Visual pull offset of the serpentela on the sling, in world px. */
+  /** Visual pull offset of the partner on the sling, in world px. */
   private pullWorld(aim: Launch): Vec {
     const length = Math.hypot(aim.vx, aim.vy) || 1;
     return { x: (-aim.vx / length) * aim.power * SLING.maxDrag, y: (-aim.vy / length) * aim.power * SLING.maxDrag };
@@ -255,25 +270,25 @@ export class BattleScene extends Phaser.Scene {
     const id = this.sim.currentShapeId;
     if (!id || this.sim.phase !== 'aiming') return;
     this.slingReady = false;
-    this.slingSprite.setTexture(id).setVisible(true).setRotation(0).setScale(SERPENTELA.scale);
+    this.slingSprite.setTexture(attackerKey(id)).setVisible(true).setRotation(0).setScale(this.attackerScale(id));
     const reduced = this.hooks.reducedMotion();
     this.slingSprite.setPosition(reduced ? SLING_REST.x : SLING.x - 150, reduced ? SLING_REST.y : WORLD.groundY - 48);
     this.refreshQueue(true);
     if (reduced) { this.slingReady = true; return; }
     this.tweens.add({ targets: this.slingSprite, x: SLING_REST.x, duration: 820, ease: 'Back.easeInOut' });
-    this.tweens.add({ targets: this.slingSprite, y: SLING_REST.y - 90, duration: 410, ease: 'Sine.easeOut', yoyo: false,
+    this.tweens.add({ targets: this.slingSprite, y: SLING_REST.y - 90, duration: 410, ease: 'Sine.easeOut',
       onComplete: () => this.tweens.add({ targets: this.slingSprite, y: SLING_REST.y, duration: 410, ease: 'Sine.easeIn', onComplete: () => { this.slingReady = true; } }) });
   }
 
-  /** Serpentelas waiting on the grass behind the sling. */
+  /** Partners waiting on the grass behind the sling. */
   private refreshQueue(skipSling = false): void {
     for (const sprite of this.queue) { this.tweens.killTweensOf(sprite); sprite.destroy(); }
     this.queue = [];
     const first = this.sim.phase === 'aiming' ? this.sim.shotIndex + (skipSling || this.slingSprite.visible ? 1 : 0) : this.sim.shotIndex + 1;
-    const ids = this.config.level.shots.slice(first);
-    ids.forEach((id, i) => {
-      const sprite = this.add.image(SLING.x - 160 - i * 92, WORLD.groundY - 44, id).setDepth(4).setScale(0.86);
-      if (!this.hooks.reducedMotion()) this.tweens.add({ targets: sprite, scaleY: 0.82, scaleX: 0.9, duration: 1200 + i * 130, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+    this.config.level.shots.slice(first).forEach((id, i) => {
+      const scale = this.attackerScale(id) * 0.86;
+      const sprite = this.add.image(SLING.x - 160 - i * 92, WORLD.groundY - 44, attackerKey(id)).setDepth(4).setScale(scale);
+      if (!this.hooks.reducedMotion()) this.tweens.add({ targets: sprite, scaleY: scale * 0.95, scaleX: scale * 1.05, duration: 1200 + i * 130, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
       this.queue.push(sprite);
     });
   }
@@ -283,7 +298,7 @@ export class BattleScene extends Phaser.Scene {
     const steps = this.started && !this.paused ? this.stepper.advance(delta, rate) : 0;
     for (let i = 0; i < steps; i++) {
       this.handle(this.sim.step());
-      const active = this.sim.activeSerpentelaId !== undefined ? this.sim.pieces.get(this.sim.activeSerpentelaId) : undefined;
+      const active = this.sim.activeAttackerId !== undefined ? this.sim.pieces.get(this.sim.activeAttackerId) : undefined;
       if (active && this.sim.stepCount % SLING.trailDotEvery === 0) this.currentTrail.push({ x: active.body.position.x, y: active.body.position.y });
     }
     this.syncSprites();
@@ -295,7 +310,7 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private updateCamera(): void {
-    const id = this.sim.activeSerpentelaId;
+    const id = this.sim.activeAttackerId;
     const active = id !== undefined ? this.sim.pieces.get(id) : undefined;
     if (active) {
       this.rig.setFocus(active.body.position.x, active.body.position.y);
@@ -309,29 +324,25 @@ export class BattleScene extends Phaser.Scene {
       this.tweens.killTweensOf(sprite);
       sprite.destroy();
       this.sprites.delete(id);
-      const glow = this.glows.get(id);
-      if (glow) { this.tweens.killTweensOf(glow); glow.destroy(); this.glows.delete(id); }
     }
     for (const piece of this.sim.pieces.values()) {
       let sprite = this.sprites.get(piece.id);
       if (!sprite) sprite = this.createSprite(piece);
       sprite.setPosition(piece.body.position.x, piece.body.position.y).setRotation(piece.body.angle);
-      this.glows.get(piece.id)?.setPosition(piece.body.position.x, piece.body.position.y);
     }
   }
 
   private createSprite(piece: Piece): Phaser.GameObjects.Image {
     let sprite: Phaser.GameObjects.Image;
-    if (piece.kind === 'serpentela') {
-      sprite = this.add.image(0, 0, piece.shapeId as string).setOrigin(piece.anchor.x / piece.w, piece.anchor.y / piece.h).setScale(SERPENTELA.scale).setDepth(20);
-    } else if (piece.kind === 'crystal') {
-      const w = 54 + CRYSTAL_PAD * 2, h = 94 + CRYSTAL_PAD * 2;
-      sprite = this.add.image(0, 0, crystalTexture(this, false)).setOrigin((27 + CRYSTAL_PAD + piece.anchor.x) / w, (48 + CRYSTAL_PAD + piece.anchor.y) / h).setDepth(11);
-      const glow = this.add.image(0, 0, 'tl004-glow').setDepth(9).setBlendMode(Phaser.BlendModes.ADD).setScale(1.6).setAlpha(0.7);
-      if (!this.hooks.reducedMotion()) this.tweens.add({ targets: glow, alpha: 0.35, scale: 1.35, duration: 1100, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
-      this.glows.set(piece.id, glow);
+    if (piece.kind === 'attacker') {
+      const scale = this.attackerScale(piece.shapeId as string);
+      sprite = this.add.image(0, 0, attackerKey(piece.shapeId as string)).setOrigin(piece.anchor.x / piece.w, piece.anchor.y / piece.h).setScale(scale).setDepth(20);
+      sprite.setData('baseScale', scale);
+    } else if (piece.kind === 'target') {
+      sprite = this.add.image(0, 0, targetKey(piece.shapeId as string)).setOrigin(piece.anchor.x / piece.w, piece.anchor.y / piece.h).setScale(TARGET.scale).setDepth(11);
+      sprite.setData('baseScale', TARGET.scale);
     } else {
-      sprite = this.add.image(0, 0, blockTexture(this, piece.material as Exclude<MaterialId, 'crystal'>, piece.w, piece.h, false)).setDepth(10);
+      sprite = this.add.image(0, 0, blockTexture(this, piece.material as BlockMaterial, piece.w, piece.h, false)).setDepth(10);
     }
     this.sprites.set(piece.id, sprite);
     return sprite;
@@ -343,21 +354,15 @@ export class BattleScene extends Phaser.Scene {
       switch (event.type) {
         case 'impact': {
           this.hooks.sfx.impact(event.material, event.strength);
-          if (event.serpentelaId !== undefined) {
+          if (event.attackerId !== undefined) {
             if (!reduced && event.strength >= FX.hitStopMinImpact) this.hitStopUntil = this.time.now + FX.hitStopMs;
-            if (event.strength >= 12) this.squash(event.serpentelaId, event.strength);
+            if (event.strength >= 12) this.squash(event.attackerId, event.strength);
           }
           if (!reduced && event.strength >= FX.shakeMinImpact) this.cameras.main.shake(140, 0.0035 * Math.min(1.6, event.strength / 40));
           if (event.strength >= 20) this.sparks.explode(Math.min(10, Math.round(event.strength / 6)), event.x, event.y);
           break;
         }
-        case 'cracked': {
-          const piece = this.sim.pieces.get(event.id);
-          const sprite = this.sprites.get(event.id);
-          if (!piece || !sprite) break;
-          sprite.setTexture(piece.kind === 'crystal' ? crystalTexture(this, true) : blockTexture(this, piece.material as Exclude<MaterialId, 'crystal'>, piece.w, piece.h, true));
-          break;
-        }
+        case 'cracked': this.onCracked(event.id, reduced); break;
         case 'break': this.onBreak(event, reduced); break;
         case 'launch': this.rig.mode = 'follow'; this.refreshQueue(true); break;
         case 'shotEnd': {
@@ -381,29 +386,56 @@ export class BattleScene extends Phaser.Scene {
     }
   }
 
+  /** Blocks show cracks; a dazed 四十塊 blushes and wobbles. */
+  private onCracked(id: number, reduced: boolean): void {
+    const piece = this.sim.pieces.get(id);
+    const sprite = this.sprites.get(id);
+    if (!piece || !sprite) return;
+    if (piece.kind === 'target') {
+      sprite.setTint(0xffd2d8);
+      if (!reduced) this.tweens.add({ targets: sprite, scaleX: TARGET.scale * 1.08, scaleY: TARGET.scale * 0.92, duration: 120, yoyo: true, repeat: 2 });
+      return;
+    }
+    sprite.setTexture(blockTexture(this, piece.material as BlockMaterial, piece.w, piece.h, true));
+  }
+
   private onBreak(event: Extract<SimEvent, { type: 'break' }>, reduced: boolean): void {
-    const material = event.material ?? 'wood';
-    this.debris.get(material)?.explode(event.kind === 'crystal' ? 14 : 9, event.x, event.y);
     this.puffs.explode(4, event.x, event.y);
-    if (event.kind === 'crystal') {
-      this.hooks.sfx.crystal();
-      this.sparks.explode(18, event.x, event.y);
-      this.ghost(event.x, event.y);
+    if (event.kind === 'target') {
+      this.hooks.sfx.knockout();
+      this.sparks.explode(16, event.x, event.y);
+      this.knockOut(event, reduced);
     } else {
+      const material = (event.material ?? 'wood') as BlockMaterial;
+      this.debris.get(material)?.explode(9, event.x, event.y);
       this.hooks.sfx.shatter(material);
     }
-    if (event.points > 0) this.popup(event.x, event.y - 30, event.points.toLocaleString(), event.kind === 'crystal' ? 0xf3c8ff : 0xffffff);
+    if (event.points > 0) this.popup(event.x, event.y - 40, event.kind === 'target' ? `打飛! +${event.points.toLocaleString()}` : event.points.toLocaleString(), event.kind === 'target' ? 0xffd166 : 0xffffff);
     if (!reduced && !this.slowUsedThisShot && this.sim.phase === 'flying' && this.sim.score.breaksThisShot >= FX.slowMotionMinBreaks) {
       this.slowUsedThisShot = true;
       this.slowUntil = this.time.now + FX.slowMotionMs;
     }
   }
 
-  /** The copied phantom leaving a shattered crystal. */
-  private ghost(x: number, y: number): void {
-    const id = this.config.level.shots[0];
-    const ghost = this.add.image(x, y, id).setDepth(55).setAlpha(0.7).setTint(0xf3c8ff).setScale(0.6);
-    this.tweens.add({ targets: ghost, y: y - 160, alpha: 0, scale: 0.9, duration: 900, ease: 'Cubic.easeOut', onComplete: () => ghost.destroy() });
+  /** A 四十塊 gets knocked spinning out of the screen (visual only; the body is already gone from the simulation). */
+  private knockOut(event: Extract<SimEvent, { type: 'break' }>, reduced: boolean): void {
+    const flyer = this.add.image(event.x, event.y, targetKey(event.shapeId as string)).setScale(TARGET.scale).setRotation(event.angle).setDepth(58);
+    if (reduced) {
+      this.tweens.add({ targets: flyer, alpha: 0, duration: 300, onComplete: () => flyer.destroy() });
+      return;
+    }
+    const direction = Math.abs(event.vx) < 0.5 ? 1 : Math.sign(event.vx);
+    const start = { x: event.x, y: event.y, angle: event.angle };
+    this.tweens.addCounter({
+      from: 0, to: 1, duration: 1100, ease: 'Linear',
+      onUpdate: (tween) => {
+        const t = tween.getValue() ?? 0;
+        flyer.setPosition(start.x + direction * 1500 * t, start.y - 1100 * t + 500 * t * t);
+        flyer.setRotation(start.angle + direction * 14 * t);
+        flyer.setScale(TARGET.scale * (1 + 0.5 * t));
+      },
+      onComplete: () => flyer.destroy(),
+    });
   }
 
   private popup(x: number, y: number, text: string, color: number): void {
@@ -425,22 +457,25 @@ export class BattleScene extends Phaser.Scene {
     if (!sprite) return;
     this.hooks.sfx.squish();
     if (this.hooks.reducedMotion()) return;
+    const base = sprite.getData('baseScale') as number;
     const amount = Math.min(0.32, strength / 120);
     this.tweens.killTweensOf(sprite);
-    sprite.setScale(SERPENTELA.scale * (1 + amount), SERPENTELA.scale * (1 - amount));
-    this.tweens.add({ targets: sprite, scaleX: SERPENTELA.scale, scaleY: SERPENTELA.scale, duration: 620, ease: 'Back.easeOut' });
+    sprite.setScale(base * (1 + amount), base * (1 - amount));
+    this.tweens.add({ targets: sprite, scaleX: base, scaleY: base, duration: 620, ease: 'Back.easeOut' });
   }
 
   private drawSling(time: number): void {
     const back = this.sling.backTip, front = this.sling.frontTip;
     let anchor: Vec = { x: SLING_REST.x - 30, y: SLING_REST.y + 8 };
     let thickness = 10;
+    const id = this.sim.currentShapeId;
+    const scale = id ? this.attackerScale(id) : 1;
     if (this.aim && this.slingSprite.visible) {
       const pull = this.pullWorld(this.aim);
       const x = SLING_REST.x + pull.x, y = SLING_REST.y + pull.y;
       const angle = Math.atan2(this.aim.vy, this.aim.vx);
       const stretch = 1 + 0.24 * this.aim.power;
-      this.slingSprite.setPosition(x, y).setRotation(angle * this.aim.power).setScale(SERPENTELA.scale * stretch, SERPENTELA.scale / stretch);
+      this.slingSprite.setPosition(x, y).setRotation(angle * this.aim.power).setScale(scale * stretch, scale / stretch);
       const len = Math.hypot(pull.x, pull.y) || 1;
       anchor = { x: x + (pull.x / len) * 34, y: y + (pull.y / len) * 34 };
       thickness = 10 - 4 * this.aim.power;
@@ -452,7 +487,7 @@ export class BattleScene extends Phaser.Scene {
         anchor = { x: SLING_REST.x - 30 + this.recoil.from.x * (1 - ease), y: SLING_REST.y + 8 + this.recoil.from.y * (1 - ease) };
       }
     } else if (this.slingSprite.visible && this.slingReady) {
-      this.slingSprite.setPosition(SLING_REST.x, SLING_REST.y).setRotation(0).setScale(SERPENTELA.scale);
+      this.slingSprite.setPosition(SLING_REST.x, SLING_REST.y).setRotation(0).setScale(scale);
     }
     this.bandBack.clear().lineStyle(thickness, ROSE_BROWN, 1).lineBetween(back.x, back.y, anchor.x, anchor.y);
     this.bandFront.clear().lineStyle(thickness + 1, ROSE, 1).lineBetween(front.x, front.y, anchor.x, anchor.y);
@@ -462,7 +497,7 @@ export class BattleScene extends Phaser.Scene {
   private drawGuides(): void {
     this.preview.clear();
     if (this.aim && this.aim.power >= SLING.cancelPower) {
-      const path = predictPath(SLING_REST, this.aim.vx, this.aim.vy, GRAVITY_PER_STEP, SERPENTELA.frictionAir, WORLD.groundY);
+      const path = predictPath(SLING_REST, this.aim.vx, this.aim.vy, GRAVITY_PER_STEP, ATTACKER.frictionAir, WORLD.groundY);
       previewDots(path, SLING.previewFraction, SLING.previewDotEvery).forEach((dot, i, all) => {
         const r = 9 - (i / all.length) * 4;
         this.preview.fillStyle(CREAM, 0.95).fillCircle(dot.x, dot.y, r);
@@ -477,13 +512,10 @@ export class BattleScene extends Phaser.Scene {
   private report(): void {
     const score = this.sim.score.total;
     if (score !== this.reported.score) { this.reported.score = score; this.hooks.onScore(score); }
-    const waiting = this.config.level.shots.slice(this.sim.phase === 'aiming' ? this.sim.shotIndex : this.sim.shotIndex + 1);
-    const shots = waiting.join(',');
-    if (shots !== this.reported.shots || (this.sim.phase === 'won' || this.sim.phase === 'lost')) {
-      const final = this.sim.phase === 'won' || this.sim.phase === 'lost' ? [] : waiting;
-      const key = final.join(',');
-      if (key !== this.reported.shots) { this.reported.shots = key; this.hooks.onShots(final); }
-    }
+    const over = this.sim.phase === 'won' || this.sim.phase === 'lost';
+    const waiting = over ? [] : this.config.level.shots.slice(this.sim.phase === 'aiming' ? this.sim.shotIndex : this.sim.shotIndex + 1);
+    const key = waiting.join(',');
+    if (key !== this.reported.shots) { this.reported.shots = key; this.hooks.onShots(waiting); }
     const skip = this.sim.canSkip;
     if (skip !== this.reported.skip) { this.reported.skip = skip; this.hooks.onSkipAvailable(skip); }
   }

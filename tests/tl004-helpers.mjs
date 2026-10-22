@@ -14,8 +14,12 @@ Common.setDecomp(decomp);
 
 export const kit = { Engine, Bodies, Body, Composite, Events, Sleeping };
 
-const manifest = JSON.parse(await readFile(new URL('../src/data/serpentelas.generated.json', import.meta.url)));
-export const shapes = new Map(manifest.definitions.map((d) => [d.id, d]));
+const serpentelas = JSON.parse(await readFile(new URL('../src/data/serpentelas.generated.json', import.meta.url)));
+const attackers = JSON.parse(await readFile(new URL('../src/tl004/data/attackers.generated.json', import.meta.url)));
+export const shapes = {
+  attackers: new Map(attackers.definitions.map((d) => [d.id, d])),
+  targets: new Map(serpentelas.definitions.map((d) => [d.id, d])),
+};
 export const testTower = JSON.parse(await readFile(new URL('../src/tl004/levels/test-tower.json', import.meta.url)));
 
 export function createSim(level = testTower) {

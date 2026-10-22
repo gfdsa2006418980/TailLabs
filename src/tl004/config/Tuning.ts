@@ -33,22 +33,29 @@ export const PHYSICS = {
 /** Downward speed gained per step: gravity × scale × step². */
 export const GRAVITY_PER_STEP = PHYSICS.gravityY * PHYSICS.gravityScale * STEP_MS * STEP_MS;
 
-export const SERPENTELA = {
-  /** Display and collider scale of the 96 px artwork (≈ 9% of the 1080 px safe height). */
-  scale: 1,
-  density: 0.002,
+/** The five launched partners (彩燈, 竹筍, 撲克, 薑片, 3D油飯). Outlines are already in display px. */
+export const ATTACKER = {
+  /** Their art is smaller inside its box than the old serpentelas, so density is higher to keep a similar punch. */
+  density: 0.0027,
   friction: 0.6,
   frictionStatic: 0.9,
   frictionAir: 0.004,
   restitution: 0.22,
 } as const;
 
+/** 四十塊: the escaped serpentelas hiding in the tower. */
+export const TARGET = {
+  /** Scale of the 96 px serpentela art and its collider. */
+  scale: 0.8,
+  score: 5000,
+} as const;
+
 export const SLING = {
   x: 420,
   y: 690,
-  /** Rest point of the band, where the serpentela sits. */
+  /** Rest point of the band, where the partner sits. */
   restOffsetY: -10,
-  /** Visual pull of the serpentela in world px at full power. */
+  /** Visual pull of the partner in world px at full power. */
   maxDrag: 190,
   /** Full power is reached at this share of the screen height, so thumb travel is the same at any zoom. */
   dragScreen: 0.22,
@@ -76,7 +83,6 @@ export const SHOT = {
 } as const;
 
 export const SCORE = {
-  crystal: 5000,
   remainingShot: 10000,
   chainWindowSteps: steps(3),
   chainMinBreaks: 5,

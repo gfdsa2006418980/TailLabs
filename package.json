@@ -31,7 +31,8 @@
     "build:tl002": "npm run typecheck:tl002 && vite build --config vite.tl002.config.ts",
     "preview": "vite preview --host 0.0.0.0 --port 4173 --strictPort",
     "preview:tl002": "vite preview --config vite.tl002.config.ts",
-    "art:tl003": "node --no-warnings tools/build-tl003-art.mjs"
+    "art:tl003": "node --no-warnings tools/build-tl003-art.mjs",
+    "art:tl004": "node tools/build-tl004-art.mjs"
   },
   "dependencies": {
     "phaser": "3.90.0"

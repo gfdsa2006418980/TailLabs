@@ -1,10 +1,10 @@
 import type Phaser from 'phaser';
 import type { MaterialId } from '../config/Materials.ts';
-import { CRYSTAL_SHAPE } from '../sim/Level.ts';
 import { INK, MATERIAL_COLORS } from './Palette.ts';
 
+type BlockMaterial = Exclude<MaterialId, 'target'>;
+
 const OUTLINE = 4;
-export const CRYSTAL_PAD = 6;
 
 /** Small deterministic random source so a block always gets the same grain and cracks. */
 function seeded(seed: number): () => number {
@@ -37,7 +37,7 @@ function drawCracks(g: Phaser.GameObjects.Graphics, w: number, h: number, random
 }
 
 /** Rectangular block texture: rounded storybook shape, single ink outline, material detail. */
-export function blockTexture(scene: Phaser.Scene, material: Exclude<MaterialId, 'crystal'>, w: number, h: number, cracked: boolean): string {
+export function blockTexture(scene: Phaser.Scene, material: BlockMaterial, w: number, h: number, cracked: boolean): string {
   const key = `tl004-${material}-${w}x${h}${cracked ? '-cracked' : ''}`;
   if (scene.textures.exists(key)) return key;
   const colors = MATERIAL_COLORS[material];
@@ -85,42 +85,7 @@ export function blockTexture(scene: Phaser.Scene, material: Exclude<MaterialId, 
   return key;
 }
 
-/** Crystal texture laid out so CRYSTAL_SHAPE's (0,0) sits at (27 + pad, 48 + pad). */
-export function crystalTexture(scene: Phaser.Scene, cracked: boolean): string {
-  const key = `tl004-crystal${cracked ? '-cracked' : ''}`;
-  if (scene.textures.exists(key)) return key;
-  const colors = MATERIAL_COLORS.crystal;
-  const ox = 27 + CRYSTAL_PAD, oy = 48 + CRYSTAL_PAD;
-  const points = CRYSTAL_SHAPE.map((p) => ({ x: p.x + ox, y: p.y + oy }));
-  const g = scene.make.graphics({}, false);
-  g.fillStyle(colors.base, 1).fillPoints(points, true);
-  g.fillStyle(colors.light, 0.85).fillPoints([points[0], points[1], { x: ox + 4, y: oy - 2 }, points[5]], true);
-  g.fillStyle(colors.dark, 0.5).fillPoints([{ x: ox, y: oy + 2 }, points[2], points[3]], true);
-  g.lineStyle(2, colors.dark, 0.7);
-  g.lineBetween(points[0].x, points[0].y, ox, oy + 2);
-  g.lineBetween(points[5].x, points[5].y, ox, oy + 2);
-  g.lineBetween(points[1].x, points[1].y, ox, oy + 2);
-  g.lineStyle(OUTLINE, INK, 1).strokePoints(points, true, true);
-  if (cracked) {
-    g.lineStyle(3, INK, 0.85);
-    g.strokePoints([{ x: ox - 14, y: oy - 20 }, { x: ox - 4, y: oy - 6 }, { x: ox - 10, y: oy + 6 }, { x: ox + 2, y: oy + 22 }], false);
-  }
-  g.generateTexture(key, 54 + CRYSTAL_PAD * 2, 94 + CRYSTAL_PAD * 2);
-  g.destroy();
-  return key;
-}
-
-export function glowTexture(scene: Phaser.Scene): string {
-  const key = 'tl004-glow';
-  if (scene.textures.exists(key)) return key;
-  const g = scene.make.graphics({}, false);
-  for (let r = 64; r > 0; r -= 4) g.fillStyle(0xf3c8ff, 0.035 + (64 - r) * 0.0012).fillCircle(64, 64, r);
-  g.generateTexture(key, 128, 128);
-  g.destroy();
-  return key;
-}
-
-export function debrisTexture(scene: Phaser.Scene, material: MaterialId): string {
+export function debrisTexture(scene: Phaser.Scene, material: BlockMaterial): string {
   const key = `tl004-debris-${material}`;
   if (scene.textures.exists(key)) return key;
   const colors = MATERIAL_COLORS[material];

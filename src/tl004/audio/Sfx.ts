@@ -1,6 +1,6 @@
 import type { MaterialId } from '../config/Materials.ts';
 
-type ImpactMaterial = MaterialId | 'ground' | 'serpentela';
+type ImpactMaterial = MaterialId | 'ground' | 'attacker';
 
 interface AudioSessionLike { type: string }
 
@@ -106,13 +106,13 @@ export class Sfx {
     if (!this.gate(`impact-${material}`, 45)) return;
     const level = Math.min(1, strength / 45);
     if (material === 'stone') { this.tone(150, 70, 0.18, 0.25 * level + 0.05); this.burst('lowpass', 600, 0.7, 0.12, 0.18 * level); }
-    else if (material === 'glass' || material === 'crystal') this.tone(1800 + Math.random() * 500, 1500, 0.09, 0.08 * level + 0.03, 'triangle');
+    else if (material === 'glass') this.tone(1800 + Math.random() * 500, 1500, 0.09, 0.08 * level + 0.03, 'triangle');
     else if (material === 'wood') { this.tone(260, 140, 0.1, 0.2 * level + 0.05, 'triangle'); this.burst('bandpass', 1200, 1.5, 0.06, 0.12 * level); }
-    else if (material === 'serpentela') this.tone(420, 300, 0.09, 0.1 * level + 0.04, 'sine');
+    else if (material === 'target' || material === 'attacker') this.tone(420, 300, 0.09, 0.1 * level + 0.04, 'sine');
     else this.burst('lowpass', 400, 0.7, 0.14, 0.2 * level + 0.04);
   }
 
-  /** A soft "boing" when the serpentela squashes. */
+  /** A soft "boing" when a partner squashes. */
   squish(): void {
     if (!this.gate('squish', 140)) return;
     this.tone(300, 620, 0.16, 0.12, 'sine');
@@ -125,10 +125,12 @@ export class Sfx {
     else if (material === 'wood') { this.burst('bandpass', 1500, 1.2, 0.22, 0.25); this.tone(220, 90, 0.16, 0.14, 'triangle'); }
   }
 
-  crystal(): void {
-    if (!this.gate('crystal', 90)) return;
-    this.burst('highpass', 4200, 0.6, 0.5, 0.15);
-    [880, 1175, 1568, 2093].forEach((f, i) => this.tone(f, f * 1.01, 0.32, 0.1, 'triangle', i * 0.06));
+  /** A 四十塊 knocked out: cartoon "bonk" plus a rising slide-whistle as it flies off. */
+  knockout(): void {
+    if (!this.gate('knockout', 90)) return;
+    this.tone(520, 260, 0.08, 0.2, 'square');
+    this.tone(500, 1900, 0.55, 0.11, 'sine', 0.05);
+    this.burst('bandpass', 2200, 1.2, 0.3, 0.08, 0.05);
   }
 
   star(index: number): void {
