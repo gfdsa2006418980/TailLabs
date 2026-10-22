@@ -126,6 +126,22 @@ test('no sleeping block is left hanging after a hit', () => {
   }
 });
 
+test('the first level stays easy: wood only, and most reasonable shots hit something', () => {
+  assert.ok(testTower.blocks.every((block) => block.material === 'wood' || block.material === 'crystal'));
+  let total = 0, hits = 0;
+  for (let angle = -0.1; angle >= -1.2; angle -= 0.1) {
+    for (const power of [0.7, 0.8, 0.9, 1]) {
+      const sim = createSim();
+      sim.launch(...Object.values(shot(angle, power)));
+      runUntilSettled(sim);
+      total++;
+      if (sim.crystalsLeft < 3) hits++;
+      sim.destroy();
+    }
+  }
+  assert.ok(hits / total >= 0.3, `only ${hits}/${total} first shots broke a crystal`);
+});
+
 test('a simple aiming bot can clear the test tower', () => {
   const candidates = [];
   for (let angle = -0.15; angle >= -1.1; angle -= 0.05) for (const power of [0.85, 1]) candidates.push(shot(angle, power));

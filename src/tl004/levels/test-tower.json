@@ -1,6 +1,6 @@
 {
-  "id": "m1-test-tower",
-  "name": "測試工坊",
+  "id": "m1-wood-hut",
+  "name": "木造小工坊",
   "shots": [
     "serpentela-w50-01",
     "serpentela-w50-02",
@@ -8,25 +8,18 @@
     "serpentela-w50-04"
   ],
   "stars": {
-    "two": 22000,
-    "three": 32000
+    "two": 25000,
+    "three": 35000
   },
   "blocks": [
-    { "material": "stone", "x": 1950, "y": 860, "w": 100, "h": 160 },
-    { "material": "stone", "x": 2350, "y": 860, "w": 100, "h": 160 },
-    { "material": "glass", "x": 2090, "y": 880, "w": 24, "h": 120 },
-    { "material": "glass", "x": 2210, "y": 880, "w": 24, "h": 120 },
-    { "material": "glass", "x": 2150, "y": 808, "w": 160, "h": 24 },
-    { "material": "crystal", "x": 2150, "y": 892 },
-    { "material": "wood", "x": 2150, "y": 765, "w": 520, "h": 30 },
-    { "material": "wood", "x": 1960, "y": 650, "w": 30, "h": 200 },
-    { "material": "wood", "x": 2340, "y": 650, "w": 30, "h": 200 },
-    { "material": "wood", "x": 2080, "y": 690, "w": 28, "h": 120 },
-    { "material": "wood", "x": 2220, "y": 690, "w": 28, "h": 120 },
-    { "material": "crystal", "x": 2150, "y": 702 },
-    { "material": "wood", "x": 2150, "y": 617, "w": 200, "h": 28 },
-    { "material": "wood", "x": 2150, "y": 536, "w": 440, "h": 28 },
-    { "material": "stone", "x": 2150, "y": 487, "w": 70, "h": 70 },
-    { "material": "crystal", "x": 2150, "y": 404 }
+    { "material": "wood", "x": 1310, "y": 860, "w": 30, "h": 160 },
+    { "material": "wood", "x": 1510, "y": 860, "w": 30, "h": 160 },
+    { "material": "crystal", "x": 1410, "y": 892 },
+    { "material": "wood", "x": 1410, "y": 767, "w": 260, "h": 26 },
+    { "material": "wood", "x": 1360, "y": 704, "w": 28, "h": 100 },
+    { "material": "wood", "x": 1460, "y": 704, "w": 28, "h": 100 },
+    { "material": "crystal", "x": 1410, "y": 706 },
+    { "material": "wood", "x": 1410, "y": 642, "w": 160, "h": 24 },
+    { "material": "crystal", "x": 1410, "y": 582 }
   ]
 }
