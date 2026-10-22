@@ -13,8 +13,11 @@ const levelUp = run => { run.phase = 'running'; run.xp = run.xpNeeded; run.advan
 
 test('TL003 cards: rarity scales magnitudes; legendary is reserved for evolutions', () => {
   const kinetic = cardDef('kinetic');
-  near(makeCard(kinetic, 'uncommon').value, kinetic.value * RARITIES.uncommon.mult * B.cardScale(1));
-  near(makeCard(kinetic, 'rare', 30).modifier.value, kinetic.value * RARITIES.rare.mult * B.cardScale(30));
+  // 2026-10-23: one fixed value per rarity at every tactical level (no late +1% cards).
+  near(makeCard(kinetic, 'uncommon').value, kinetic.value * RARITIES.uncommon.mult);
+  near(makeCard(kinetic, 'rare', 30).modifier.value, kinetic.value * RARITIES.rare.mult);
+  for (const def of CARD_DEFS.filter(d => d.kind === 'normal')) near(makeCard(def, 'common', 100).value, makeCard(def, 'common', 2).value);
+  near(makeCard(cardDef('kinetic'), 'common', 80).value, 0.1); near(makeCard(cardDef('crit'), 'common', 80).value, 0.03);
   const w = rarityWeights(1); near(w.common + w.uncommon + w.rare, 100);
   assert.ok(rarityWeights(30).common < w.common && rarityWeights(500).common === 35, 'common share shrinks with level, floored at 35');
   assert.ok(CARD_DEFS.filter(d => d.fixedRarity === 'legendary').every(d => d.kind === 'evolution'));
@@ -52,6 +55,20 @@ test('TL003 cards: skill cards fill up to three skill slots and stop when full',
   for (let i = 0; i < 20; i++) { const c = levelUp(run); assert.ok(!c.some(x => x.kind === 'skill')); run.choose(c[0].id); }
 });
 
+test('TL003 cards: the build pulls its own cards (mercenaries, skills, cores and past picks raise the weight)', () => {
+  const run = running(); const base = run.affinity();
+  run.recruit('cryo'); run.learn('gas'); take(run, 'chill'); take(run, 'chill');
+  const w = run.affinity();
+  // cryo: 冷凍 +0.6 and 元素 +0.3; gas: 毒素 +0.4 and 物理 +0.2; two 冷凍 picks +0.3. The rifle and grenade were already there.
+  near(w.get('冷凍') - (base.get('冷凍') ?? 1), 0.6 + 0.3);
+  near(w.get('毒素') - (base.get('毒素') ?? 1), 0.4);
+  near(w.get('元素') - (base.get('元素') ?? 1), 0.3);
+  // Over many draws, 冷凍 cards come up clearly more often than for a squad without cold.
+  const share = r => { let cold = 0, all = 0; for (let i = 0; i < 300; i++) { const c = levelUp(r); for (const x of c) { all++; if (x.category === '冷凍') cold++; } r.phase = 'running'; r.choices = []; } return cold / all; };
+  const plainRun = running(); plainRun.recruit('gunner'); plainRun.recruit('chemist'); take(plainRun, 'kinetic');
+  const coldRun = running(); coldRun.recruit('cryo'); coldRun.recruit('sniper'); take(coldRun, 'chill');
+  assert.ok(share(coldRun) > share(plainRun) * 1.3, 'cold squads see more cold cards');
+});
 test('TL003 cards: pity guarantees a rare after a streak of plain draws', () => {
   const run = running(); take(run, 'kinetic');
   run.pity = PITY_DRAWS - 1; const offers = levelUp(run);

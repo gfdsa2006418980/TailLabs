@@ -12,6 +12,12 @@ export const INCOME_GROWTH_PER_MINUTE = 1.9;
 export const KILL_REWARD_GROWTH_PER_MINUTE = INCOME_GROWTH_PER_MINUTE / SPAWN_GROWTH_PER_MINUTE;
 export const WAVE_REWARD_GROWTH_PER_MINUTE = INCOME_GROWTH_PER_MINUTE;
 export const ENEMY_HP_GROWTH_PER_MINUTE = 1.8;
+/**
+ * Every zombie's HP (boss included) × this. 2026-10-23: kept at ×1 by the user's decision; with fixed card
+ * values the bot's zero-talent first run passes the first boss in about 1% of runs (measured: ×0.35 → 44%,
+ * ×0.3 → 51%, ×0.4 → 28%, ×0.6 → 9%).
+ */
+export const ENEMY_HP_SCALE = 1;
 export const ENEMY_ATTACK_GROWTH_PER_MINUTE = 1.45;
 
 /**
@@ -78,6 +84,20 @@ export const BLOOD_SKILL_COST = 0.04;
  * The searchlight sweeps the road on game time. Core 探照獵殺 (reworked 定點防禦): lit zombies take
  * ×SEARCHLIGHT_FACTOR damage, unlit ones ÷SEARCHLIGHT_FACTOR; the beam widens and the guns prefer lit targets.
  */
+/**
+ * Area damage falloff (2026-10-23, for performance and so crowds resist splash):
+ * - Instant area damage shares a budget of `full` hits: up to `full` targets take full damage; past that,
+ *   every target takes full ÷ count. Only the `cap` nearest to the centre are processed at all.
+ * - Lingering areas (fire zones, gas clouds) act on at most ZONE_CAP nearest targets per pulse, at full strength.
+ * Skills fire every few seconds; auto-attack splash and chain explosions fire many times a second, so
+ * they get the smaller numbers.
+ */
+export const AREA = {
+  skill: { full: 12, cap: 40 },
+  auto: { full: 6, cap: 16 },
+} as const;
+export const ZONE_CAP = 20;
+
 export const SEARCHLIGHT_RADIUS = 55;
 export const SEARCHLIGHT_WIDE_RADIUS = 95;
 export const SEARCHLIGHT_FACTOR = 2;

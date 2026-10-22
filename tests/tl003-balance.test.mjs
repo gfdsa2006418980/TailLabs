@@ -102,12 +102,13 @@ test('TL003 balance: boss strength ignores permanent player power', () => {
   assert.equal(weak.boss.maxHp, strong.boss.maxHp); assert.equal(weak.boss.attack, strong.boss.attack);
 });
 
-test('TL003 balance: card bonuses add up instead of compounding', () => {
+test('TL003 balance: speed cards add up; the wall card adds a share of the current maximum', () => {
   const run = new DefenseRun(3); run.start();
   const interval = run.intervalFor('rifle'), wall = run.wallMaxHealth;
   for (let i = 0; i < 4; i++) { run.phase = 'choice'; run.choices = [{ id: 'speed', effect: 'speed' }]; run.choose('speed'); }
   for (let i = 0; i < 4; i++) { run.phase = 'choice'; run.choices = [{ id: 'wall', effect: 'wall' }]; run.choose('wall'); }
   const speed = CARDS.find(c => c.id === 'speed').value, gain = CARDS.find(c => c.id === 'wall').value;
   assert.ok(Math.abs(run.intervalFor('rifle') - interval / (1 + 4 * speed)) < 1e-9);
-  assert.ok(Math.abs(run.wallMaxHealth - wall * (1 + 4 * gain)) < 1e-9);
+  // 2026-10-23: the wall card counts on the current maximum (a share of the opening wall meant nothing late), so it compounds.
+  assert.ok(Math.abs(run.wallMaxHealth - wall * (1 + gain) ** 4) < 1e-9);
 });

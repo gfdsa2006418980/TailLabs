@@ -32,7 +32,7 @@ test('TL003 cores: cremation turns direct damage into burns; layers stack burns 
   near(fire.enemies[0].hp, 1e6); near(fire.enemies[0].burnPower, fire.damageFor('rifle') * 0.8);
   const layers = withCores('layers'); take(layers, 'burn'); const e = enemy(); layers.enemies = [e];
   for (let i = 0; i < 14; i++) shoot(layers);
-  assert.equal(e.burnLayers, 10); near(e.burnPower, 10 * 0.35 * makeCard(cardDef('burn')).value * 1, 1e-3);
+  assert.equal(e.burnLayers, 10); near(e.burnPower, 10 * 0.35 * makeCard(cardDef('burn')).value * layers.damageFor('rifle'), 1e-3);
 });
 
 test('TL003 cores: agony puts the crit on statuses instead of the hit', () => {
@@ -136,7 +136,7 @@ test('TL003 wildfire lights only unburnt enemies, at 40% of the dead one\'s burn
 
 test('TL003 balance: several status cards merge into one application per hit; the flamer grows +6.5% a level', () => {
   const run = plain(); take(run, 'burn'); take(run, 'burn'); const e = enemy(); run.enemies = [e]; shoot(run);
-  near(e.burnPower, 2 * makeCard(cardDef('burn')).value, 1e-3); assert.equal(e.burnFlammability, 0);
+  near(e.burnPower, 2 * makeCard(cardDef('burn')).value * run.damageFor('rifle'), 1e-3); assert.equal(e.burnFlammability, 0);
   const layers = withCores('layers'); take(layers, 'burn'); take(layers, 'burn'); const f = enemy(); layers.enemies = [f]; shoot(layers);
   assert.equal(f.burnLayers, 2);
   const base = plain(); const lv1 = base.damageFor('flame'); base.levels.flame = 2; near(base.damageFor('flame'), lv1 * 1.065);
