@@ -10,7 +10,7 @@ import { DefenseRun } from './Run.ts';
 import { LocalMetaMirror, META_KEY } from './Meta.ts';
 import { TalentScreen } from './TalentScreen.ts';
 import * as B from './Balance.ts';
-import { cardIcon, choiceScreen, deployScreen, formatCount, resultScreen } from './Screens.ts';
+import { cardIcon, choiceScreen, damageBreakdown, deployScreen, formatCount, resultScreen } from './Screens.ts';
 import type { Report } from './Screens.ts';
 import { countUp, motionReduced, pop, setReducedMotion } from './Motion.ts';
 import { DefenseAudio, loadAudioPreferences, saveAudioPreferences } from './Audio.ts';
@@ -44,9 +44,9 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
     <div class="hud-money" id="money-box" aria-label="資金">${px('icon_money', 2)}<strong id="money">0</strong></div>
     <div class="hud-buttons"><button id="speed" class="icon-button speed-button" aria-label="遊戲速度" aria-pressed="false">×1</button><button id="mute" class="icon-button" aria-label="音效開關" aria-pressed="false"></button><button id="pause" class="icon-button" aria-label="暫停遊戲" disabled>${icon('pause')}</button></div>
   </header>
-  <div class="hud-xp" aria-label="戰術等級"><b id="level">1</b><div class="xp-track"><i id="xp-fill"></i></div></div>
+  <div class="hud-xp" aria-label="戰術等級"><b id="level">1</b><div class="xp-track"><i id="xp-fill"></i></div><span id="dps" class="hud-dps" aria-label="本關每秒傷害"></span></div>
   <div id="boss-banner" class="boss-banner" role="status" hidden>${px('icon_wave', 2)}<div><strong id="boss-title">屍王</strong><div class="boss-track"><i id="boss-fill"></i></div></div><span id="boss-detail"></span></div>
-  <div id="stage-bar" class="stage-bar" role="status" hidden><strong id="stage-title">第 1 關完成</strong><span id="stage-detail"></span><button id="next-stage" class="primary">下一關 ▶</button><button id="stage-abandon" class="quiet-button abandon">放棄本局，返回標題</button></div>
+  <div id="stage-bar" class="stage-bar" role="status" hidden><strong id="stage-title">第 1 關完成</strong><b id="stage-dps" class="stage-dps"></b><span id="stage-detail"></span><button id="next-stage" class="primary">下一關 ▶</button><button id="stage-abandon" class="quiet-button abandon">放棄本局，返回標題</button></div>
   <div id="toast" class="toast" aria-hidden="true"></div>
   <nav class="hud-bottom" aria-label="傭兵與防守">
     <button id="repair" class="side-action" aria-label="修復拒馬">${px('icon_repair', 2)}<span class="cost">${px('icon_money', 1)}<span id="repair-cost">6</span></span></button>
@@ -72,6 +72,9 @@ let storage: Storage | undefined;
 try { storage = window.localStorage; } catch { /* Memory-only fallback. */ }
 const MOTION_KEY = 'taillabs.tl003.motion.v1', HINT_KEY = 'taillabs.tl003.hint.v1', TIPS_KEY = 'taillabs.tl003.tips.v1', SPEED_KEY = 'taillabs.tl003.speed.v1';
 /** New-player guide: the opening briefing, the first fall, and the coach's finished steps. */
+const DANGER_KEY = 'taillabs.tl003.danger.v1';
+/** The danger level picked on the deploy screen, never above what the blueprint has unlocked. */
+const selectedDanger = () => Math.min(meta.tree.danger ?? 0, Math.max(0, Number(readFlag(DANGER_KEY)) || 0));
 const AUTO_PICK_KEY = 'taillabs.tl003.autopick.v1', AUTO_UPGRADE_KEY = 'taillabs.tl003.autoupgrade.v1';
 const INTRO_KEY = 'taillabs.tl003.intro.v1', FALLEN_KEY = 'taillabs.tl003.fallen.v1', COACH_KEY = 'taillabs.tl003.coach.v1';
 const readFlag = (key: string) => { try { return storage?.getItem(key) ?? null; } catch { return null; } };
@@ -106,7 +109,7 @@ function reset() { meta.refresh(); aim = undefined; newRun(); displayedPhase = '
 function startRun() {
   if (!meta.beginRun()) return;
   writeFlag(TIPS_KEY, '1');
-  aim = undefined; newRun(); run.start(true); displayedPhase = ''; sync();
+  aim = undefined; newRun(); run.start(true, selectedDanger()); displayedPhase = ''; sync();
 }
 battlefield.feedback.onCoin = () => { pop(el('money-box'), 1.14, 140); audio.play('coin'); };
 
@@ -131,7 +134,8 @@ const CHOICE_TIP = '<b>戰地補給：</b>每次升級從三張裡選一張。�
 function showChoice() {
   choiceResolving = false;
   const tip = coach.enabled && !coach.has('choice') ? CHOICE_TIP : undefined;
-  showModal(choiceScreen(run.level, run.choices, run.canReroll ? { cost: run.rerollCost, affordable: run.money >= run.rerollCost } : undefined, run.picksLeft, tip, autoPick, run.pendingPicks), 'choice', false);
+  const dps = run.choices.map(c => run.previewDps(c.id));
+  showModal(choiceScreen(run.level, run.choices, run.canReroll ? { cost: run.rerollCost, affordable: run.money >= run.rerollCost } : undefined, run.picksLeft, tip, autoPick, run.pendingPicks, dps), 'choice', false);
   const autoBox = document.getElementById('auto-pick') as HTMLInputElement | null;
   if (autoBox) autoBox.onchange = () => { autoPick = autoBox.checked; writeFlag(AUTO_PICK_KEY, autoPick ? '1' : '0'); if (autoPick) pickBest(); };
   if (autoPick) pickBest();
@@ -190,10 +194,10 @@ function showReport() {
   const first = report?.run !== run;
   if (first) {
     const previousBest = meta.value.HighestClearedWave;
-    meta.settle(run, run.score, run.clearedWave);
+    meta.settle(run, run.score, run.clearedWave, { victory: run.phase === 'victory', danger: run.danger });
     report = { run, data: {
       victory: run.phase === 'victory', elapsed: run.elapsed, kills: run.kills, income: run.totalEarnedMoney,
-      points: run.score, timePoints: Math.floor(run.elapsed / 30), incomePoints: Math.floor(Math.log10(run.totalEarnedMoney + 1)),
+      points: run.score, stages: run.clearedWave, danger: run.danger, breakdown: damageBreakdown(run.stats),
       bestWave: meta.value.HighestClearedWave, previousBest, persistent: meta.persistent,
     } };
     // The first time the line falls, the story picks up before the report (points are already saved).
@@ -226,7 +230,7 @@ function bindAbandon(button: HTMLButtonElement) {
   let armed = false;
   button.onclick = () => {
     if (!armed) { armed = true; button.textContent = '確定放棄？已得戰功照樣結算'; button.classList.add('armed'); return; }
-    meta.settle(run, run.score, run.clearedWave); report = undefined; reset();
+    meta.settle(run, run.score, run.clearedWave, { danger: run.danger }); report = undefined; reset();
   };
 }
 function pauseMenu() {
@@ -234,6 +238,7 @@ function pauseMenu() {
   const cards = run.selectedCards.length ? run.selectedCards.map(c => `<span title="${c.name}">${px(cardIcon(c.id), 2)}</span>`).join('') : '<small>—</small>';
   showModal(`<div class="modal-kicker">暫停</div><h2 id="modal-title">暫停防守</h2>
     <div class="pause-build"><div class="pause-elements">${counts}</div><div class="pause-cards">${cards}</div></div>
+    <details class="pause-breakdown"><summary>本局傷害與控場</summary>${damageBreakdown(run.stats, 6)}</details>
     <div class="settings">
       <div class="setting"><span>音量</span><span class="volume-control"><button id="mute-menu" class="icon-button" type="button" aria-label="音效開關"></button><input id="volume" type="range" min="0" max="100" step="5" aria-label="音效音量"></span></div>
       <label class="setting"><span>減少畫面晃動</span><input id="motion" type="checkbox" ${reducedMotion ? 'checked' : ''}></label>
@@ -265,7 +270,7 @@ function syncPhase() {
   }
   text('announcement', run.phase === 'choice' ? '戰地補給到達，選擇一張。' : run.phase === 'intermission' ? `第 ${run.stage} 關完成。可以升級與補強，準備好就前往下一關。` : run.phase === 'over' ? '防線失守。本局結束。' : run.phase === 'running' ? `第 ${run.stage} 關開始。` : '');
   if (run.phase === 'ready') {
-    const deploy = () => { displayedPhase = 'ready'; showModal(deployScreen(meta.effects, meta.value.TalentPoints, meta.value.HighestClearedWave, !readFlag(TIPS_KEY)), 'deploy'); bindDeploy(); };
+    const deploy = () => { displayedPhase = 'ready'; showModal(deployScreen(meta.effects, meta.value.TalentPoints, meta.tree.bestStage ?? meta.value.HighestClearedWave, !readFlag(TIPS_KEY), { unlocked: meta.tree.danger ?? 0, selected: selectedDanger() }), 'deploy'); bindDeploy(); };
     // First open: the briefing comes before the deploy screen.
     if (!readFlag(INTRO_KEY)) showStory(INTRO_LINES, 'INCOMING TRANSMISSION', '接受指揮', () => { writeFlag(INTRO_KEY, '1'); deploy(); });
     else deploy();
@@ -279,6 +284,7 @@ function syncPhase() {
 }
 function bindDeploy() {
   el('start').onclick = startRun;
+  for (const b of dialog.querySelectorAll<HTMLButtonElement>('[data-danger]')) b.onclick = () => { writeFlag(DANGER_KEY, b.dataset.danger!); audio.play('pick'); displayedPhase = ''; sync(); };
   el('open-talents').onclick = () => talents.open();
   el('replay-briefing').onclick = () => showStory(INTRO_LINES, 'INCOMING TRANSMISSION', '返回', () => { displayedPhase = ''; sync(); });
 }
@@ -314,7 +320,8 @@ function sync() {
   el('wall-fill').style.width = `${100 * wallRatio}%`; el('wall-chip').style.width = `${100 * wallRatio}%`;
   el('wall-fill').closest('.hud-wall')!.classList.toggle('critical', wallRatio < 0.3);
   text('wave', run.stage === 0 ? `1/${B.STAGE_COUNT}關` : run.endless ? `第${run.stage}關` : `${run.stage}/${B.STAGE_COUNT}關`); text('time', clock(Math.ceil(run.stageLeft)));
-  text('level', run.level.toString()); el('xp-fill').style.width = `${Math.min(100, run.xp / run.xpNeeded * 100)}%`;
+  text('level', run.level.toString());
+  { let dealt = 0; for (const v of Object.values(run.stats.stage)) dealt += v; text('dps', run.phase === 'running' && run.stageTime > 1 ? `DPS ${formatNumber(dealt / run.stageTime)}` : ''); } el('xp-fill').style.width = `${Math.min(100, run.xp / run.xpNeeded * 100)}%`;
   if (run.phase === 'running' && run.wave !== shownWave) {
     if (shownWave && run.wave > shownWave) toast(run.bossStage ? `<small>STAGE ${run.wave.toString().padStart(2, '0')}</small><b>${run.superBossStage ? '超級屍王' : '屍王關'}</b>` : `<small>STAGE</small><b>${run.wave.toString().padStart(2, '0')}</b>`, run.bossStage ? 'danger' : '');
     shownWave = run.wave;
@@ -376,6 +383,8 @@ function syncStageBar() {
   const next = run.stage + 1;
   text('stage-title', run.stage === 0 ? '出擊準備' : `第 ${run.stage} 關完成`);
   el('next-stage').textContent = run.stage === 0 ? '出擊 ▶' : '下一關 ▶';
+  const growth = run.prevStageDps > 0 ? run.lastStageDps / run.prevStageDps - 1 : 0;
+  text('stage-dps', run.stage > 0 ? `本關 DPS ${formatNumber(run.lastStageDps)}${run.prevStageDps > 0 ? `（比上一關 ${growth >= 0 ? '+' : ''}${(growth * 100).toFixed(0)}%）` : ''}` : '');
   text('stage-detail', `下一關：第 ${next} 關・${next === B.STAGE_COUNT ? `${B.stageSeconds(next)} 秒後超級屍王來襲` : B.isBossStage(next) ? `${B.stageSeconds(next)} 秒後屍王來襲` : `撐過 ${B.stageSeconds(next)} 秒`}。花資金升級、補強，準備好就出發。`);
 }
 function nextStage() { if (run.nextStage()) { audio.play('pick'); displayedPhase = ''; sync(); } }

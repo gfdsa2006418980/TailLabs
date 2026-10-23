@@ -231,3 +231,9 @@ html.reduce-motion .toast.show { animation-name: toast-fade !important; animatio
 
 .abandon { justify-self: center; margin-top: 2px; padding: 8px 12px; min-height: 40px; font-size: 12px; color: #c9a59c }
 .abandon.armed { color: #fff; background: #87372f }
+
+/* v2: live stage DPS next to the XP line; the stage DPS in the rest */
+.hud-dps { font: 700 10px/1 Consolas, monospace; color: var(--gold); text-shadow: 1px 1px 0 #000; min-width: 64px; text-align: right }
+.stage-dps { color: #ffe9b8; font-size: 13px }
+/* stop double-tap zoom on phones (iOS Safari ignores user-scalable) */
+html, body, button, canvas { touch-action: manipulation }

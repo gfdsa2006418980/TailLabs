@@ -1,3 +1,4 @@
+import { CORE_SLOT_STAGES } from './Balance.ts';
 import { calculateValue, effectiveCooldown } from './Combat.ts';
 import type { Modifier, Tag } from './Combat.ts';
 import { MERCENARIES, MERC_KINDS, SKILLS } from './Content.ts';
@@ -140,7 +141,8 @@ export const CORES: readonly CoreNode[] = CORE_SPECS.map(({ at, between, spec })
 });
 export const coreById = (id: string) => CORES.find(core => core.id === id);
 /** Core slots open with the map tier: T1 one, T2 two, T3 three (spec max 3). */
-export const coreSlots = (tree: TalentTree) => Math.min(3, Math.max(1, tree.tier));
+/** v2: one core slot from the start, one more on the first clear of stage 10 and of stage 20 (no longer tied to the tier). */
+export const coreSlots = (tree: TalentTree) => 1 + CORE_SLOT_STAGES.filter(stage => (tree.bestStage ?? 0) >= stage).length;
 export const isCoreRevealed = (tree: TalentTree, id: string) => coreById(id)?.links.some(link => talentLevel(tree, link) > 0) ?? false;
 export const isCoreUnlocked = (tree: TalentTree, id: string) => tree.unlockedCoreTalents.includes(id);
 export const isCoreActive = (tree: TalentTree, id: string) => tree.activeCoreTalents.includes(id);

@@ -558,10 +558,13 @@ export class Battlefield {
       const ty = end.y - 8 * end.scale / WALL_SCALE;
       if (e.kind === 'shot') {
         const cool = merc.kind === 'tesla' || merc.kind === 'signal' || merc.kind === 'cryo', tint = cool ? (merc.kind === 'cryo' ? ICE : CYAN) : WARM;
+        // v2: the gun's level shows: Lv10 a heavier tracer, Lv25 a bigger flash, Lv50 white-hot rounds and bigger hits.
+        const level = run.levels[merc.kind], tier = level >= 50 ? 3 : level >= 25 ? 2 : level >= 10 ? 1 : 0;
         const a = Math.min(1, progress * 1.6), b = Math.min(1, progress * 1.6 + 0.35);
-        this.line(E, sx + (end.x - sx) * a, sy + (ty - sy) * a, sx + (end.x - sx) * b, sy + (ty - sy) * b, cool ? '#bff1ea' : merc.kind === 'chemist' ? '#a4dc4c' : '#ffd884');
-        if (progress < 0.35) { this.sprite('muzzle', sx, sy + 3, 1, this.glow()); this.light(sx, sy, 38, tint, 1.3 * (1 - progress / 0.35), 12); }
-        if (progress > 0.45) { this.sprite(this.animFrame('hit', (progress - 0.45) * 0.3, false), end.x, ty + 3, 1, this.glow()); this.light(end.x, ty, 16, tint, 0.8, 6); }
+        const tracer = tier >= 3 ? '#fff6dc' : cool ? '#bff1ea' : merc.kind === 'chemist' ? '#a4dc4c' : '#ffd884';
+        this.line(E, sx + (end.x - sx) * a, sy + (ty - sy) * a, sx + (end.x - sx) * b, sy + (ty - sy) * b, tracer, tier >= 1 ? 2 : 1);
+        if (progress < 0.35) { this.sprite('muzzle', sx, sy + 3, tier >= 2 ? 1.4 : 1, this.glow()); this.light(sx, sy, 38 + tier * 10, tint, (1.3 + tier * 0.25) * (1 - progress / 0.35), 12); }
+        if (progress > 0.45) { this.sprite(this.animFrame('hit', (progress - 0.45) * 0.3, false), end.x, ty + 3, tier >= 3 ? 1.5 : 1, this.glow()); this.light(end.x, ty, 16 + tier * 6, tint, 0.8, 6); }
       } else if (e.kind === 'flame') {
         for (let i = 0; i < 4; i++) { const k = Math.min(1, progress * 1.4 + i * 0.12); this.sprite(this.animFrame('fire', progress + i * 0.1), sx + (end.x - sx) * k, sy + (ty - sy) * k + 4, 0.5 + k * 0.5, this.glow()); }
         const k = Math.min(1, progress * 1.4); this.light(sx + (end.x - sx) * k, sy + (ty - sy) * k, 30, FIRE, 1, 8);

@@ -4,7 +4,8 @@
  */
 import './screens.css';
 import { formatNumber } from './Combat.ts';
-import { RARITIES } from './Content.ts';
+import { MERCENARIES, RARITIES, SKILLS } from './Content.ts';
+import type { MercKind, SkillId } from './Content.ts';
 import type { UpgradeCard } from './Content.ts';
 import { FRAMES } from './generated/sprites.ts';
 import type { PermanentEffects } from './Talents.ts';
@@ -20,17 +21,20 @@ const CATEGORY_ICON: Record<string, string> = {
   傭兵: 'icon_merc_rifle', 經濟: 'icon_money', 防守: 'icon_fortify', 連動: 'icon_star', 質變: 'icon_star', 詛咒: 'icon_wave',
 };
 
-export function deployScreen(effects: PermanentEffects, talentPoints: number, bestWave: number, showTips: boolean) {
-  const tips = [['icon_money', '擊殺賺錢'], ['icon_merc_cryo', '補給招募'], ['icon_skill_grenade', '拖曳投擲物'], ['icon_wave', '02:00 屍王']];
+export function deployScreen(effects: PermanentEffects, talentPoints: number, bestWave: number, showTips: boolean, danger = { unlocked: 0, selected: 0 }) {
+  const tips = [['icon_money', '擊殺賺錢'], ['icon_merc_cryo', '補給招募'], ['icon_skill_grenade', '拖曳投擲物'], ['icon_wave', '第 4 關屍王']];
+  const levels = Array.from({ length: danger.unlocked + 1 }, (_, d) => d);
   return `<div class="screen deploy-screen">
     <div class="deploy-hero" aria-hidden="true"><span class="hero-glow"></span>${px('zombie_walker_0', 3)}${px('merc_rifle', 5)}${px('zombie_runner_1', 3)}</div>
     <h2 id="modal-title" class="logo"><span>無盡防線</span><small>THE LAST LINE</small></h2>
     ${deploymentSummary(effects)}
     ${showTips ? `<ul class="deploy-tips">${tips.map(([icon, label]) => `<li>${px(icon, 2)}<span>${label}</span></li>`).join('')}</ul>` : ''}
     <div class="screen-actions">
+      ${danger.unlocked > 0 ? `<div class="danger-pick" role="group" aria-label="危險等級">${levels.map(d => `<button type="button" data-danger="${d}" aria-pressed="${d === danger.selected}">${d === 0 ? '一般' : '危險 ' + d}</button>`).join('')}</div>
+      <p class="danger-note">${danger.selected === 0 ? '一般難度。' : `喪屍強度等於往後推 ${danger.selected * 10} 關，戰功 ×${danger.selected + 1}。`}</p>` : ''}
       <button id="start" class="primary go">部署 <span>▶</span></button>
       <button id="open-talents" class="camp-button">${px('icon_star', 2)}<b>指揮藍圖</b>${talentPoints > 0 ? `<span class="badge">${formatNumber(talentPoints)}</span>` : '<span></span>'}</button>
-      ${bestWave > 0 ? `<p class="best">最高 <b>W${bestWave.toString().padStart(2, '0')}</b></p>` : ''}
+      ${bestWave > 0 ? `<p class="best">最佳 <b>第 ${bestWave} 關</b></p>` : ''}
       <button id="replay-briefing" class="briefing-button" type="button">▶ 作戰簡報</button>
     </div>
   </div>`;
@@ -51,7 +55,7 @@ export const cardIcon = (id: string) => {
 };
 const KIND_TAG: Record<string, string> = { synergy: '連動', evolution: '質變', curse: '詛咒', merc: '招募', skill: '主動' };
 /** `tip`: the new-player guide's note for the first pick (HTML). */
-export function choiceScreen(level: number, cards: readonly UpgradeCard[], reroll?: { cost: number; affordable: boolean }, picks = 1, tip?: string, autoPick = false, queued = 0) {
+export function choiceScreen(level: number, cards: readonly UpgradeCard[], reroll?: { cost: number; affordable: boolean }, picks = 1, tip?: string, autoPick = false, queued = 0, dps: readonly number[] = []) {
   const market = cards.length > 3 || picks > 1;
   return `<div class="screen choice-screen${market ? ' market' : ''}">
     <div class="choice-head"><small>${market ? 'BLACK MARKET' : 'FIELD SUPPLY'}</small><b id="modal-title">Lv ${level}<span class="sr-only">，戰地補給，選擇一張</span></b>${market ? `<span class="picks-left">再選 ${picks} 張</span>` : queued > 0 ? `<span class="picks-left">還有 ${queued} 次</span>` : ''}</div>
@@ -65,6 +69,7 @@ export function choiceScreen(level: number, cards: readonly UpgradeCard[], rerol
         <strong>${card.name}</strong>
         <span class="pick-rarity">${RARITIES[rarity].name}</span>
         <span class="pick-stat">${card.short}</span>
+        ${Math.abs(dps[i] ?? 0) >= 0.005 ? `<span class="pick-dps ${(dps[i] ?? 0) > 0 ? 'up' : 'down'}">面板 DPS ${(dps[i] ?? 0) > 0 ? '+' : ''}${((dps[i] ?? 0) * 100).toFixed(1)}%</span>` : ''}
         <kbd>${i + 1}</kbd>
       </button>
       <button class="pick-info" data-info="${i}" aria-label="${card.name}的完整說明" aria-expanded="false">i</button>
@@ -81,7 +86,7 @@ export function choiceScreen(level: number, cards: readonly UpgradeCard[], rerol
 
 export interface Report {
   victory: boolean; elapsed: number; kills: number; income: number;
-  points: number; timePoints: number; incomePoints: number;
+  points: number; stages: number; danger: number; breakdown: string;
   bestWave: number; previousBest: number; persistent: boolean;
 }
 export function resultScreen(r: Report) {
@@ -96,9 +101,10 @@ export function resultScreen(r: Report) {
     </div>
     <div class="result-points">
       <span>戰功 ★</span><strong id="result-points">+0</strong>
-      <small>時間 +${r.timePoints} · 收入 +${r.incomePoints}</small>
-      ${record ? `<em class="new-best">新紀錄 W${r.bestWave.toString().padStart(2, '0')}</em>` : ''}
+      <small>通過 ${r.stages} 關${r.danger ? ` · 危險 ${r.danger}（×${r.danger + 1}）` : ''}</small>
+      ${record ? `<em class="new-best">新紀錄 第 ${r.bestWave} 關</em>` : ''}
     </div>
+    <details class="result-breakdown" open><summary>傷害與控場回測</summary>${r.breakdown}</details>
     <div class="screen-actions">
       <button id="result-talents" class="primary go">分配戰功 <span>${px('icon_star', 1)} ${formatNumber(r.points)}</span></button>
       <button id="retry" class="camp-button"><b>再守一次</b><span>→</span></button>
@@ -107,3 +113,30 @@ export function resultScreen(r: Report) {
   </div>`;
 }
 export const formatCount = (format: string | undefined) => (v: number) => format === 'clock' ? clock(v) : format === 'number' ? formatNumber(Math.floor(v)) : Math.round(v).toString();
+
+/** What a damage source key (Run.damageSource) is called and coloured in the breakdowns. */
+const SHARED_SOURCES: Record<string, [string, string]> = {
+  burn: ['燃燒（持續）', '#e6764b'], frostbite: ['凍傷（冰凍爆發）', '#bfe8ff'], shockburst: ['電爆（麻痺爆發）', '#c7f5ff'],
+  toxicburst: ['毒爆', '#a6c46a'], corpseblast: ['屍爆', '#d9a066'], thorns: ['拒馬反傷', '#b9bfb0'], other: ['其他', '#8a8f86'],
+};
+export function sourceLabel(key: string): [string, string] {
+  if (key.startsWith('merc:')) { const m = MERCENARIES[key.slice(5) as MercKind]; if (m) return [m.name, m.color]; }
+  if (key.startsWith('skill:')) { const s = SKILLS[key.slice(6) as SkillId]; if (s) return [s.name, s.color]; }
+  return SHARED_SOURCES[key] ?? [key, '#8a8f86'];
+}
+export interface BattleStats { damage: Record<string, number>; control: Record<string, number>; toxinBursts: number }
+/**
+ * v2 recap: damage by source (largest first, bars by share) and control applied. "Control" adds up every zombie's
+ * seconds, so 30 zombies frozen for 2 s count as 60 s.
+ */
+export function damageBreakdown(stats: BattleStats, limit = 8) {
+  const entries = Object.entries(stats.damage).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]);
+  const total = entries.reduce((s, [, v]) => s + v, 0);
+  const rows = total > 0 ? entries.slice(0, limit).map(([key, v]) => {
+    const [label, color] = sourceLabel(key), share = 100 * v / total;
+    return `<li style="--share:${share.toFixed(1)}%;--c:${color}"><span>${label}</span><b>${formatNumber(v)}</b><em>${share < 1 ? '<1' : share.toFixed(0)}%</em></li>`;
+  }).join('') : '<li class="empty"><span>還沒有傷害紀錄</span></li>';
+  const sec = (v: number | undefined) => `${formatNumber(Math.round(v ?? 0))} 秒`;
+  return `<ol class="breakdown">${rows}</ol>
+    <p class="control-recap">冰凍 <b>${sec(stats.control.chill)}</b> · 麻痺 <b>${sec(stats.control.shock)}</b> · 暈眩 <b>${sec(stats.control.stun)}</b> · 毒爆 <b>${formatNumber(stats.toxinBursts)}</b> 次<small>（控場秒數為所有喪屍合計）</small></p>`;
+}

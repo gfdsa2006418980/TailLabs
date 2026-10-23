@@ -1,3 +1,4 @@
+import { CORE_SLOT_STAGES } from './Balance.ts';
 import './talents.css';
 import { formatNumber } from './Combat.ts';
 import { LocalMetaMirror } from './Meta.ts';
@@ -82,9 +83,9 @@ export class TalentScreen {
   }
   private slots(tree: TalentTree) {
     const open = coreSlots(tree);
-    return `<div class="core-slots" role="group" aria-label="戰術核心槽位">${SLOT_TIERS.map((tier, i) => {
+    return `<div class="core-slots" role="group" aria-label="戰術核心槽位">${SLOT_TIERS.map((_, i) => {
       const id = tree.activeCoreTalents[i], core = id ? coreById(id) : undefined;
-      if (i >= open) return `<div class="core-slot locked"><span>T${tier} 開放</span></div>`;
+      if (i >= open) return `<div class="core-slot locked"><span>通過第 ${CORE_SLOT_STAGES[i - 1]} 關開放</span></div>`;
       if (!core) return `<div class="core-slot empty"><span>空槽</span></div>`;
       return `<button class="core-slot filled" data-slot-core="${core.id}" style="--node-color:${core.color}" aria-label="已裝上 ${core.name}"><b>✠</b><span>${core.name}</span></button>`;
     }).join('')}</div>`;
@@ -135,7 +136,7 @@ export class TalentScreen {
       ${this.slots(tree)}
       <div class="star-scroll talent-scroll" aria-label="可拖曳的指揮藍圖"><div class="star-map" style="width:${MAP_SIZE}px;height:${MAP_SIZE}px"><svg class="talent-links" viewBox="0 0 ${MAP_SIZE} ${MAP_SIZE}" aria-hidden="true">${lines}</svg>${TALENTS.map(n => this.nodeButton(tree, n.id)).join('')}${CORES.map(c => this.coreButton(tree, c.id)).join('')}</div></div>
       ${this.inspector(tree)}
-      ${breakthrough ? `<button id="talent-breakthrough" class="talent-breakthrough">晉階至第 ${tree.tier + 1} 階 <span>上限 +10${tree.tier < 3 ? '・開放核心槽' : ''} ↗</span></button>` : ''}
+      ${breakthrough ? `<button id="talent-breakthrough" class="talent-breakthrough">晉階至第 ${tree.tier + 1} 階 <span>上限 +10 ↗</span></button>` : ''}
       <p id="talent-notice" class="talent-notice" role="status" aria-live="polite">${this.notice || (this.meta.persistent ? '' : '無法存檔。戰功只留在此分頁')}</p>
       <button id="talent-deploy" class="primary go">返回標題 <span>↩</span></button>`;
     if (!this.dialog.open) this.dialog.showModal();

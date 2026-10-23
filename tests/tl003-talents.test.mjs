@@ -25,7 +25,8 @@ const step = run => {
   run.advance(FIELD.step);
 };
 function simulate(seed, effects) {
-  const run = new DefenseRun(seed, effects);run.start();
+  // The game's opening (a rest with the first pick) so the squad can clear stages; points come from cleared stages.
+  const run = new DefenseRun(seed, effects);run.start(true);
   for(let i=0;i<60*300 && run.phase!=='over';i++)step(run);
   return run;
 }
@@ -152,7 +153,7 @@ test('TL003 save round trip preserves purchases, revealed neighbors, tiers and r
   const {meta,storage,data}=mirror(100,treeWith(allAt(10)));assert.equal(meta.breakthrough().ok,true);assert.equal(meta.buyTalent('kinetic_damage').ok,true);
   const fresh=new LocalMetaMirror(storage);assert.equal(fresh.tree.tier,2);assert.equal(fresh.tree.nodes.kinetic_damage,11);assert.equal(isRevealed(fresh.tree,'fire_dot'),true);
   assert.deepEqual(Object.keys(JSON.parse(data.get(META_KEY))).sort(),['HighestClearedWave','TalentPoints','TalentTreeJson','version']);
-  assert.deepEqual(Object.keys(fresh.tree).sort(),['activeCoreTalents','maxNodeLevel','nodes','tier','unlockedCoreTalents']);
+  assert.deepEqual(Object.keys(fresh.tree).sort(),['activeCoreTalents','bestStage','danger','maxNodeLevel','nodes','tier','unlockedCoreTalents']);
 });
 test('TL003 separate mirrors refresh before spending and settling to avoid stale local-tab overwrites', () => {
   const {meta:a,storage}=mirror(5),b=new LocalMetaMirror(storage);a.buyTalent('mercenary_damage');assert.equal(b.buyTalent('kinetic_damage').ok,true);
@@ -176,21 +177,22 @@ test('TL003 spawn frequency grows at three times its former exponential speed wi
   near(spawnIntervalAt(60),1.8/1.331);assert.ok(spawnIntervalAt(300)<1.8/1.1**5);
 });
 test('TL003 late-wave spawn growth can produce multiple enemies per simulation step', () => {
-  const run=new DefenseRun(1);run.start();run.elapsed=1140;run.advance(FIELD.step);
+  const run=new DefenseRun(1);run.start(false,3);run.stage=20;run.advance(FIELD.step);
   assert.ok(run.enemies.length>1);assert.equal(new Set(run.enemies.map(e=>e.id)).size,run.enemies.length);
 });
 
-test('TL003 tactical cores: unlock spends points, forget refunds in full, slots open with the tier, no exclusives', () => {
+test('TL003 tactical cores: unlock spends points, forget refunds in full, slots open on the first clears of stages 10 and 20, no exclusives', () => {
   assert.ok(CORES.every(c=>c.exclusive.length===0),'no core blocks another (2026-10-23)');
   const tip=CORES.find(c=>c.id==='coldsteel').links[0];
   const {meta}=mirror(200,treeWith({[tip]:1}));assert.equal(isCoreRevealed(meta.tree,'coldsteel'),true);
   const before=meta.value.TalentPoints;assert.equal(meta.unlockCore('coldsteel').ok,true);assert.equal(meta.value.TalentPoints,before-15);
   assert.equal(meta.equipCore('coldsteel').ok,true);assert.deepEqual(compileTalents(meta.tree).cores,['coldsteel']);
-  // tier 1 = one slot
+  // one slot before stage 10 is cleared
   const other=CORES.find(c=>c.id==='layers');const t2=meta.tree;t2.nodes[other.links[0]]=1;
-  const {meta:m2}=mirror(200,t2);assert.equal(m2.unlockCore('layers').ok,true);assert.equal(m2.equipCore('layers').ok,false,'one slot at tier 1');
+  const {meta:m2}=mirror(200,t2);assert.equal(m2.unlockCore('layers').ok,true);assert.equal(m2.equipCore('layers').ok,false,'one slot before stage 10');
+  assert.equal(coreSlots({...m2.tree,bestStage:9}),1);assert.equal(coreSlots({...m2.tree,bestStage:10}),2);assert.equal(coreSlots({...m2.tree,tier:5,bestStage:19}),2,'the tier no longer opens slots');
   // formerly exclusive pairs (cold steel + cremation) now share a loadout
-  const t3=structuredClone(m2.tree);t3.tier=3;t3.maxNodeLevel=30;for(const id of CORES.find(c=>c.id==='cremation').links)t3.nodes[id]=1;
+  const t3=structuredClone(m2.tree);t3.bestStage=20;for(const id of CORES.find(c=>c.id==='cremation').links)t3.nodes[id]=1;
   const {meta:m3}=mirror(200,t3);assert.equal(m3.unlockCore('cremation').ok,true);assert.equal(m3.equipCore('cremation').ok,true,'cremation and cold steel together');
   assert.equal(m3.equipCore('layers').ok,true);assert.equal(coreSlots(m3.tree),3);
   assert.equal(m3.unequipCore('cremation').ok,true);

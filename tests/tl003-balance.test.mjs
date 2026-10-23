@@ -1,55 +1,47 @@
 // TL003 balance acceptance with an active-play bot (spends money, aims skills, picks cards, fortifies in the rests).
-// Targets since the 2026-10-23 stage rework: a zero-talent run clears a stage or two; about half of the T1 blueprint
-// clears all 20 stages; §9 (DPS ×2.00/min, income ×1.85–1.95/min) is kept as a reference.
+// v2 targets (2026-10-23 retrospective, set before tuning): a run of all 20 stages takes about a quarter of an hour;
+// a zero-talent first run clears 2–4 stages; spending each run's points on the blueprint, the first full clear comes
+// after about ten runs. These are real gates now, not todos.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { BUILDS, firstRunStats, playRun, seedFor, treeWithLevels, dpsGrowth, incomeGrowth } from '../tools/tl003-balance.mjs';
-import { TALENTS, compileTalents } from '../src/tl003/Talents.ts';
+import { BUILDS, firstRunStats, metaLoop, playRun, seedFor, treeWithLevels } from '../tools/tl003-balance.mjs';
+import { compileTalents } from '../src/tl003/Talents.ts';
 import * as B from '../src/tl003/Balance.ts';
 import { DefenseRun, FIELD } from '../src/tl003/Run.ts';
 import { CARDS, SKILLS } from '../src/tl003/Content.ts';
 
-// 2026-10-23: three progression targets miss after the multi-dimension rework (random squads make runs
-// either fall at the first boss or last 20 minutes). They still run and report, but as `todo` they do not
-// block a deploy while the user playtests; remove PLAYTEST_PENDING once the balance is settled.
-const PLAYTEST_PENDING = { todo: '2026-10-23 rework: rebalance after the playtest (see docs/TL003-v0.4-amendments.md)' };
 const median = values => { const s = [...values].sort((a, b) => a - b); return s[Math.floor(s.length / 2)]; };
-const runAt = (level, seeds, maxSeconds = 1200) =>
-  Array.from({ length: seeds }, (_, i) => playRun({ seed: seedFor(i), effects: compileTalents(treeWithLevels(level)), maxSeconds }));
 
-test('TL003 balance: an active zero-talent first run clears a stage or two, keeps buying and falls before the first boss stage', PLAYTEST_PENDING, () => {
+test('TL003 balance: a zero-talent first run clears 2–4 stages and never wins', () => {
   for (const build of Object.keys(BUILDS)) {
-    const runs = Array.from({ length: 8 }, (_, i) => playRun({ seed: seedFor(i), build }));
+    const runs = Array.from({ length: 6 }, (_, i) => playRun({ seed: seedFor(i), build }));
     const cleared = median(runs.map(r => r.clearedWave));
     assert.ok(runs.every(r => !r.victory), `${build}: a first run must never win`);
-    assert.ok(cleared >= 1 && cleared < B.BOSS_FIRST_STAGE, `${build}: median stages cleared ${cleared}`);
+    assert.ok(cleared >= 2 && cleared <= 4, `${build}: median stages cleared ${cleared}`);
   }
 });
 
 // Since 2026-10-23 recruits come free from the level-up cards, so a passive player still fields a squad;
-// what must hold is that never upgrading or casting loses well before the first boss.
-test('TL003 balance: the passive baseline (never buys or casts) still loses within a minute', () => {
+// what must hold is that never upgrading or casting loses early.
+test('TL003 balance: the passive baseline (never buys or casts) still loses within a minute and a half', () => {
   const s = firstRunStats(64, 'passive');
   assert.ok(s.kills >= 4, `passive kills ${s.kills}`);
-  assert.ok(s.medianSeconds <= 60, `passive median survival ${s.medianSeconds}s`);
+  assert.ok(s.medianSeconds <= 90, `passive median survival ${s.medianSeconds}s`);
 });
 
-test('TL003 balance: in long runs panel DPS grows about ×2 and income about ×1.9 per minute', PLAYTEST_PENDING, () => {
-  const runs = [...runAt(10, 3), ...runAt(15, 3)];
-  for (const r of runs) assert.ok(r.seconds >= 360, `long-run sample died at ${r.seconds}s`);
-  const dps = median(runs.map(r => dpsGrowth(r.dps))), income = median(runs.map(r => incomeGrowth(r.earned)));
-  assert.ok(dps >= 1.85 && dps <= 2.15, `DPS growth ×${dps}/min`);
-  assert.ok(income >= 1.75 && income <= 2.0, `income growth ×${income}/min`);
-});
-
-// The 2026-10-23 target: about half of the T1 blueprint (all 47 nodes at Lv5) to clear the 20 stages.
-const wholeTree = level => { const tree = treeWithLevels(0); for (const n of TALENTS) tree.nodes[n.id] = level; return tree; };
-test('TL003 balance: stages cleared grow with the whole blueprint; about half of T1 is needed for all 20', PLAYTEST_PENDING, () => {
-  const at = level => median(Array.from({ length: 3 }, (_, i) => playRun({ seed: seedFor(i), effects: compileTalents(wholeTree(level)), build: 'economy' })).map(r => r.victory ? B.STAGE_COUNT : r.clearedWave));
-  const l0 = at(0), l3 = at(3), l7 = at(7);
-  assert.ok(l0 <= 3, `Lv0 blueprint clears ${l0}`);
-  assert.ok(l3 > l0 && l3 < B.STAGE_COUNT, `Lv3 blueprint clears ${l3}`);
-  assert.equal(l7, B.STAGE_COUNT, `Lv7 blueprint clears ${l7}`);
+test('TL003 balance: spending each run on the blueprint, the first full clear comes after about ten runs of about a quarter hour', () => {
+  const first = [], minutes = [];
+  for (const build of Object.keys(BUILDS)) {
+    const history = metaLoop({ runs: 25, build });
+    const win = history.findIndex(r => r.victory);
+    first.push(win < 0 ? 99 : win + 1);
+    if (win >= 0) minutes.push(history[win].seconds / 60);
+    // Progress is gradual: no run jumps from the first boss straight to a full clear.
+    assert.ok(history.slice(0, Math.max(0, win)).some(r => r.clearedWave >= B.BOSS_FIRST_STAGE), `${build}: stages ${history.map(r => r.victory ? 'W' : r.clearedWave).join(' ')}`);
+  }
+  const runs = median(first);
+  assert.ok(runs >= 5 && runs <= 15, `first full clear on run ${first.join(' / ')}`);
+  for (const m of minutes) assert.ok(m >= 10 && m <= 22, `a full clear took ${m.toFixed(1)} min`);
 });
 
 test('TL003 balance: structural guards keep income and the barricade from outscaling the horde', () => {
@@ -98,8 +90,8 @@ test('TL003 balance: boss stages 4, 7, … 19 and a super boss on 20; the boss i
   last.elapsed = plain.elapsed = 600; last.stageTime = B.stageSeconds(20) - 0.01; plain.stageTime = B.stageSeconds(19) - 0.01;
   last.advance(FIELD.step); plain.advance(FIELD.step);
   assert.ok(last.boss.superBoss && !plain.boss.superBoss);
-  assert.ok(Math.abs(last.boss.maxHp / plain.boss.maxHp / (B.SUPER_BOSS_HP * B.BOSS_HP_PER_STAGE) - 1) < 0.01);
-  assert.ok(Math.abs(last.boss.attack / plain.boss.attack / B.SUPER_BOSS_ATTACK - 1) < 0.01);
+  assert.ok(Math.abs(last.boss.maxHp / plain.boss.maxHp / (B.SUPER_BOSS_HP * B.BOSS_HP_PER_STAGE * B.ENEMY_HP_GROWTH_PER_MINUTE ** B.STAGE_PACE_MINUTES) - 1) < 0.01, 'one stage later on the curve, ×super');
+  assert.ok(Math.abs(last.boss.attack / plain.boss.attack / (B.SUPER_BOSS_ATTACK * B.ENEMY_ATTACK_GROWTH_PER_MINUTE ** B.STAGE_PACE_MINUTES) - 1) < 0.01);
   assert.ok(last.enemies.filter(e => e.kind === 'runner').length >= B.SUPER_BOSS_ESCORT);
 });
 

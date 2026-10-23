@@ -4,11 +4,13 @@ import { canBreakthrough, compileTalents, coreById, coreConflicts, coreSlots, is
 export interface TalentTree {
   tier: number; maxNodeLevel: number; nodes: Record<string, number>;
   unlockedCoreTalents: string[]; activeCoreTalents: string[];
+  /** v2: the best stage ever cleared (opens core slots) and the highest danger level unlocked (0 = normal only). */
+  bestStage?: number; danger?: number;
 }
 export interface MetaSave { version: 1; TalentPoints: number; TalentTreeJson: string; HighestClearedWave: number }
 export interface MetaProgressionPort { load(): Promise<MetaSave>; save(meta: MetaSave): Promise<void> }
 export const META_KEY = 'taillabs.tl003.meta.v1';
-export const emptyTree = (): TalentTree => ({ tier: 1, maxNodeLevel: 10, nodes: {}, unlockedCoreTalents: [], activeCoreTalents: [] });
+export const emptyTree = (): TalentTree => ({ tier: 1, maxNodeLevel: 10, nodes: {}, unlockedCoreTalents: [], activeCoreTalents: [], bestStage: 0, danger: 0 });
 export const emptyMeta = (): MetaSave => ({ version: 1, TalentPoints: 0, TalentTreeJson: JSON.stringify(emptyTree()), HighestClearedWave: 0 });
 const nonnegativeInt = (v: unknown) => typeof v === 'number' && Number.isSafeInteger(v) && v >= 0 ? v : 0;
 export function normalizeMeta(value: unknown): MetaSave {
@@ -21,6 +23,7 @@ export function normalizeMeta(value: unknown): MetaSave {
     if (raw && typeof raw === 'object') {
       tree.tier = Math.max(1, nonnegativeInt(raw.tier));
       tree.maxNodeLevel = Math.max(10, nonnegativeInt(raw.maxNodeLevel));
+      tree.bestStage = nonnegativeInt(raw.bestStage); tree.danger = nonnegativeInt(raw.danger);
       if (raw.nodes && typeof raw.nodes === 'object' && !Array.isArray(raw.nodes)) {
         tree.nodes = Object.fromEntries(Object.entries(raw.nodes).filter(([k]) => /^[a-z_]+$/.test(k)).map(([k, v]) => [k, nonnegativeInt(v)]));
       }
@@ -119,11 +122,15 @@ export class LocalMetaMirror {
     this.persist({ ...this.value, TalentTreeJson: JSON.stringify(tree) });
     return { ok: true, message: `藍圖晉階 T${tree.tier}。節點上限 Lv${tree.maxNodeLevel}，等級全數保留。` };
   }
-  settle(run: object, points: number, clearedWave: number): boolean {
+  /** Ends a run once: adds its points, records the best stage, and a full clear unlocks the next danger level. */
+  settle(run: object, points: number, clearedWave: number, outcome: { victory?: boolean; danger?: number } = {}): boolean {
     if (this.settled.has(run)) return false;
     this.settled.add(run);
     this.inRun = false; this.refresh();
-    this.persist({ ...this.value, TalentPoints: this.value.TalentPoints + nonnegativeInt(points), HighestClearedWave: Math.max(this.value.HighestClearedWave, nonnegativeInt(clearedWave)) });
+    const tree = this.tree;
+    tree.bestStage = Math.max(tree.bestStage ?? 0, nonnegativeInt(clearedWave));
+    if (outcome.victory) tree.danger = Math.max(tree.danger ?? 0, nonnegativeInt(outcome.danger ?? 0) + 1);
+    this.persist({ ...this.value, TalentPoints: this.value.TalentPoints + nonnegativeInt(points), HighestClearedWave: Math.max(this.value.HighestClearedWave, nonnegativeInt(clearedWave)), TalentTreeJson: JSON.stringify(tree) });
     return true;
   }
 }

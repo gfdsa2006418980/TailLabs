@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { calculateValue, calculateDamage, effectiveCooldown, runScore, formatNumber, withFamily } from '../src/tl003/Combat.ts';
-import { DefenseRun, FIELD, freshStatus, meterThreshold } from '../src/tl003/Run.ts';
+import { DefenseRun, FIELD, damageSource, freshStatus, meterThreshold } from '../src/tl003/Run.ts';
 import { MERCENARIES, CARDS, SKILLS, ENEMIES } from '../src/tl003/Content.ts';
 import { LocalMetaMirror, META_KEY, emptyMeta, normalizeMeta } from '../src/tl003/Meta.ts';
 import { project, unproject, projectedCircle } from '../src/tl003/Projection.ts';
@@ -60,7 +60,7 @@ test('TL003 two defenses: armor stops physical hits, resistance stops elemental 
   near(calculateDamage({ baseDamage: 100, tags: ['Damage.Blast'] }, armored).final, 100 / 2.3);
   near(calculateDamage({ baseDamage: 100, tags: ['Damage.Kinetic', 'Damage.Cold'] }, hazmat).final, 100 / 1.1);
   near(calculateDamage({ baseDamage: 100, tags: ['Damage.Electric'] }, { defense: 0, toxin: 0, resist: 5 }).final, 5, 'resistance tops out at 95%');
-  const run = running(); run.elapsed = 300; run.advance(FIELD.step);
+  const run = running(); run.stage = 10; run.advance(FIELD.step);
   for (let i = 0; i < 400 && !run.enemies.some(e => e.kind === 'hazmat'); i++) { run.mercenaries[0].shotTimer = 1e9; if (run.phase === 'choice') run.choose(run.choices[0].id); run.advance(FIELD.step); }
   const spawned = run.enemies.find(e => e.kind === 'hazmat'); assert.ok(spawned, 'hazmat zombies join the horde'); near(spawned.resist, 0.75);
 });
@@ -273,9 +273,12 @@ test('TL003 skills are decoupled from mercenaries: three slots, each on its own 
     if (id==='mortar') { assert.equal(r.events.filter(e=>e.kind==='blast').length,5); continue; }
     r.advance(1); assert.ok(r.enemies[0].hp<1e6||r.mines.length>0,`${id} did something`); }
 });
-test('TL003 stage lengths grow 5 s a stage up to 120 s; bosses on 4, 7, …, 19 and a super boss on the last stage', () => {
+test('TL003 stage lengths grow a little each stage up to a cap; bosses on 4, 7, …, 19 and a super boss on the last stage', () => {
   assert.equal(B.STAGE_COUNT, 20);
-  for (let n = 1; n <= B.STAGE_COUNT; n++) near(B.stageSeconds(n), Math.min(120, 30 + 5 * (n - 1)));
+  for (let n = 1; n <= B.STAGE_COUNT; n++) near(B.stageSeconds(n), Math.min(B.STAGE_MAX_SECONDS, B.STAGE_FIRST_SECONDS + B.STAGE_STEP_SECONDS * (n - 1)));
+  // About a quarter of an hour of clocks for the whole run (mop-ups and boss fights come on top).
+  const clocks = Array.from({ length: B.STAGE_COUNT }, (_, i) => B.stageSeconds(i + 1)).reduce((a, b) => a + b, 0);
+  assert.ok(clocks >= 600 && clocks <= 840, `${clocks} s of stage clocks`);
   assert.deepEqual(Array.from({ length: B.STAGE_COUNT }, (_, i) => i + 1).filter(B.isBossStage), [4, 7, 10, 13, 16, 19, 20]);
   const run = running(); assert.equal(run.stage, 1); assert.equal(run.wave, 1); assert.equal(run.clearedWave, 0); near(run.stageLength, B.stageSeconds(1));
   for (const old of ['BOSS_FIRST_SECONDS', 'BOSS_INTERVAL_SECONDS', 'BOSS_RUSH_HP_GROWTH']) assert.equal(old in B, false, `${old} is gone`);
@@ -291,7 +294,7 @@ test('TL003 a normal stage stops spawning when its clock runs out, then ends on 
   run.mines.push({ x: 400, y: 225, damage: 1 });
   const money = run.money, xp = run.xp; run.advance(FIELD.step);
   const share = B.stageSeconds(1) / 30;
-  near(run.money - money, calculateValue(5 * share * B.WAVE_REWARD_GROWTH_PER_MINUTE ** (run.elapsed / 60), ['Economy.WaveReward'], run.modifiers));
+  near(run.money - money, calculateValue(5 * share * B.WAVE_REWARD_GROWTH_PER_MINUTE ** run.pace, ['Economy.WaveReward'], run.modifiers));
   assert.equal(run.xp - xp, Math.round(2 * share)); assert.equal(run.level, 3, 'the clear bonus XP alone does not level here');
   assert.equal(run.zones.length, 0); assert.equal(run.mines.length, 1);
   // Two banked picks, one after the other, each with its own reroll; then the rest.
@@ -318,14 +321,15 @@ test('TL003 start(true) opens with a rest: stage 0, one pick, then shopping unti
   const plain = new DefenseRun(123); plain.start(); assert.equal(plain.stage, 1); assert.equal(plain.phase, 'running');
 });
 test('TL003 boss stages: warning, boss and runners when the clock runs out, spawns until the boss is down; the super boss ends the run', () => {
-  const bossHp = (stage, elapsed) => ENEMIES.boss.hp * B.ENEMY_HP_SCALE * B.ENEMY_HP_GROWTH_PER_MINUTE ** (elapsed / 60) * B.BOSS_HP_FIRST * B.BOSS_HP_PER_STAGE ** (stage - 1);
+  // v2: everything follows the stage (pace), not the clock.
+  const bossHp = stage => ENEMIES.boss.hp * B.ENEMY_HP_SCALE * B.ENEMY_HP_GROWTH_PER_MINUTE ** ((stage - 1) * B.STAGE_PACE_MINUTES) * B.BOSS_HP_FIRST * B.BOSS_HP_PER_STAGE ** (stage - 1);
   const quiet = running(); quiet.stage = 3; quiet.stageTime = quiet.stageLength - 1; quiet.advance(FIELD.step); assert.equal(quiet.bossWarning, undefined, 'no warning on a normal stage');
   const run = running(); run.wallHealth = run.wallMaxHealth = 1e12; run.mercenaries[0].shotTimer = 1e9; run.stage = 4;
   run.stageTime = run.stageLength - B.BOSS_WARNING_SECONDS - 0.5; run.advance(FIELD.step); assert.equal(run.bossWarning, undefined);
   run.advance(1); assert.ok(run.bossWarning > 0 && run.bossWarning <= B.BOSS_WARNING_SECONDS, `${run.bossWarning}`);
   run.stageTime = run.stageLength - FIELD.step / 2; const lastId = Math.max(0, ...run.enemies.map(e => e.id));
   run.advance(FIELD.step); const boss = run.boss; assert.ok(boss, 'the boss charges in'); assert.equal(run.bossWarning, undefined);
-  near(boss.maxHp / bossHp(4, run.elapsed), 1); assert.ok(!boss.superBoss);
+  near(boss.maxHp / bossHp(4), 1); assert.ok(!boss.superBoss);
   assert.ok(run.enemies.filter(e => e.id > lastId && e.kind === 'runner').length >= B.BOSS_ESCORT);
   // The horde keeps coming while the boss stands, even with the clock out.
   const before = run.enemies.length; run.advance(10); assert.ok(run.enemies.length > before, 'spawns continue until the boss is down');
@@ -336,8 +340,8 @@ test('TL003 boss stages: warning, boss and runners when the clock runs out, spaw
   // The last stage: a super boss; beating it wins.
   const last = running(); last.wallHealth = last.wallMaxHealth = 1e12; last.mercenaries[0].shotTimer = 1e9; last.stage = B.STAGE_COUNT;
   last.stageTime = last.stageLength - FIELD.step / 2; const lastBefore = Math.max(0, ...last.enemies.map(e => e.id)); last.advance(FIELD.step);
-  const sup = last.boss; assert.ok(sup && sup.superBoss); near(sup.maxHp / (bossHp(B.STAGE_COUNT, last.elapsed) * B.SUPER_BOSS_HP), 1);
-  near(sup.attack, ENEMIES.boss.attack * B.ENEMY_ATTACK_GROWTH_PER_MINUTE ** (last.elapsed / 60) * B.SUPER_BOSS_ATTACK);
+  const sup = last.boss; assert.ok(sup && sup.superBoss); near(sup.maxHp / (bossHp(B.STAGE_COUNT) * B.SUPER_BOSS_HP), 1);
+  near(sup.attack, ENEMIES.boss.attack * B.ENEMY_ATTACK_GROWTH_PER_MINUTE ** last.pace * B.SUPER_BOSS_ATTACK);
   assert.ok(last.enemies.filter(e => e.id > lastBefore && e.kind === 'runner').length >= B.SUPER_BOSS_ESCORT);
   sup.hp = 0; last.advance(FIELD.step); last.enemies = []; last.advance(FIELD.step);
   assert.equal(last.phase, 'victory'); assert.equal(last.clearedWave, B.STAGE_COUNT);
@@ -358,7 +362,7 @@ test('TL003 past ENEMY_CAP alive zombies a new one merges into the nearest of it
 test('TL003 enemy difficulty is independent of permanent player progress and supports six enemy types', () => {
   const a=running(),b=running();b.modifiers.push({kind:'More',tags:['Damage.Kinetic'],value:1e10});
   a.advance(FIELD.step);b.advance(FIELD.step);near(a.enemies[0].maxHp,b.enemies[0].maxHp);near(a.enemies[0].speed,b.enemies[0].speed);
-  const kinds=new Set();for(let seed=1;seed<=128;seed++){const r=new DefenseRun(Math.imul(seed,2654435761));r.start();r.elapsed=180;r.advance(FIELD.step);kinds.add(r.enemies[0].kind);}assert.equal(kinds.size,6);
+  const kinds=new Set();for(let seed=1;seed<=128;seed++){const r=new DefenseRun(Math.imul(seed,2654435761));r.start();r.stage=8;r.advance(FIELD.step);kinds.add(r.enemies[0].kind);}assert.equal(kinds.size,6);
 });
 test('TL003 first-run baseline (no upgrades, no skills) ends before the first boss after a handful of kills', () => {
   const runs=Array.from({length:128},(_,i)=>simulate(Math.imul(i+1,2654435761)));
@@ -413,4 +417,53 @@ test('TL003 reworked throwables: snipe takes the field\'s biggest HP, mines stay
     const r = quiet(); r.learn(id); const t = enemy({ x: 500, y: 225, hp: 1e9, maxHp: 1e9 }); r.enemies = [t];
     r.cast(1, 500, 225); assert.ok(r[frozen](t), `${id} controls at once`);
   }
+});
+
+// ---------- v2 (2026-10-23 retrospective) ----------
+test('TL003 v2: enemy strength, spawns and income follow the stage and the danger level, never the clock', () => {
+  const at = (stage, danger = 0, elapsed = 0) => { const r = new DefenseRun(9); r.start(false, danger); r.stage = stage; r.elapsed = elapsed; r.mercenaries[0].shotTimer = 1e9; r.advance(FIELD.step); return r; };
+  const early = at(5), late = at(5, 0, 900);
+  near(early.enemies[0].maxHp, late.enemies[0].maxHp, 'the clock does not grow the horde');
+  near(early.pace, 4 * B.STAGE_PACE_MINUTES);
+  near(at(1, 2).pace, at(1 + 2 * B.DANGER_STAGE_SHIFT).pace, 'danger shifts every stage later');
+  assert.ok(at(12).enemies[0].maxHp >= at(2).enemies[0].maxHp, 'later stages are stronger');
+  assert.equal(B.stagePoints(0), 0); assert.equal(B.stagePoints(4), 10); assert.equal(B.stagePoints(20), 210); assert.equal(B.stagePoints(20, 2), 630);
+  const r = at(3); r.stage = 3; assert.equal(r.clearedWave, 2); assert.equal(r.score, 3);
+});
+
+test('TL003 v2: damage is credited to its source; control seconds and toxin bursts are counted', () => {
+  assert.equal(damageSource(MERCENARIES.rifle.tags), 'merc:rifle');
+  assert.equal(damageSource(['Damage.Blast', 'Skill.Active', 'Weapon.grenade']), 'skill:grenade');
+  assert.equal(damageSource(['Damage.Fire', 'Mechanic.DOT', 'Status.Burning']), 'burn');
+  assert.equal(damageSource(['Damage.Cold', 'Status.Frozen']), 'frostbite');
+  assert.equal(damageSource(['Damage.Toxin', 'Mechanic.AOE', 'Mechanic.Explosion']), 'toxicburst');
+  const run = running(); const target = enemy({ x: 600, hp: 1e6, maxHp: 1e6 }); run.enemies = [target];
+  run.mercenaries[0].shotTimer = 0; run.advance(FIELD.step);
+  near(run.stats.damage['merc:rifle'], 1e6 - target.hp, 'the rifle shot is credited to the rifle');
+  run.learn('cryobomb'); run.cast(1, 600, 225);
+  assert.ok(run.stats.damage['skill:cryobomb'] > 0); near(run.stats.control.chill, B.STATUS.chill.duration, 'one freeze');
+  // Overkill is not counted: a kill credits only the HP it took.
+  const weak = enemy({ id: 30001, x: 600, hp: 1, maxHp: 1e6 }); const before = run.stats.damage['skill:cryobomb'];
+  run.enemies = [weak]; run.skills[1].cooldown = 0; run.cast(1, 600, 225); near(run.stats.damage['skill:cryobomb'] - before, 1);
+});
+
+test('TL003 v2: the card preview measures panel DPS on a copy and leaves the run untouched', () => {
+  const run = running(); run.phase = 'choice'; run.choices = [{ id: 'kinetic' }, { id: 'merc_gunner' }, { id: 'wall' }].map(c => ({ ...c, ...CARDS.find(d => d.id === c.id) }));
+  run.choices[1] = { id: 'merc_gunner', kind: 'merc', merc: 'gunner', effect: 'merc', name: '機槍兵' };
+  const snapshot = JSON.stringify({ m: run.modifiers, c: run.selectedCards, s: run.mercenaries, w: run.wallMaxHealth, money: run.money, phase: run.phase });
+  const dps = run.panelDps(); assert.ok(dps > 0);
+  assert.ok(run.previewDps('kinetic') > 0, 'more kinetic damage shows'); assert.ok(run.previewDps('merc_gunner') > 0.2, 'a new gun shows a lot');
+  near(run.previewDps('wall'), 0, 'a wall card does not change DPS');
+  assert.equal(JSON.stringify({ m: run.modifiers, c: run.selectedCards, s: run.mercenaries, w: run.wallMaxHealth, money: run.money, phase: run.phase }), snapshot);
+  near(run.panelDps(), dps);
+});
+
+test('TL003 v2: settling records the best stage (core slots) and a full clear unlocks the next danger level', () => {
+  const data = new Map(), storage = { getItem: k => data.get(k) ?? null, setItem: (k, v) => data.set(k, v) };
+  const meta = new LocalMetaMirror(storage);
+  meta.beginRun(); assert.equal(meta.settle({}, 15, 5, { danger: 0 }), true);
+  assert.equal(meta.tree.bestStage, 5); assert.equal(meta.tree.danger ?? 0, 0); assert.equal(meta.value.TalentPoints, 15);
+  meta.beginRun(); meta.settle({}, 210, 20, { victory: true, danger: 0 }); assert.equal(meta.tree.bestStage, 20); assert.equal(meta.tree.danger, 1);
+  meta.beginRun(); meta.settle({}, 30, 4, { danger: 1 }); assert.equal(meta.tree.bestStage, 20, 'a worse run never lowers the best'); assert.equal(meta.tree.danger, 1);
+  assert.deepEqual(Object.keys(JSON.parse(data.get(META_KEY))).sort(), ['HighestClearedWave', 'TalentPoints', 'TalentTreeJson', 'version'], 'the save format is unchanged');
 });

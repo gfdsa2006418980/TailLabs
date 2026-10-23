@@ -1,4 +1,4 @@
-import { calculateDamage, calculateValue, effectiveCooldown, runScore, withFamily } from './Combat.ts';
+import { calculateDamage, calculateValue, effectiveCooldown, withFamily } from './Combat.ts';
 import type { DamageInstance, Modifier, Tag } from './Combat.ts';
 import { CARD_DEFS, ELEMENTS, ENEMIES, MERCENARIES, RARITIES, RARITY_ORDER, SKILLS, cardDef, makeCard } from './Content.ts';
 import type { CardDef, Element, EnemyKind, MercKind, Rarity, SkillId, UpgradeCard } from './Content.ts';
@@ -62,6 +62,30 @@ const mercY = (slot: number) => 130 + slot * 92;
 /** The very first choice of a run offers its mercenaries and one ammo card of an element. */
 const STARTERS = ['kinetic', 'burn', 'bio', 'shock', 'chill'];
 const THORN_TAGS: Tag[] = ['Damage.Kinetic', 'Damage.Physical', 'Defense.Barricade'];
+const BURN_TAGS: Tag[] = ['Damage.Fire', 'Damage.Elemental', 'Mechanic.DOT', 'Status.Burning'];
+/** Each throwable's damage per cast in units of the squad's reference shot, for the panel DPS. */
+const SKILL_PANEL: Record<SkillId, [number, Tag[]]> = {
+  grenade: [5, ['Damage.Blast']], molotov: [18, ['Damage.Fire', 'Mechanic.DOT']], laser: [9, ['Damage.Electric']], cryobomb: [4, ['Damage.Cold']],
+  gas: [3.6, ['Damage.Toxin']], mortar: [12.5, ['Damage.Blast']], emp: [3, ['Damage.Electric']], strafe: [4.8, ['Damage.Kinetic']],
+  snipe: [30, ['Damage.Kinetic', 'Damage.Cold']], minefield: [16, ['Damage.Blast', 'Damage.Fire']],
+};
+/**
+ * Where a hit's damage is credited (v2 stats): a throwable, a mercenary's attack (its ammo procs included), or a
+ * shared effect: burns, frostbite, paralysis bursts, toxin bursts, corpse blasts, spikes.
+ */
+export function damageSource(tags: readonly Tag[]): string {
+  if (tags.includes('Status.Frozen')) return 'frostbite';
+  if (tags.includes('Status.Paralyzed')) return 'shockburst';
+  if (tags.includes('Defense.Barricade')) return 'thorns';
+  // Guns carry a Weapon tag too; only throwables are Skill.Active.
+  const weapon = tags.includes('Skill.Active') ? tags.find(t => t.startsWith('Weapon.')) : undefined;
+  if (weapon) return 'skill:' + weapon.slice(7);
+  if (tags.includes('Mechanic.DOT') || tags.includes('Status.Burning')) return 'burn';
+  const merc = tags.find(t => t.startsWith('Mercenary.'));
+  if (merc) return 'merc:' + merc.slice(10);
+  if (tags.includes('Mechanic.Explosion')) return tags.includes('Damage.Toxin') ? 'toxicburst' : 'corpseblast';
+  return 'other';
+}
 // Synergy strengths, looked up once (hot paths run per enemy per step).
 const PHOSPHORUS = cardDef('phosphorus')!.value, ACIDCORE = cardDef('acidcore')!.value, CONDUCTOR = cardDef('conductor')!.value, CHEMFIRE = cardDef('chemfire')!.value;
 const rank = (r: Rarity) => RARITY_ORDER.indexOf(r);
@@ -120,6 +144,15 @@ export class DefenseRun {
   endless = false;
   /** Current stage (1-based), seconds into it, and level-ups banked for the next rest. */
   stage = 1; stageTime = 0; pendingPicks = 0;
+  /** Danger level chosen at deployment: every stage plays DANGER_STAGE_SHIFT × danger stages later. */
+  danger = 0;
+  /**
+   * What the squad actually did (v2): damage by source for the run and for the current stage, seconds of control
+   * applied, toxin bursts. Feeds the DPS panel, the rest summary and the battle report.
+   */
+  stats = { damage: {} as Record<string, number>, stage: {} as Record<string, number>, control: { chill: 0, shock: 0, stun: 0 } as Record<MeterKind, number>, toxinBursts: 0 };
+  /** Damage per second of the stage just cleared and of the one before it. */
+  lastStageDps = 0; prevStageDps = 0;
   /** Card-driven rules. Bonuses add up; percentages are fractions. */
   critChance = 0; critDamage = 1.5; pierce = 0; burnTimeBonus = 0; toxinGain = 0; shockGain = 0; chillGain = 0; stunGain = 0; thorns = 0;
   synergies = new Set<string>(); evolutions: Partial<Record<SkillId, string>> = {};
@@ -193,7 +226,10 @@ export class DefenseRun {
   /** The stage's boss has been beaten: no more spawns, the stage ends when the road is clear. */
   bossDown = false;
   get xpNeeded() { return B.xpForLevel(this.level); }
-  get score() { return runScore(this.elapsed, this.totalEarnedMoney); }
+  /** Talent points this run pays: every cleared stage n pays n, × (1 + danger). */
+  get score() { return B.stagePoints(this.clearedWave, this.danger); }
+  /** The stage's place on the old per-minute curves (enemy strength, spawn rate, income): set by stage and danger, not the clock. */
+  get pace() { return (Math.max(1, this.stage) - 1 + this.danger * B.DANGER_STAGE_SHIFT) * B.STAGE_PACE_MINUTES; }
   /** Identifies the coming boss rush (one announcement each). */
   get nextBossAt() { return this.bossRushes + 1; }
   /** Seconds until this boss stage's rush while it is being announced; undefined otherwise. */
@@ -207,8 +243,9 @@ export class DefenseRun {
    * run starts in a rest before stage 1 with one pick (two recruits and an ammo card); without it (unit tests) the
    * battle starts at once.
    */
-  start(opening = false) {
+  start(opening = false, danger = 0) {
     if (this.phase !== 'ready') return;
+    this.danger = Math.max(0, Math.min(B.DANGER_MAX, Math.floor(danger)));
     this.mercenaries.push({ id: this.nextId++, kind: 'rifle', shotTimer: 0 });
     this.skills.push({ id: 'grenade', cooldown: this.skillCooldown('grenade') * B.SKILL_START_CHARGE });
     this.phase = 'running';
@@ -222,7 +259,8 @@ export class DefenseRun {
   /** Leaves the rest and starts the next stage. */
   nextStage(): boolean {
     if (this.phase !== 'intermission') return false;
-    this.stage++; this.stageTime = 0; this.bossSpawned = false; this.bossDown = false; this.afterChoice = 'running'; this.phase = 'running'; return true;
+    this.stage++; this.stageTime = 0; this.bossSpawned = false; this.bossDown = false; this.afterChoice = 'running'; this.phase = 'running';
+    this.spawnTimer = 0; return true;
   }
   /** Money can be spent in battle and during the rest between stages. */
   private get shopOpen() { return this.phase === 'running' || this.phase === 'intermission'; }
@@ -309,7 +347,7 @@ export class DefenseRun {
       case 'critDamage': this.critDamage += v; break;
       case 'reduction': this.wallReduction = 1 - (1 - this.wallReduction) * (1 - Math.min(0.95, v)); break;
       case 'thorns': this.thorns += v; break;
-      case 'airdrop': this.earn(calculateValue(25 * v * B.INCOME_GROWTH_PER_MINUTE ** (this.elapsed / 60), ['Economy.WaveReward'], this.modifiers)); break;
+      case 'airdrop': this.earn(calculateValue(25 * v * B.INCOME_GROWTH_PER_MINUTE ** this.pace, ['Economy.WaveReward'], this.modifiers)); break;
       case 'burnTime': this.burnTimeBonus += v; break;
       case 'toxinGain': this.toxinGain += v; break;
       case 'shockGain': this.shockGain += v; break;
@@ -352,8 +390,10 @@ export class DefenseRun {
   /** The boss is down and the road is clear: lingering areas fade (mines stay), the stage pays its clear bonus, the squad rests. */
   private endStage() {
     this.zones = []; this.blasts = []; this.invalidateGrid();
+    let dealt = 0; for (const v of Object.values(this.stats.stage)) dealt += v;
+    this.prevStageDps = this.lastStageDps; this.lastStageDps = dealt / Math.max(1, this.stageTime); this.stats.stage = {};
     const share = this.stageLength / 30;
-    this.earn(calculateValue(5 * share * B.WAVE_REWARD_GROWTH_PER_MINUTE ** (this.elapsed / 60), ['Economy.WaveReward'], this.modifiers));
+    this.earn(calculateValue(5 * share * B.WAVE_REWARD_GROWTH_PER_MINUTE ** this.pace, ['Economy.WaveReward'], this.modifiers));
     this.xp += Math.round(2 * share); this.checkLevel();
     if (!this.endless && this.stage >= B.STAGE_COUNT) { this.phase = 'victory'; return; }
     this.openPick();
@@ -444,7 +484,7 @@ export class DefenseRun {
     return offers;
   }
   /** §11: re-draw the three cards for battlefield money; the price follows income and rises per reroll. */
-  get rerollCost() { return this.freeRerolls > 0 ? 0 : Math.ceil(8 * B.INCOME_GROWTH_PER_MINUTE ** (this.elapsed / 60)); }
+  get rerollCost() { return this.freeRerolls > 0 ? 0 : Math.ceil(8 * B.INCOME_GROWTH_PER_MINUTE ** this.pace); }
   /** One reroll per pick (2026-10-23); a free reroll from the talents pays for it. */
   get canReroll() { return this.rerollsThisLevel < B.REROLLS_PER_PICK; }
   reroll(): boolean {
@@ -452,6 +492,52 @@ export class DefenseRun {
     if (this.freeRerolls > 0) this.freeRerolls--; else this.money -= this.rerollCost;
     this.rerollsThisLevel++;
     this.choices = this.draw(); return true;
+  }
+  private record(tags: readonly Tag[], amount: number) {
+    if (!(amount > 0)) return;
+    const key = damageSource(tags);
+    this.stats.damage[key] = (this.stats.damage[key] ?? 0) + amount;
+    this.stats.stage[key] = (this.stats.stage[key] ?? 0) + amount;
+  }
+  /**
+   * Panel DPS against a plain target (no defense, no resistance): every gun's expected hit (crits and ammo procs
+   * included, splash counted on a small crowd) over its shot interval, plus every throwable over its cooldown.
+   * A comparison tool for the card preview, not a prediction of the battle.
+   */
+  panelDps(): number {
+    const critFactor = this.cores.has('coldsteel') ? 1 : 1 + Math.min(1, this.critChance) * (this.critDamage - 1);
+    let procs = 0, ignite = 0;
+    for (const m of this.modifiers) if (m.kind === 'Special' && m.tags.includes('Skill.AutoAttack')) {
+      if (m.rule === 'shock' || m.rule === 'chill') procs += m.value;
+      if (m.rule === 'ignite') ignite += m.value;
+    }
+    let total = 0;
+    for (const merc of this.mercenaries) {
+      const def = MERCENARIES[merc.kind], base = this.damageFor(merc.kind);
+      const crowd = def.pattern === 'aoe' ? 3 : def.pattern === 'cone' ? (def.targets ?? 1) : def.pattern === 'chain' ? 1 + 0.7 * (def.targets ?? 0) : 1;
+      const hit = merc.kind === 'flame'
+        ? calculateValue(base * 3, withFamily(BURN_TAGS), this.modifiers)
+        : calculateValue(base, withFamily(def.tags), this.modifiers) * critFactor * (1 + procs) + calculateValue(base * (ignite + (def.ignite ?? 0)) * 3, withFamily(BURN_TAGS), this.modifiers);
+      total += hit * crowd / this.shotInterval(merc);
+    }
+    for (const skill of this.skills) {
+      const [k, tags] = SKILL_PANEL[skill.id];
+      total += calculateValue(this.skillPower * (B.SKILL_TUNING[skill.id] ?? 1) * k, withFamily([...tags, 'Skill.Active', `Weapon.${skill.id}` as Tag]), this.modifiers) * critFactor / Math.max(1, this.skillCooldown(skill.id));
+    }
+    return total;
+  }
+  /** Panel DPS change (a fraction) if this offered card were picked, measured on a copy; the run is untouched. */
+  previewDps(id: string): number {
+    const before = this.panelDps();
+    if (this.phase !== 'choice' || !this.choices.some(c => c.id === id) || !(before > 0)) return 0;
+    const copy = Object.assign(Object.create(Object.getPrototypeOf(this)), this) as DefenseRun;
+    copy.modifiers = this.modifiers.map(m => ({ ...m, tags: [...m.tags] })); copy.selectedCards = [...this.selectedCards];
+    copy.mercenaries = this.mercenaries.map(m => ({ ...m })); copy.skills = this.skills.map(s => ({ ...s })); copy.levels = { ...this.levels };
+    copy.synergies = new Set(this.synergies); copy.evolutions = { ...this.evolutions }; copy.evolutionDeferred = { ...this.evolutionDeferred };
+    copy.choices = [...this.choices]; copy.events = []; copy.picksLeft = 1; copy.afterChoice = 'running';
+    copy.stats = { damage: {}, stage: {}, control: { chill: 0, shock: 0, stun: 0 }, toxinBursts: 0 };
+    copy.choose(id);
+    return copy.panelDps() / before - 1;
   }
   private visual(kind: VisualEvent['kind'], x: number, y: number, color: string, radius = 0, fromX?: number, fromY?: number) {
     const life = kind === 'shot' ? 0.13 : kind === 'blast' || kind === 'toxic' ? 0.55 : 0.4;
@@ -481,6 +567,7 @@ export class DefenseRun {
     if (!enemy.toxinBurst && enemy.toxin >= enemy.defense) {
       enemy.toxinBurst = true;
       if (this.blasts.length < 300) this.blasts.push({ x: enemy.x, y: enemy.y, damage: enemy.maxHp * B.TOXIN_BURST, toxic: true });
+      this.stats.toxinBursts++;
     }
   }
   /** Electric: the shock meter raises damage taken; a paralysed zombie takes the full bonus. */
@@ -501,6 +588,7 @@ export class DefenseRun {
     m.count = (this.elapsed - m.last <= B.STATUS_WINDOW ? m.count : 0) + 1; m.last = this.elapsed; m.value = 0;
     const def = B.STATUS[kind];
     m.timer = def.duration * (kind === 'shock' ? this.perm.shockTime : 1);
+    this.stats.control[kind] += m.timer;
     const tags: Tag[] = kind === 'chill' ? ['Damage.Cold', 'Status.Frozen'] : kind === 'shock' ? ['Damage.Electric', 'Status.Paralyzed'] : ['Damage.Blast', 'Status.Stunned'];
     this.visual(kind === 'chill' ? 'freeze' : kind === 'shock' ? 'paralyze' : 'stun', enemy.x, enemy.y, kind === 'chill' ? '#bfe8ff' : kind === 'shock' ? '#c7f5ff' : '#ffe9a8', 20).target = enemy.id;
     if (def.burst > 0) this.hit(enemy, { baseDamage: enemy.maxHp * def.burst, tags }, { build: 0 });
@@ -596,6 +684,7 @@ export class DefenseRun {
     // Core 焚化協議: every direct hit becomes a burn at 80% instead of damage.
     let cremation = 0;
     if (direct && this.cores.has('cremation')) { cremation = final * 0.8; final = 0; }
+    this.record(tags, Math.min(final, Math.max(0, enemy.hp)));
     enemy.hp -= final; enemy.hitFlash = 0.1;
     // Hits under 0.1% of the target's max HP still count but create no event: late waves land thousands of
     // them a second, and their damage numbers were most of the drawing work.
@@ -907,13 +996,13 @@ export class DefenseRun {
       // Hazmat (elemental resistance) arrives a little before the armored (physical) specialist.
       const roster: [EnemyKind, number, number][] = [['elite', 150, 0.07], ['armored', 75, 0.12], ['hazmat', 60, 0.1], ['brute', 45, 0.18], ['runner', 22, 0.22]];
       for (const [candidate, unlock, weight] of roster) {
-        if (this.elapsed < unlock) continue;
+        if (this.pace * 60 < unlock) continue;
         threshold += weight;
         if (roll < threshold) { kind = candidate; break; }
       }
     }
-    const def = ENEMIES[kind], minutes = this.elapsed / 60;
-    const hp = def.hp * B.ENEMY_HP_SCALE * B.ENEMY_HP_GROWTH_PER_MINUTE ** minutes * (kind === 'boss' ? B.BOSS_HP_FIRST * B.BOSS_HP_PER_STAGE ** (this.stage - 1) : 1);
+    const def = ENEMIES[kind], minutes = this.pace;
+    const hp = def.hp * B.ENEMY_HP_SCALE * B.ENEMY_HP_GROWTH_PER_MINUTE ** minutes * (kind === 'boss' ? B.BOSS_HP_FIRST * B.BOSS_HP_PER_STAGE ** (Math.max(1, this.stage) - 1 + this.danger * B.DANGER_STAGE_SHIFT) : 1);
     // The boss charges down the centre of the road; everyone else picks a random lane.
     const y = kind === 'boss' ? 200 + this.random() * 50 : 100 + this.random() * 260;
     const reward = def.reward * B.KILL_REWARD_GROWTH_PER_MINUTE ** minutes;
@@ -1033,7 +1122,8 @@ export class DefenseRun {
     const timeUp = this.stageTime + 1e-8 >= this.stageLength;
     if (this.bossStage ? !this.bossDown : !timeUp) {
       this.spawnTimer -= dt;
-      while (this.spawnTimer <= 0) { this.spawn(); this.spawnTimer += spawnIntervalAt(this.elapsed); }
+      // The opening seconds of the first stage stay slow; after that the rate is the stage's.
+      while (this.spawnTimer <= 0) { this.spawn(); this.spawnTimer += spawnIntervalAt(this.stage <= 1 && this.danger === 0 && this.stageTime < 12 ? this.stageTime : 12 + this.pace * 60); }
     }
     if (this.bossStage && !this.bossSpawned && timeUp) this.bossRush();
     for (const event of this.events) event.life -= dt;
@@ -1051,8 +1141,10 @@ export class DefenseRun {
     // Talent 軍需運輸: passive income every 10 seconds, growing with the income curve.
     if (this.perm.passiveIncome > 0) {
       this.passiveTimer += dt;
-      if (this.passiveTimer >= 10) { this.passiveTimer -= 10; this.earn(this.perm.passiveIncome * B.INCOME_GROWTH_PER_MINUTE ** (this.elapsed / 60)); }
+      if (this.passiveTimer >= 10) { this.passiveTimer -= 10; this.earn(this.perm.passiveIncome * B.INCOME_GROWTH_PER_MINUTE ** this.pace); }
     }
+    // Once the spawns have stopped (clock out, or boss down), the leftovers charge at RUSH_SPEED so the mop-up is short.
+    const rush = (this.bossStage ? this.bossDown : this.stageTime >= this.stageLength) ? B.RUSH_SPEED : 1;
     // Thorn damage only depends on run-wide modifiers: compute it once per step, apply defense per enemy.
     let thornRaw: number | undefined;
     for (const enemy of this.enemies) {
@@ -1071,8 +1163,9 @@ export class DefenseRun {
       if (dot) {
         // Synergy (fire + toxin): every 10 toxin deepens burns, at most ×3.
         const chem = this.synergies.has('chemfire') ? Math.min(3, 1 + CHEMFIRE * enemy.toxin / 10) : 1;
-        enemy.hp -= calculateDamage({ baseDamage: dot * chem * this.dealtScale(enemy), tags: ['Damage.Fire', 'Damage.Elemental', 'Mechanic.DOT', 'Status.Burning'] },
+        const burned = calculateDamage({ baseDamage: dot * chem * this.dealtScale(enemy), tags: BURN_TAGS },
           { defense: enemy.defense, toxin: enemy.toxin, resist: enemy.resist, vulnerability: this.vulnerability(enemy) }).final;
+        this.record(BURN_TAGS, Math.min(burned, Math.max(0, enemy.hp))); enemy.hp -= burned;
         if (enemy.hp <= 0) { this.kill(enemy); continue; }
       }
       const shocked = enemy.meters.shock.value > 0 || this.isParalyzed(enemy);
@@ -1080,7 +1173,7 @@ export class DefenseRun {
         // Frozen and stunned zombies stand still; the chill meter slows them while it fills.
         if (!this.isFrozen(enemy) && !this.isStunned(enemy)) {
           const chill = Math.min(1, enemy.meters.chill.value / meterThreshold(enemy, 'chill', this.elapsed));
-          enemy.x = Math.min(FIELD.wallX - 18, enemy.x + enemy.speed * dt * (1 - B.STATUS.chill.slow * chill) * (shocked ? this.perm.stunField : 1));
+          enemy.x = Math.min(FIELD.wallX - 18, enemy.x + enemy.speed * rush * dt * (1 - B.STATUS.chill.slow * chill) * (shocked ? this.perm.stunField : 1));
         }
       } else if (!this.isParalyzed(enemy)) {
         // Paralysed zombies cannot bite; frozen or stunned ones at the barricade still do.
@@ -1089,7 +1182,8 @@ export class DefenseRun {
         if (this.thorns > 0) {
           // Spikes: a share of the squad's reference shot per second, as kinetic damage (no per-tick events).
           thornRaw ??= calculateValue(this.thorns * this.skillPower * dt, THORN_TAGS, this.modifiers);
-          enemy.hp -= calculateDamage({ baseDamage: thornRaw * this.dealtScale(enemy), tags: THORN_TAGS }, { defense: enemy.defense, toxin: enemy.toxin, resist: enemy.resist }).final;
+          const thorn = calculateDamage({ baseDamage: thornRaw * this.dealtScale(enemy), tags: THORN_TAGS }, { defense: enemy.defense, toxin: enemy.toxin, resist: enemy.resist }).final;
+          this.record(THORN_TAGS, Math.min(thorn, Math.max(0, enemy.hp))); enemy.hp -= thorn;
           if (enemy.hp <= 0) { this.kill(enemy); continue; }
         }
       }

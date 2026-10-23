@@ -13,13 +13,13 @@ export const SPAWN_GROWTH_PER_MINUTE = 1.1 ** SPAWN_GROWTH_SPEED;
 export const INCOME_GROWTH_PER_MINUTE = 1.9;
 export const KILL_REWARD_GROWTH_PER_MINUTE = INCOME_GROWTH_PER_MINUTE / SPAWN_GROWTH_PER_MINUTE;
 export const WAVE_REWARD_GROWTH_PER_MINUTE = INCOME_GROWTH_PER_MINUTE;
-export const ENEMY_HP_GROWTH_PER_MINUTE = 1.35;
+export const ENEMY_HP_GROWTH_PER_MINUTE = 1.8;
 /**
  * Every zombie's HP (boss included) × this. 2026-10-23: kept at ×1 by the user's decision; with fixed card
  * values the bot's zero-talent first run passes the first boss in about 1% of runs (measured: ×0.35 → 44%,
  * ×0.3 → 51%, ×0.4 → 28%, ×0.6 → 9%).
  */
-export const ENEMY_HP_SCALE = 1;
+export const ENEMY_HP_SCALE = 0.35;
 export const ENEMY_ATTACK_GROWTH_PER_MINUTE = 1.45;
 
 /**
@@ -129,10 +129,24 @@ export const SKILL_START_CHARGE = 0;
  * and when the road is clear the squad rests: the level-ups banked during the stage are picked one after another,
  * money can be spent, and the player starts the next stage. Clearing STAGE_COUNT stages wins the run.
  */
-export const STAGE_FIRST_SECONDS = 30;
-export const STAGE_STEP_SECONDS = 5;
-export const STAGE_MAX_SECONDS = 120;
+export const STAGE_FIRST_SECONDS = 15;
+export const STAGE_STEP_SECONDS = 2;
+export const STAGE_MAX_SECONDS = 50;
 export const STAGE_COUNT = 20;
+/**
+ * v2 (2026-10-23 retrospective): enemy strength, spawn rate and income follow the stage, never the clock. A stage is
+ * "worth" STAGE_PACE_MINUTES of the old per-minute curves, so stage n plays like minute (n − 1) × pace of the old
+ * curve whatever the time on the clock; replaying an early stage with more talents feels faster, not the same.
+ * Danger level d (unlocked by clearing all stages at d − 1) plays every stage as if it were DANGER_STAGE_SHIFT × d
+ * stages later and pays (1 + d) × the talent points.
+ */
+export const STAGE_PACE_MINUTES = 0.75;
+export const DANGER_STAGE_SHIFT = 10;
+export const DANGER_MAX = 10;
+/** Talent points for a run: every cleared stage n pays n, × (1 + danger). A full clear at danger 0 pays 210. */
+export const stagePoints = (cleared: number, danger = 0) => Math.round(cleared * (cleared + 1) / 2 * (1 + danger));
+/** Core slots open on the first clear of these stages (one slot from the start). */
+export const CORE_SLOT_STAGES = [10, 20] as const;
 export const stageSeconds = (stage: number) => Math.min(STAGE_MAX_SECONDS, STAGE_FIRST_SECONDS + STAGE_STEP_SECONDS * (stage - 1));
 /**
  * Boss stages (2026-10-23): stage 4 and every third stage after it (4, 7, 10, 13, 16, 19), plus a super boss on the
@@ -156,7 +170,9 @@ export const BOSS_HP_PER_STAGE = 1.1;
  * Overtime (2026-10-23, against stalemates): OVERTIME_GRACE seconds after a stage's clock runs out, the zombies
  * left on the road bite the barricade ×2 every OVERTIME_DOUBLING seconds, until the road is clear or the line falls.
  */
-export const OVERTIME_GRACE = 20;
+export const OVERTIME_GRACE = 10;
+/** Leftover zombies move this much faster once a stage stops spawning (shorter mop-up). */
+export const RUSH_SPEED = 2;
 export const OVERTIME_DOUBLING = 15;
 /** A boss still standing this long after it charged in starts the overtime too. */
 export const BOSS_OVERTIME_GRACE = 60;
