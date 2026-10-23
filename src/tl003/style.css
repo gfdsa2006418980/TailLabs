@@ -34,7 +34,7 @@ button {
   box-shadow: inset 2px 2px 0 var(--light), inset -2px -2px 0 var(--dark);
   clip-path: var(--notch);
 }
-button:hover:enabled { background: var(--light); box-shadow: inset 2px 2px 0 var(--hi), inset -2px -2px 0 var(--mid) }
+@media (hover: hover) { button:hover:enabled { background: var(--light); box-shadow: inset 2px 2px 0 var(--hi), inset -2px -2px 0 var(--mid) } }
 button:active:enabled { transform: translateY(1px); box-shadow: inset 2px 2px 0 var(--dark), inset -2px -2px 0 var(--light) }
 button:disabled { cursor: default; filter: saturate(.35) brightness(.7) }
 button:focus-visible, canvas:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px }
@@ -45,7 +45,7 @@ button:focus-visible, canvas:focus-visible { outline: 2px solid var(--gold); out
   background: var(--sand); color: var(--ink); font-size: 15px; font-weight: 700; letter-spacing: 1px;
   box-shadow: inset 2px 2px 0 var(--bone), inset -3px -3px 0 #8a7b5a;
 }
-.primary:hover:enabled { background: var(--bone); box-shadow: inset 2px 2px 0 #fff6dc, inset -3px -3px 0 var(--sand) }
+@media (hover: hover) { .primary:hover:enabled { background: var(--bone); box-shadow: inset 2px 2px 0 #fff6dc, inset -3px -3px 0 var(--sand) } }
 html .camp-button { box-shadow: inset 2px 2px 0 var(--light), inset -2px -2px 0 var(--dark); border-radius: 0 }
 
 /* ---------- dialogs ---------- */
@@ -69,3 +69,6 @@ dialog p { font-size: 13px; color: #c7d0b8; line-height: 1.7; margin: 10px auto 
   dialog h2 { font-size: 18px }
   dialog p { font-size: 11px; margin-top: 6px }
 }
+
+/* iOS Safari double-tap zoom (2026-10-24): every element, disabled buttons included, opts out. */
+*, *::before, *::after { touch-action: manipulation }

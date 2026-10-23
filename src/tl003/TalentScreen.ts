@@ -138,7 +138,7 @@ export class TalentScreen {
       ${this.inspector(tree)}
       ${breakthrough ? `<button id="talent-breakthrough" class="talent-breakthrough">晉階至第 ${tree.tier + 1} 階 <span>上限 +10 ↗</span></button>` : ''}
       <p id="talent-notice" class="talent-notice" role="status" aria-live="polite">${this.notice || (this.meta.persistent ? '' : '無法存檔。戰功只留在此分頁')}</p>
-      <button id="talent-deploy" class="primary go">返回標題 <span>↩</span></button>`;
+      <button id="talent-deploy" class="primary go">返回標題 <span><i class="px-icon" data-icon="icon_back" style="--px:2px" aria-hidden="true"></i></span></button>`;
     if (!this.dialog.open) this.dialog.showModal();
     this.bindMap();
     const select = (selection: Selection) => { if (this.dragged) return; this.selected = selection; this.notice = ''; this.render(); pop(this.dialog.querySelector('.talent-inspector'), 1.03, 160); };

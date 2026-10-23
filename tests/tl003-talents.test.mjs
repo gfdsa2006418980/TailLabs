@@ -1,12 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { LocalMetaMirror, META_KEY, emptyMeta, emptyTree } from '../src/tl003/Meta.ts';
-import { CORES, TALENTS, TALENT_LINKS, canBreakthrough, compileTalents, coreSlots, deploymentStats, isCoreRevealed, isRevealed, talentCost, talentMultiplier } from '../src/tl003/Talents.ts';
+import { LocalMetaMirror, META_KEY, TREE_LAYOUT, emptyMeta, emptyTree, legacyRefund, normalizeMeta } from '../src/tl003/Meta.ts';
+import { BRANCHES, CORES, TALENTS, TALENT_LINKS, canBreakthrough, compileTalents, coreSlots, deploymentStats, isCoreRevealed, isRevealed, talentCost, talentMultiplier } from '../src/tl003/Talents.ts';
 import { calculateDamage, calculateValue, effectiveCooldown } from '../src/tl003/Combat.ts';
 import { MERCENARIES, SKILLS } from '../src/tl003/Content.ts';
 import * as B from '../src/tl003/Balance.ts';
 import { MERC_TUNING } from '../src/tl003/Balance.ts';
-import { DefenseRun, FIELD, SPAWN_GROWTH_SPEED, THROWABLE, spawnIntervalAt , freshStatus } from '../src/tl003/Run.ts';
+import { DefenseRun, FIELD, SPAWN_GROWTH_SPEED, THROWABLE, spawnIntervalAt , freshStatus, meterThreshold } from '../src/tl003/Run.ts';
 
 const near = (actual, expected) => assert.ok(Math.abs(actual - expected) < 1e-8, `${actual} != ${expected}`);
 function mirror(points = 1000, tree = emptyTree()) {
@@ -20,20 +20,28 @@ const allAt = level => Object.fromEntries(TALENTS.map(n => [n.id, level]));
 const target = { defense: 0, toxin: 0 };
 const pick = run => run.choose(run.choices.find(c => c.id === 'kinetic')?.id ?? run.choices[0].id);
 /** One frame of a no-shopping player: picks cards, leaves each rest at once. */
+/** Throws every ready throwable at the front zombie (the squad starts with one gun since 2026-10-24, so the bot aims too). */
+const cast = run => {
+  const front = run.enemies.reduce((best, e) => (!best || e.x > best.x ? e : best), undefined);
+  if (front) run.skills.forEach((s, slot) => { if (s.cooldown <= 0) run.cast(slot, Math.min(front.x, FIELD.wallX - 5), front.y); });
+};
 const step = run => {
   if(run.phase === 'choice')pick(run);
   if(run.phase === 'intermission')run.nextStage();
+  cast(run);
   run.advance(FIELD.step);
 };
+/** The first node of each branch (the ring around the hub), in branch order. */
+const firstRing = () => BRANCHES.map(b => TALENTS.find(n => n.category === b).id);
 function simulate(seed, effects) {
-  // The game's opening (a rest with the first pick) so the squad can clear stages; points come from cleared stages.
+  // The game's opening (a rest with the pick of a first mercenary); points come from cleared stages.
   const run = new DefenseRun(seed, effects);run.start(true);
   for(let i=0;i<60*300 && run.phase!=='over';i++)step(run);
   return run;
 }
 
-test('TL003 star map has 47 distinct connected nodes (the 9 originals kept); zero investment reveals only the root', () => {
-  assert.equal(new Set(TALENTS.map(n=>n.id)).size,47);
+test('TL003 star map has 52 distinct connected nodes (the 9 originals kept); zero investment reveals only the root', () => {
+  assert.equal(new Set(TALENTS.map(n=>n.id)).size,52);
   for(const id of ['mercenary_damage','kinetic_damage','barricade_health','economy_income','fire_dot','repair_efficiency','attack_speed','active_skill_damage','active_skill_haste'])assert.ok(TALENTS.some(n=>n.id===id),id);
   const tree=emptyTree();assert.deepEqual(TALENTS.filter(n=>isRevealed(tree,n.id)).map(n=>n.id),['mercenary_damage']);
   const visited=new Set(['mercenary_damage']);for(let i=0;i<TALENTS.length;i++)for(const[a,b]of TALENT_LINKS){if(visited.has(a))visited.add(b);if(visited.has(b))visited.add(a);}
@@ -42,7 +50,9 @@ test('TL003 star map has 47 distinct connected nodes (the 9 originals kept); zer
 test('TL003 the first point reveals every directly adjacent node without requiring level ten', () => {
   const {meta}=mirror(2);assert.equal(meta.buyTalent('mercenary_damage').ok,true);assert.equal(meta.tree.nodes.mercenary_damage,1);
   assert.equal(meta.value.TalentPoints,1);
-  assert.deepEqual(TALENTS.filter(n=>isRevealed(meta.tree,n.id)).map(n=>n.id),['mercenary_damage','kinetic_damage','fire_dot','corrosion_power','shock_power','attack_speed','active_skill_damage','barricade_health','economy_income']);
+  // The hub links to the first node of every branch: ten neighbours, one per branch.
+  assert.deepEqual(TALENTS.filter(n=>isRevealed(meta.tree,n.id)).map(n=>n.id),['mercenary_damage',...firstRing()]);
+  assert.deepEqual(firstRing(),TALENT_LINKS.filter(([a])=>a==='mercenary_damage').map(([,b])=>b));
   assert.equal(isRevealed(meta.tree,'crit_rate'),false);
   assert.equal(meta.buyTalent('kinetic_damage').ok,true);assert.equal(isRevealed(meta.tree,'crit_rate'),true);
 });
@@ -60,7 +70,7 @@ test('TL003 costs are ceil(1.12^Level) and repeated purchases spend the actual c
 test('TL003 breakthrough needs every node at the current cap', () => {
   const {meta}=mirror(100);const before=structuredClone(meta.value);const refused=meta.breakthrough();assert.equal(refused.ok,false);assert.deepEqual(meta.value,before);
   assert.ok(refused.message.includes('所有節點'),refused.message);
-  assert.equal(TALENTS.length,47);
+  assert.equal(TALENTS.length,52);
   assert.equal(canBreakthrough(treeWith({mercenary_damage:10})),false,'one node at the cap is no longer enough');
   assert.equal(canBreakthrough(treeWith({...allAt(10),mercenary_damage:9})),false,'one node short blocks it');
   assert.equal(canBreakthrough(treeWith(allAt(10))),true);
@@ -122,13 +132,22 @@ test('TL003 permanent wall health, repair and attack speed enter the actual Run'
   near(run.wallMaxHealth,40*1.08**2);near(run.wallHealth,run.wallMaxHealth);near(run.intervalFor('rifle'),1.25/1.03**4);
   run.wallHealth=1;run.money=100;run.repair();near(run.wallHealth,1+run.wallMaxHealth*.4*1.06**3);
 });
-test('TL003 permanent income multiplies real kill and completed stage rewards and score earnings', () => {
-  const a=new DefenseRun(123),b=new DefenseRun(123,compileTalents(treeWith({economy_income:3})));a.start();b.start();a.wallHealth=b.wallHealth=1e10;
+test('TL003 permanent income: 戰利品回收 multiplies only real kill rewards, 守城獎勵 only the completed stage reward', () => {
+  const income=treeWith({economy_income:3}),wave=treeWith({wave_bonus:3});
+  const a=new DefenseRun(123),b=new DefenseRun(123,compileTalents(income)),c=new DefenseRun(123,compileTalents(wave));
+  const runs=[a,b,c];for(const run of runs){run.start();run.wallHealth=1e10;}
   // Play stage 1 to its rest (the clear bonus is paid when the road is clear after the clock).
-  const toRest = run => { if(run.phase === 'choice')pick(run); run.advance(FIELD.step); };
-  for(let i=0;i<60*120&&(a.phase!=='intermission'||b.phase!=='intermission');i++){toRest(a);toRest(b);}
-  assert.equal(a.phase,'intermission');assert.equal(b.phase,'intermission');assert.equal(a.kills,b.kills);assert.ok(a.kills>0);assert.equal(a.clearedWave,1);
-  near(b.totalEarnedMoney,a.totalEarnedMoney*1.06**3);near(b.money,a.money*1.06**3);
+  const toRest = run => { if(run.phase === 'choice')pick(run); if(run.phase === 'running')run.advance(FIELD.step); };
+  for(let i=0;i<60*120&&runs.some(r=>r.phase!=='intermission');i++)runs.forEach(toRest);
+  for(const run of runs){assert.equal(run.phase,'intermission');assert.equal(run.kills,a.kills);assert.equal(run.clearedWave,1);}
+  assert.ok(a.kills>0);
+  // a earns kills K and the stage reward W; b earns K × income + W, c earns K + W × wave.
+  const ki=talentMultiplier(income,'economy_income'),wv=talentMultiplier(wave,'wave_bonus');near(ki,1.06**3);near(wv,1.08**3);
+  const kills=(b.totalEarnedMoney-a.totalEarnedMoney)/(ki-1),stage=(c.totalEarnedMoney-a.totalEarnedMoney)/(wv-1);
+  assert.ok(kills>0&&stage>0,`kills ${kills}, stage ${stage}`);near(kills+stage,a.totalEarnedMoney);
+  near(b.money-a.money,b.totalEarnedMoney-a.totalEarnedMoney);near(c.money-a.money,c.totalEarnedMoney-a.totalEarnedMoney);
+  // Neither node touches the other reward.
+  near(calculateValue(1,['Economy.WaveReward'],compileTalents(income).modifiers),1);near(calculateValue(1,['Economy.KillReward'],compileTalents(wave).modifiers),1);
 });
 test('TL003 permanent haste stays unbounded and matches the displayed cooldown prediction', () => {
   const effects=compileTalents(treeWith({active_skill_haste:200}));const run=new DefenseRun(1,effects);run.start();run.cast(0,500,220);
@@ -144,8 +163,11 @@ test('TL003 permanent progress never increases the HP, speed, attack or bounty o
   assert.deepEqual(a.enemies,b.enemies);assert.ok(b.wallMaxHealth>a.wallMaxHealth);
 });
 test('TL003 two earned points can buy a real improvement under the same seed', () => {
-  const {meta}=mirror(0);const first=simulate(4);assert.ok(first.score>=2);meta.settle(first,first.score,first.clearedWave);
-  meta.buyTalent('mercenary_damage');meta.buyTalent('kinetic_damage');const second=simulate(4,meta.effects);
+  // Since the 2026-10-24 opening a first run may earn a single point: settle runs until two are banked.
+  const {meta}=mirror(0);const first=simulate(4);assert.ok(first.score>=1);
+  for(let i=0;meta.value.TalentPoints<2&&i<5;i++){const run=i?simulate(4):first;meta.beginRun();meta.settle(run,run.score,run.clearedWave);}
+  assert.ok(meta.value.TalentPoints>=2);
+  assert.equal(meta.buyTalent('mercenary_damage').ok,true);assert.equal(meta.buyTalent('kinetic_damage').ok,true);const second=simulate(4,meta.effects);
   assert.ok(second.kills>first.kills||second.elapsed>first.elapsed);assert.ok(deploymentStats(meta.effects).dps>4.16);
 });
 test('TL003 five repeat runs can earn, spend, retain growth and leave every new Run transient', () => {
@@ -156,13 +178,15 @@ test('TL003 five repeat runs can earn, spend, retain growth and leave every new 
     const reload=new LocalMetaMirror(storage);assert.deepEqual(reload.value,meta.value);assert.equal(reload.value.TalentPoints,earned-spent);
     const next=new DefenseRun(123,reload.effects);next.start();assert.equal(next.money,0);assert.equal(next.elapsed,0);assert.equal(next.xp,0);assert.equal(next.level,1);assert.equal(next.mercenaries.length,1);assert.equal(next.selectedCards.length,0);runs++;
   }
-  assert.equal(runs,5);assert.ok(meta.tree.nodes.mercenary_damage>=2);assert.ok(deploymentStats(meta.effects).dps>4.16);
+  assert.equal(runs,5);assert.ok(meta.tree.nodes.mercenary_damage>=1);assert.ok(spent>=4,`spent ${spent}`);
+  assert.ok(deploymentStats(meta.effects).dps>deploymentStats(compileTalents(emptyTree())).dps);
 });
 test('TL003 save round trip preserves purchases, revealed neighbors, tiers and reserved core data', () => {
   const {meta,storage,data}=mirror(100,treeWith(allAt(10)));assert.equal(meta.breakthrough().ok,true);assert.equal(meta.buyTalent('kinetic_damage').ok,true);
   const fresh=new LocalMetaMirror(storage);assert.equal(fresh.tree.tier,2);assert.equal(fresh.tree.nodes.kinetic_damage,11);assert.equal(isRevealed(fresh.tree,'fire_dot'),true);
   assert.deepEqual(Object.keys(JSON.parse(data.get(META_KEY))).sort(),['HighestClearedWave','TalentPoints','TalentTreeJson','version']);
-  assert.deepEqual(Object.keys(fresh.tree).sort(),['activeCoreTalents','bestStage','danger','maxNodeLevel','nodes','tier','unlockedCoreTalents']);
+  assert.deepEqual(Object.keys(fresh.tree).sort(),['activeCoreTalents','bestStage','danger','layout','maxNodeLevel','nodes','tier','unlockedCoreTalents']);
+  assert.equal(fresh.tree.layout,TREE_LAYOUT);
 });
 test('TL003 separate mirrors refresh before spending and settling to avoid stale local-tab overwrites', () => {
   const {meta:a,storage}=mirror(5),b=new LocalMetaMirror(storage);a.buyTalent('mercenary_damage');assert.equal(b.buyTalent('kinetic_damage').ok,true);
@@ -173,11 +197,13 @@ test('TL003 unavailable storage permits in-session camp investment after settlem
   assert.equal(meta.buyTalent('mercenary_damage').ok,true);assert.equal(meta.value.TalentPoints,1);assert.equal(meta.tree.nodes.mercenary_damage,1);assert.equal(meta.persistent,false);
 });
 test('TL003 proposed multipliers follow the mother spec rather than additive permanent growth', () => {
-  const tree=treeWith({kinetic_damage:10,fire_dot:10,mercenary_damage:10,barricade_health:10,economy_income:10,repair_efficiency:10,attack_speed:10});
-  for(const id of ['kinetic_damage','fire_dot','barricade_health'])near(talentMultiplier(tree,id),1.08**10);
+  const tree=treeWith({kinetic_damage:10,fire_dot:10,mercenary_damage:10,barricade_health:10,economy_income:10,repair_efficiency:10,attack_speed:10,wave_bonus:10});
+  for(const id of ['kinetic_damage','fire_dot','barricade_health','wave_bonus'])near(talentMultiplier(tree,id),1.08**10);
   for(const id of ['mercenary_damage','economy_income','repair_efficiency'])near(talentMultiplier(tree,id),1.06**10);
   near(talentMultiplier(tree,'attack_speed'),1.03**10);
-  near(calculateValue(1,['Economy.WaveReward'],compileTalents(tree).modifiers),1.06**10);
+  // 守城獎勵 alone pays the stage reward; 戰利品回收 alone the kill reward.
+  near(calculateValue(1,['Economy.WaveReward'],compileTalents(tree).modifiers),1.08**10);
+  near(calculateValue(1,['Economy.KillReward'],compileTalents(tree).modifiers),1.06**10);
 });
 
 test('TL003 spawn frequency grows at three times its former exponential speed without tripling the opening wave', () => {
@@ -215,4 +241,98 @@ test('TL003 star map: 16 cores, all reachable; an empty map still compiles to th
   assert.equal(CORES.length,16);assert.equal(new Set(CORES.map(c=>c.id)).size,16);
   for(const core of CORES)for(const link of core.links)assert.ok(TALENTS.some(n=>n.id===link),`${core.id} links ${link}`);
   assert.deepEqual(Object.keys(compileTalents(emptyTree())).sort(),['attackSpeed','haste','modifiers','wallHealth']);
+});
+
+// ---------- 2026-10-24 blueprint: ten branches, 52 nodes, legacy refund, new node effects ----------
+test('TL003 blueprint: ten branches 36° apart around the hub, 52 nodes, every branch a reachable chain from the hub', () => {
+  assert.equal(BRANCHES.length,10);assert.equal(TALENTS.length,52);
+  assert.deepEqual(TALENTS.filter(n=>n.category==='中心').map(n=>n.id),['mercenary_damage']);
+  const sizes=Object.fromEntries(BRANCHES.map(b=>[b,TALENTS.filter(n=>n.category===b).length]));
+  for(const b of ['動能','爆裂','火焰','冷凍','電能','毒素','傭兵','投擲物','拒馬'])assert.equal(sizes[b],5,b);
+  assert.equal(sizes['經濟'],6);assert.equal(1+Object.values(sizes).reduce((s,n)=>s+n,0),TALENTS.length);
+  // Each branch is a chain: hub → first → … → tip, so every node of it becomes revealable in order.
+  for(const b of BRANCHES){
+    const ids=TALENTS.filter(n=>n.category===b).map(n=>n.id);let tree=treeWith({mercenary_damage:1});
+    for(const id of ids){assert.ok(isRevealed(tree,id),`${b}: ${id}`);tree=treeWith({...tree.nodes,[id]:1});}
+    for(let i=0;i<ids.length;i++)assert.ok(TALENT_LINKS.some(([a,c])=>a===(i?ids[i-1]:'mercenary_damage')&&c===ids[i]),`${b} link ${ids[i]}`);
+  }
+  // Branch directions: consecutive branch tips sit on rays 36° apart.
+  const hub=TALENTS.find(n=>n.id==='mercenary_damage'),angle=id=>{const n=TALENTS.find(t=>t.id===id);return Math.atan2(n.y-hub.y,n.x-hub.x);};
+  const tips=BRANCHES.map(b=>TALENTS.filter(n=>n.category===b).at(-1).id);
+  for(let i=1;i<tips.length;i++){const d=(angle(tips[i])-angle(tips[i-1])+4*Math.PI)%(2*Math.PI);assert.ok(Math.abs(d-Math.PI/5)<0.1,`${tips[i]} ${d}`);}
+  for(const id of ['igniter','fuel_stock','eroder','bio_shield','laser_focus','coil_cooling','stun_field','rifle_specialist','flame_specialist','tesla_specialist','recruiter','grenade_payload','molotov_payload','laser_width','field_medic','supply_line'])
+    assert.ok(!TALENTS.some(n=>n.id===id),`${id} was removed`);
+  // No node pays passive income any more; ten cores sit on branch tips, six between two tips.
+  assert.equal(compileTalents(treeWith(allAt(10))).passiveIncome,undefined);
+  assert.equal(CORES.filter(c=>c.links.length===1).length,10);assert.equal(CORES.filter(c=>c.links.length===2).length,6);
+  for(const core of CORES)for(const link of core.links)assert.ok(tips.includes(link),`${core.id} links a tip`);
+});
+test('TL003 blueprint: an old-layout save is refunded in full and its nodes cleared; a layout-2 tree is untouched', () => {
+  const oldNodes={mercenary_damage:3,kinetic_damage:10,igniter:4,lucky:2,supply_line:1};
+  const raw={tier:2,maxNodeLevel:20,nodes:oldNodes,unlockedCoreTalents:['coldsteel'],activeCoreTalents:['coldsteel'],bestStage:12,danger:1};
+  const refund=legacyRefund(oldNodes);assert.ok(refund>0);
+  // The old formula: Σ ceil(1.12^level × (1 + 0.35 × (depth − 1))), kinetic_damage at depth 1.
+  assert.equal(legacyRefund({kinetic_damage:3}),[0,1,2].reduce((s,l)=>s+Math.ceil(1.12**l),0));
+  const value=normalizeMeta({version:1,TalentPoints:7,HighestClearedWave:12,TalentTreeJson:JSON.stringify(raw)});
+  assert.equal(value.TalentPoints,7+refund);const tree=JSON.parse(value.TalentTreeJson);
+  assert.deepEqual(tree.nodes,{});assert.equal(tree.layout,TREE_LAYOUT);
+  assert.equal(tree.tier,2);assert.equal(tree.maxNodeLevel,20);assert.equal(tree.bestStage,12);assert.equal(tree.danger,1);assert.deepEqual(tree.activeCoreTalents,['coldsteel']);
+  // An older layout number refunds too; the refund happens once (the normalised save is layout 2).
+  assert.equal(normalizeMeta({version:1,TalentPoints:0,HighestClearedWave:0,TalentTreeJson:JSON.stringify({...raw,layout:1})}).TalentPoints,refund);
+  assert.deepEqual(normalizeMeta(value),value);
+  // The mirror loads an old save refunded.
+  const old=mirror(5,raw).meta;assert.equal(old.value.TalentPoints,5+refund);assert.deepEqual(old.tree.nodes,{});
+  // A layout-2 tree keeps its levels and points.
+  const current=treeWith({mercenary_damage:3,blast_damage:2});
+  const kept=normalizeMeta({version:1,TalentPoints:7,HighestClearedWave:0,TalentTreeJson:JSON.stringify(current)});
+  assert.equal(kept.TalentPoints,7);assert.deepEqual(JSON.parse(kept.TalentTreeJson).nodes,current.nodes);
+});
+test('TL003 blueprint: new nodes compile to their value snapshot fields', () => {
+  const tree=treeWith({ignite_power:2,chill_power:2,freeze_time:3,deep_chill:4,stun_power:2,stun_time:3,blast_radius:5,toxic_burst:2,shock_vuln:3,merc_range:4,drill:5,skill_crit:7,skill_build:2,firezone:3,builder:4});
+  const m=id=>talentMultiplier(tree,id),e=compileTalents(tree);
+  near(e.igniteGain,m('ignite_power')-1);near(e.chillGain,m('chill_power')-1);near(e.freezeTime,m('freeze_time'));near(e.chillSlow,m('deep_chill'));
+  near(e.stunGain,m('stun_power')-1);near(e.stunTime,m('stun_time'));near(e.blastRadius,m('blast_radius'));near(e.toxinBurst,m('toxic_burst'));
+  near(e.shockVuln,m('shock_vuln'));near(e.rangeScale,m('merc_range'));assert.equal(e.startLevel,2);near(e.skillCrit,0.07);near(e.skillBuild,m('skill_build'));
+  near(e.molotovRadius,m('firezone'));near(e.molotovTime,m('firezone'));near(e.fortifyCost,1/m('builder'));near(e.repairCost,1/m('builder'));
+  assert.equal(e.passiveIncome,undefined);
+  // Element damage nodes reach anything carrying the element.
+  for(const [tag,id] of [['Damage.Blast','blast_damage'],['Damage.Cold','cold_damage'],['Damage.Electric','electric_damage'],['Damage.Toxin','toxin_damage'],['Damage.Fire','fire_damage'],['Skill.AutoAttack','auto_damage']]){
+    const t=treeWith({[id]:2});near(calculateValue(1,[tag],compileTalents(t).modifiers),talentMultiplier(t,id));
+  }
+});
+const quietRun = tree => { const run=new DefenseRun(1,compileTalents(tree));run.start();run.mercenaries.forEach(m=>m.shotTimer=1e9);run.skills[0].cooldown=0;return run; };
+const zombie = (over={}) => ({id:9001,kind:'walker',x:500,y:225,hp:1e6,maxHp:1e6,defense:0,speed:0,attack:0,reward:1,xp:0,...freshStatus(),hitFlash:0,...over});
+test('TL003 blueprint: 永凍層 and 耳鳴 lengthen freezes and stuns; 寒氣 deepens the chill slow up to 90%', () => {
+  const tree=treeWith({freeze_time:5,stun_time:4});
+  for(const [kind,id] of [['chill','freeze_time'],['stun','stun_time']]){
+    const base=quietRun(emptyTree()),run=quietRun(tree),a=zombie(),b=zombie();base.enemies=[a];run.enemies=[b];
+    base.trigger(a,kind);run.trigger(b,kind);near(a.meters[kind].timer,B.STATUS[kind].duration);near(b.meters[kind].timer,B.STATUS[kind].duration*talentMultiplier(tree,id));
+  }
+  for(const level of [3,200]){
+    const deep=treeWith({deep_chill:level}),run=quietRun(deep),z=zombie({speed:40});run.enemies=[z];
+    z.meters.chill.value=meterThreshold(z,'chill',run.elapsed)*0.5;run.advance(FIELD.step);
+    near(z.x,500+40*FIELD.step*(1-Math.min(0.9,B.STATUS.chill.slow*talentMultiplier(deep,'deep_chill'))*0.5));
+  }
+});
+test('TL003 blueprint: 擴散炸藥 widens the grenade blast; 高地佈陣 extends every mercenary range; 戰前操練 starts mercenaries higher', () => {
+  const wide=treeWith({blast_radius:10}),r=SKILLS.grenade.radius;assert.ok(talentMultiplier(wide,'blast_radius')>1.2);
+  for(const [tree,hit] of [[emptyTree(),false],[wide,true]]){
+    const run=quietRun(tree),centre=zombie(),edge=zombie({id:9002,x:500+r*1.15});run.enemies=[centre,edge];
+    assert.equal(run.cast(0,500,225),true);assert.ok(centre.hp<1e6);assert.equal(edge.hp<1e6,hit,`edge hit ${hit}`);
+  }
+  const far=treeWith({merc_range:6}),run=quietRun(far);
+  for(const kind of Object.keys(MERCENARIES))near(run.rangeFor(kind),MERCENARIES[kind].range*talentMultiplier(far,'merc_range'));
+  for(const [level,start] of [[0,1],[1,1],[2,2],[5,3]]){
+    const drilled=quietRun(treeWith({drill:level}));for(const kind of Object.keys(MERCENARIES))assert.equal(drilled.levels[kind],start,`drill ${level} ${kind}`);
+  }
+  // A recruit joins at the drilled level, and the level counts like a bought one.
+  const drilled=quietRun(treeWith({drill:4})),plain=quietRun(emptyTree());assert.equal(drilled.recruit('flame'),true);assert.equal(drilled.levels.flame,3);
+  plain.levels.rifle=3;near(drilled.damageFor('rifle'),plain.damageFor('rifle'));
+});
+test('TL003 blueprint: 精準投擲 adds crit chance to throwables only', () => {
+  const sure=treeWith({skill_crit:100}),base=quietRun(emptyTree()),run=quietRun(sure);assert.equal(run.critChance,0);
+  const a=zombie(),b=zombie();base.enemies=[a];run.enemies=[b];base.cast(0,500,225);run.cast(0,500,225);
+  near(1e6-b.hp,(1e6-a.hp)*run.critDamage);assert.ok(run.events.some(v=>v.kind==='hit'&&v.skill&&v.crit));assert.ok(!base.events.some(v=>v.kind==='hit'&&v.crit));
+  // A mercenary's shot does not crit from it.
+  const c=zombie({x:700});run.enemies=[c];run.events.length=0;run.mercenaries[0].shotTimer=0;run.advance(FIELD.step);assert.ok(c.hp<1e6);assert.ok(!run.events.some(v=>v.kind==='hit'&&v.crit));
 });

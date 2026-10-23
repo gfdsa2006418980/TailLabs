@@ -110,7 +110,15 @@ let displayedPhase = '', previous = performance.now(), uiClock = 0, shownMoney =
 let cuedRun: DefenseRun | undefined, cuedKey = '';
 const phaseKey = () => run.phase === 'choice' ? `choice:${run.level}:${run.pendingPicks}:${run.picksLeft}:${run.choices.length}` : run.phase === 'intermission' ? `intermission:${run.stage}` : run.phase;
 const clock = (seconds: number) => `${Math.floor(seconds / 60).toString().padStart(2, '0')}:${Math.floor(seconds % 60).toString().padStart(2, '0')}`;
-function newRun() { run = new DefenseRun(undefined, meta.effects); camera.reset(); battlefield.clear(); shownMoney = 0; shownSquad = ''; coach.dismiss(); coachAt = -Infinity; resetWatchers(); }
+/** Automation toggles unlock on the first clear of stage 10 (auto upgrade) and stage 20 (auto pick); hidden and off until then. */
+const AUTO_UPGRADE_STAGE = 10, AUTO_PICK_STAGE = 20;
+let autoUpgradeUnlocked = false, autoPickUnlocked = false;
+function refreshUnlocks() {
+  const best = meta.tree.bestStage ?? 0;
+  autoUpgradeUnlocked = best >= AUTO_UPGRADE_STAGE; autoPickUnlocked = best >= AUTO_PICK_STAGE;
+  el('auto-upgrade').hidden = !autoUpgradeUnlocked; el('auto-pick-toggle').hidden = !autoPickUnlocked;
+}
+function newRun() { refreshUnlocks(); run = new DefenseRun(undefined, meta.effects); camera.reset(); battlefield.clear(); shownMoney = 0; shownSquad = ''; coach.dismiss(); coachAt = -Infinity; resetWatchers(); }
 function reset() { meta.refresh(); aim = undefined; newRun(); displayedPhase = ''; sync(); }
 function startRun() {
   if (!meta.beginRun()) return;
@@ -136,7 +144,7 @@ function showStory(lines: readonly string[], kicker: string, done: string, after
 }
 // ---------- level-up choice ----------
 let choiceResolving = false, legendTimer: ReturnType<typeof setTimeout> | undefined;
-const CHOICE_TIP = '<b>戰地補給：</b>每次升級從三張裡選一張。看到<b>「招募」</b>卡建議優先選：多一名傭兵就多一把槍。三格都滿之後，再挑投擲物和強化。';
+const CHOICE_TIP = '<b>戰地補給：</b>每次升級從三張裡選一張。前 6 次會輪流讓你挑<b>傭兵</b>和<b>投擲物</b>，湊滿 3 名傭兵和 3 個投擲物；之後才是各種強化。';
 function showChoice() {
   choiceResolving = false;
   const tip = coach.enabled && !coach.has('choice') ? CHOICE_TIP : undefined;
@@ -176,7 +184,7 @@ const RARITY_RANK: Record<string, number> = { common: 0, uncommon: 1, rare: 2, l
 function pickBest() {
   const owner = run, level = run.level, left = run.pendingPicks;
   setTimeout(() => {
-    if (!autoPick || run !== owner || run.phase !== 'choice' || run.level !== level || run.pendingPicks !== left) return;
+    if (!autoPick || !autoPickUnlocked || run !== owner || run.phase !== 'choice' || run.level !== level || run.pendingPicks !== left) return;
     // Among several cards of the top rarity, one at random (2026-10-24), not always the leftmost.
     const rank = (i: number) => RARITY_RANK[run.choices[i]!.rarity ?? 'common']!;
     const indices = run.choices.map((_, i) => i), top = Math.max(...indices.map(rank));
@@ -380,9 +388,9 @@ const shopOpen = () => run.phase === 'running' || run.phase === 'intermission';
 let autoUpgrade = readFlag(AUTO_UPGRADE_KEY) === '1';
 function syncAutoUpgrade() {
   const toggle = el('auto-upgrade');
-  toggle.setAttribute('aria-pressed', String(autoUpgrade)); toggle.classList.toggle('on', autoUpgrade);
-  const pickToggle = el('auto-pick-toggle'); pickToggle.setAttribute('aria-pressed', String(autoPick)); pickToggle.classList.toggle('on', autoPick);
-  if (!autoUpgrade || !shopOpen()) return;
+  toggle.setAttribute('aria-pressed', String(autoUpgrade)); toggle.classList.toggle('on', autoUpgrade && autoUpgradeUnlocked);
+  const pickToggle = el('auto-pick-toggle'); pickToggle.setAttribute('aria-pressed', String(autoPick)); pickToggle.classList.toggle('on', autoPick && autoPickUnlocked);
+  if (!autoUpgrade || !autoUpgradeUnlocked || !shopOpen()) return;
   // The cheapest of the mercenary upgrades and the barricade (fortify grows ×1.35 a buy against ×1.15, so they take turns).
   const options: { cost: number; buy: () => boolean; button: HTMLElement }[] = run.mercenaries.map((m, slot) => ({ cost: run.upgradeCost(m.kind), buy: () => run.upgrade(m.kind), button: el(`buy-${slot}`) }));
   if (run.canFortify) options.push({ cost: run.fortifyCost, buy: () => run.fortify(), button: el('fortify') });
@@ -413,7 +421,7 @@ function syncStageBar() {
 }
 function nextStage() { if (run.nextStage()) { audio.play('pick'); displayedPhase = ''; sync(); } }
 /** Seconds without a tap or key in the rest after a stage before the next stage starts by itself (2026-10-23). */
-const REST_IDLE = 5;
+const REST_IDLE = 2;
 let restIdle = 0;
 for (const type of ['pointerdown', 'keydown'] as const) document.addEventListener(type, () => { restIdle = 0; }, { capture: true });
 function advanceRest(realDt: number) {
@@ -626,7 +634,7 @@ function guide() {
   const offer = (...args: Parameters<Coach['offer']>) => { if (coach.offer(...args)) coachAt = run.elapsed; };
   const rifle = run.mercenaries[0];
   if (run.events.some(e => e.kind === 'shot' && e.merc))
-    offer('shoot', '你的士兵會<b>自動射擊</b>進入射程的喪屍，不用操作。<br>每種傭兵射程不同：步槍手只打得到道路的下半段。');
+    offer('shoot', '你的士兵會<b>自動射擊</b>進入射程的喪屍，不用操作。<br>每種傭兵射程不同，射程外的喪屍打不到。');
   if (run.kills > 0)
     offer('kill', '擊倒喪屍會掉落<b>資金</b>（右上），並累積<b>經驗</b>（上方細條）。<br>每關結束後，累積的經驗會換成戰地補給讓你挑選。', { target: el('money-box') });
   if (coach.has('kill') && rifle && visibleMoney() >= run.upgradeCost(rifle.kind))
@@ -640,6 +648,20 @@ function guide() {
   if (run.bossWarning !== undefined)
     offer('boss', '<b>屍王</b>要來了！它很耐打，拒馬撐不了幾秒。<br>集中火力、丟投擲物，必要時修補拒馬。', { target: el('boss-banner') });
 }
+/**
+ * iOS Safari zooms on a quick second tap even with touch-action set (disabled buttons especially). A second touch within
+ * 300 ms is taken over: no zoom, and an enabled button under it still gets its click, so rapid upgrades keep counting.
+ * Sliders and the battlefield (drag-aiming) are left alone.
+ */
+let lastTouchEnd = 0;
+document.addEventListener('touchend', event => {
+  const now = performance.now(), quick = now - lastTouchEnd < 300; lastTouchEnd = now;
+  const target = event.target as Element | null;
+  if (!quick || !target || target.closest('input, canvas')) return;
+  event.preventDefault();
+  const button = target.closest<HTMLButtonElement>('button');
+  if (button && !button.disabled) button.click();
+}, { passive: false });
 function step(now: number) {
   const realDt = Math.min(0.1, Math.max(0, (now - previous) / 1000)); previous = now;
   camera.lean(aim ? battlefield.offsetOf(aim.x, aim.y) : undefined);
@@ -657,4 +679,4 @@ function step(now: number) {
 function frame(now: number) { step(now); requestAnimationFrame(frame); }
 // Dev-only handle for visual QA in the browser console; stripped from production builds.
 if (import.meta.env.DEV) Object.assign(window, { __tl003: { get run() { return run; }, camera, battlefield, step: () => step(performance.now()) } });
-sync(); requestAnimationFrame(frame);
+refreshUnlocks(); sync(); requestAnimationFrame(frame);

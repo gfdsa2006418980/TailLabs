@@ -165,3 +165,28 @@ test('TL003 balance: several status cards merge into one application per hit; th
   near(1e6 - e.hp, run.damageFor('rifle') * (1 + 2 * makeCard(cardDef('burn')).value), 1e-6);
   const base = plain(); const lv1 = base.damageFor('flame'); base.levels.flame = 2; near(base.damageFor('flame'), lv1 * B.FLAME_DAMAGE_PER_LEVEL);
 });
+
+/** A guided opening (the game's start) with the given cores equipped. */
+const openingWith = (...cores) => { const tree = emptyTree(); tree.tier = 3; tree.bestStage = 20; tree.unlockedCoreTalents = cores; tree.activeCoreTalents = cores; const run = new DefenseRun(1, compileTalents(tree)); run.start(true); return run; };
+test('TL003 cores: lone wolf still opens with a pick of three recruits, then allows exactly that one', () => {
+  const wolf = openingWith('lonewolf');
+  assert.equal(wolf.mercenaries.length, 0); assert.equal(wolf.choices.length, 3); assert.ok(wolf.choices.every(c => c.kind === 'merc'));
+  assert.equal(wolf.choose(wolf.choices[0].id), true); assert.equal(wolf.mercenaries.length, 1);
+  const kind = wolf.mercenaries[0].kind, other = ['rifle', 'flame'].find(k => k !== kind);
+  assert.equal(wolf.canRecruit(other), false); assert.equal(wolf.recruit(other), false);
+  // The opening's second pick is a throwable; later guided picks never offer another recruit.
+  assert.ok(wolf.choices.every(c => c.kind === 'skill')); assert.equal(wolf.choose(wolf.choices[0].id), true);
+  for (let i = 0; i < 3; i++) { wolf.phase = 'choice'; wolf.choices = wolf.draw(); assert.ok(!wolf.choices.some(c => c.kind === 'merc'), `pick ${i + 3}`); wolf.choose(wolf.choices[0].id); }
+  assert.equal(wolf.mercenaries.length, 1); assert.equal(wolf.skills.length, B.MAX_SKILLS);
+});
+test('TL003 cores: uniform opens with only the rifleman on offer, the rest filled with starter ammo', () => {
+  const squad = openingWith('uniform');
+  assert.equal(squad.mercenaries.length, 0); assert.equal(squad.choices.length, 3);
+  const mercs = squad.choices.filter(c => c.kind === 'merc'); assert.deepEqual(mercs.map(c => c.merc ?? cardDef(c.id).merc), ['rifle']);
+  assert.ok(squad.choices.filter(c => c.kind !== 'merc').every(c => c.kind === 'normal'), squad.choices.map(c => c.kind).join());
+  assert.equal(squad.choose(mercs[0].id), true); assert.deepEqual(squad.mercenaries.map(m => m.kind), ['rifle']);
+  assert.ok(squad.choices.every(c => c.kind === 'skill')); assert.equal(squad.choose(squad.choices[0].id), true);
+  // The next guided recruit pick offers the rifleman again (up to three).
+  squad.phase = 'choice'; squad.choices = squad.draw(); const again = squad.choices.filter(c => c.kind === 'merc');
+  assert.equal(again.length, 1); assert.equal(squad.choose(again[0].id), true); assert.deepEqual(squad.mercenaries.map(m => m.kind), ['rifle', 'rifle']);
+});

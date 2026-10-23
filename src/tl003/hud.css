@@ -16,7 +16,7 @@ body { background: #050607 }
 
 .icon-button { width: 34px; height: 34px; padding: 0; display: grid; place-items: center; background: var(--glass); box-shadow: inset 0 0 0 2px #ffffff14 }
 .icon-button svg { width: 16px; height: 16px }
-.icon-button:hover:enabled { background: #1d2722ee; box-shadow: inset 0 0 0 2px #ffffff26 }
+@media (hover: hover) { .icon-button:hover:enabled { background: #1d2722ee; box-shadow: inset 0 0 0 2px #ffffff26 } }
 
 /* ---------- top bar ---------- */
 .hud-top {
@@ -124,7 +124,7 @@ body { background: #050607 }
   background: #0b0d0ee6; clip-path: polygon(8px 0, calc(100% - 8px) 0, 100% 8px, 100% calc(100% - 8px), calc(100% - 8px) 100%, 8px 100%, 0 calc(100% - 8px), 0 8px);
   box-shadow: none; touch-action: none; transition: transform .12s var(--ease-out);
 }
-.orb:hover:enabled { background: #141a17f0; box-shadow: none }
+@media (hover: hover) { .orb:hover:enabled { background: #141a17f0; box-shadow: none } }
 .orb:active:enabled { transform: scale(.93); box-shadow: none }
 .orb:disabled { filter: none }
 /* cooldown: a ring that fills clockwise in the mercenary colour */
@@ -271,3 +271,15 @@ html, body, button, canvas { touch-action: manipulation }
 /* the go button in the rest: label, drawn arrow, countdown */
 #next-stage { display: flex; align-items: center; justify-content: center; gap: 8px }
 #next-stage .rest-count { min-width: 1.4em; padding: 2px 6px; font: 700 13px/1 Consolas, monospace; color: var(--gold); background: var(--ink) }
+
+.side-action[hidden] { display: none }
+
+/* The automation toggles look the same however they were last touched (iOS keeps :hover/:focus after a tap). */
+.auto-toggle, .auto-toggle:hover:enabled, .auto-toggle:focus, .auto-toggle:active:enabled { background: #0b0d0ee6; box-shadow: inset 0 0 0 2px #ffffff14; transform: none; outline: none }
+.auto-toggle.on, .auto-toggle.on:hover:enabled, .auto-toggle.on:focus, .auto-toggle.on:active:enabled { background: #3a3216ee; box-shadow: inset 0 0 0 2px var(--gold), 0 0 10px #ffd88455 }
+.auto-toggle:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px }
+
+/* The speed button: ×1 dark, faster gold, whatever state a tap left it in. */
+.speed-button, .speed-button:hover:enabled, .speed-button:focus, .speed-button:active:enabled { color: var(--bone); background: var(--glass); box-shadow: inset 0 0 0 2px #ffffff14; transform: none; outline: none }
+.speed-button.fast, .speed-button.fast:hover:enabled, .speed-button.fast:focus, .speed-button.fast:active:enabled { color: var(--ink); background: var(--gold); box-shadow: 0 0 10px #ffd88466 }
+.speed-button:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px }

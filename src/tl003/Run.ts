@@ -158,6 +158,11 @@ export class DefenseRun {
   endless = false;
   /** Current stage (1-based), seconds into it, and level-ups banked for the next rest. */
   stage = 1; stageTime = 0; pendingPicks = 0;
+  /**
+   * Guided opening (2026-10-24, the game's start; unit tests start unguided): the picks alternate a choice of three
+   * mercenaries and a choice of three throwables until both rows are full (six picks with no core in the way).
+   */
+  guided = false;
   /** Danger level chosen at deployment: stages play progressively later (B.dangerShift) and zombies are tougher (B.DANGER_HP / DANGER_DEFENSE). */
   danger = 0;
   /**
@@ -194,7 +199,10 @@ export class DefenseRun {
       shockGain: p?.shockGain ?? 0, shockTime: p?.shockTime ?? 1, teslaSpeed: p?.teslaSpeed ?? 1, stunField: p?.stunField ?? 1,
       skillRange: p?.skillRange ?? 1, laserWidth: p?.laserWidth ?? 1, wallReduction: p?.wallReduction ?? 0, thorns: p?.thorns ?? 0,
       fortifyCost: p?.fortifyCost ?? 1, repairCost: p?.repairCost ?? 1, bounty: p?.bounty ?? 1, startMoney: p?.startMoney ?? 0,
-      freeRerolls: p?.freeRerolls ?? 0, passiveIncome: p?.passiveIncome ?? 0, luck: p?.luck ?? 1 };
+      freeRerolls: p?.freeRerolls ?? 0, passiveIncome: p?.passiveIncome ?? 0, luck: p?.luck ?? 1,
+      igniteGain: p?.igniteGain ?? 0, toxinBurst: p?.toxinBurst ?? 1, shockVuln: p?.shockVuln ?? 1, chillGain: p?.chillGain ?? 0, freezeTime: p?.freezeTime ?? 1,
+      chillSlow: p?.chillSlow ?? 1, stunGain: p?.stunGain ?? 0, stunTime: p?.stunTime ?? 1, blastRadius: p?.blastRadius ?? 1, rangeScale: p?.rangeScale ?? 1,
+      startLevel: p?.startLevel ?? 0, skillCrit: p?.skillCrit ?? 0, skillBuild: p?.skillBuild ?? 1 };
     if (permanent) {
       this.wallHealth = this.wallMaxHealth = this.wallStartHealth = B.BARRICADE_BASE_HEALTH * permanent.wallHealth;
       this.attackSpeed = permanent.attackSpeed; this.haste = permanent.haste;
@@ -204,6 +212,9 @@ export class DefenseRun {
     // Star-map values that start a run at a different baseline than zero.
     this.critChance = this.perm.critChance; this.critDamage = 1.5 * this.perm.critDamage; this.toxinGain = this.perm.corrosionGain; this.shockGain = this.perm.shockGain;
     this.skillRange = this.perm.skillRange; this.wallReduction = this.perm.wallReduction; this.thorns = this.perm.thorns; this.freeRerolls = this.perm.freeRerolls;
+    this.chillGain = this.perm.chillGain; this.stunGain = this.perm.stunGain;
+    // Blueprint 戰前操練: every mercenary starts (and is recruited) a few levels up.
+    if (this.perm.startLevel > 0) for (const kind of Object.keys(this.levels) as MercKind[]) this.levels[kind] = 1 + this.perm.startLevel;
     if (this.cores.has('coldsteel')) this.pierce = 2;
     // Core 亡者徵召: the barricade is a single plank (max health 1) for the whole run.
     if (this.cores.has('raisedead')) { this.wallHealth = this.wallMaxHealth = this.wallStartHealth = 1; }
@@ -260,11 +271,14 @@ export class DefenseRun {
   start(opening = false, danger = 0) {
     if (this.phase !== 'ready') return;
     this.danger = Math.max(0, Math.min(B.DANGER_MAX, Math.floor(danger)));
-    this.mercenaries.push({ id: this.nextId++, kind: 'rifle', shotTimer: 0 });
-    this.skills.push({ id: 'grenade', cooldown: this.skillCooldown('grenade') * B.SKILL_START_CHARGE });
+    // The game opens with a pick of three mercenaries (2026-10-24); without `opening` (unit tests) a rifleman stands ready.
+    if (!opening) this.mercenaries.push({ id: this.nextId++, kind: 'rifle', shotTimer: 0 });
+    if (!opening) this.skills.push({ id: 'grenade', cooldown: this.skillCooldown('grenade') * B.SKILL_START_CHARGE });
+    this.guided = opening;
     this.phase = 'running';
     if (this.perm.startMoney > 0) this.earn(this.perm.startMoney);
-    if (opening) { this.stage = 0; this.pendingPicks = 1; this.openPick(); }
+    // The opening rest holds two picks: a mercenary, then a throwable, so stage 1 is never fought empty-handed.
+    if (opening) { this.stage = 0; this.pendingPicks = 2; this.openPick(); }
   }
   pause() { if (this.phase === 'running') this.phase = 'paused'; }
   resume() { if (this.phase === 'paused') this.phase = 'running'; }
@@ -301,15 +315,15 @@ export class DefenseRun {
   /** Core 彈藥經濟: kinetic damage ×(1 + log₂(1 + money) ÷ 4); ×0.5 with no money left. */
   get ammoFactor() { return this.money > 0 ? 1 + Math.log2(1 + this.money) / 4 : 0.5; }
   /** How far up the road (from the barricade) this kind can shoot. */
-  rangeFor(kind: MercKind) { return MERCENARIES[kind].range; }
+  rangeFor(kind: MercKind) { return MERCENARIES[kind].range * this.perm.rangeScale; }
   /** A skill's full cooldown, with evolutions, curses and cores. */
   skillCooldown(id: SkillId) {
     const evolution = this.evolutions[id], scale = evolution === 'hex' ? 1.3 : evolution === 'overload' ? 1.5 : 1;
     return effectiveCooldown(SKILLS[id].cooldown, this.haste) * scale * this.cooldownPenalty * (this.cores.has('lonewolf') ? 0.5 : 1);
   }
-  /** Cores can close recruitment: 孤狼 keeps the opening rifleman alone, 制式部隊 only takes riflemen. */
+  /** Cores can close recruitment: 孤狼 keeps its first mercenary alone, 制式部隊 only takes riflemen. */
   canRecruit(kind: MercKind) {
-    if (this.mercenaries.length >= B.MAX_SQUAD || this.cores.has('lonewolf')) return false;
+    if (this.mercenaries.length >= B.MAX_SQUAD || (this.cores.has('lonewolf') && this.mercenaries.length >= 1)) return false;
     if (this.cores.has('uniform')) return kind === 'rifle';
     return !this.mercenaries.some(m => m.kind === kind);
   }
@@ -464,7 +478,13 @@ export class DefenseRun {
     const size = 3;
     const take = (pool: CardDef[]) => { const pick = pool[Math.floor(this.cardRandom() * pool.length)]; if (pick) offers.push(makeCard(pick, undefined, this.level)); };
     const recruits = this.recruitPool();
-    if (recruits.length) {
+    const throwables = CARD_DEFS.filter(def => def.kind === 'skill' && def.skill && this.canLearn(def.skill));
+    if (this.guided && (recruits.length || throwables.length)) {
+      // Mercenaries when the squad is not ahead of the throwables (or no throwable is left), throwables otherwise.
+      const pool = recruits.length && (this.mercenaries.length <= this.skills.length || !throwables.length) ? recruits : throwables;
+      while (offers.length < size && pool.some(def => !offers.some(o => o.id === def.id))) take(pool.filter(def => !offers.some(o => o.id === def.id)));
+    } else if (recruits.length) {
+      // Unguided runs: 1–2 recruits a choice until the squad is full (two on the very first).
       const count = Math.min(recruits.length, first ? 2 : this.cardRandom() < 0.5 ? 1 : 2);
       for (let i = 0; i < count; i++) take(recruits.filter(def => !offers.some(o => o.id === def.id)));
     }
@@ -578,13 +598,13 @@ export class DefenseRun {
     enemy.toxin += value * (1 + this.toxinGain) * this.statusBoost; enemy.toxinDuration = B.TOXIN_DURATION * this.perm.corrosionTime;
     if (!enemy.toxinBurst && enemy.toxin >= enemy.defense) {
       enemy.toxinBurst = true;
-      if (this.blasts.length < 300) this.blasts.push({ x: enemy.x, y: enemy.y, damage: enemy.maxHp * B.TOXIN_BURST, toxic: true });
+      if (this.blasts.length < 300) this.blasts.push({ x: enemy.x, y: enemy.y, damage: enemy.maxHp * B.TOXIN_BURST * this.perm.toxinBurst, toxic: true });
       this.stats.toxinBursts++;
     }
   }
   /** Electric: the shock meter raises damage taken; a paralysed zombie takes the full bonus. */
   vulnerability(enemy: Enemy) {
-    const m = enemy.meters.shock, k = B.STATUS.shock.vulnerability;
+    const m = enemy.meters.shock, k = B.STATUS.shock.vulnerability * this.perm.shockVuln;
     if (m.timer > 0) return 1 + k;
     return m.value > 0 ? 1 + k * Math.min(1, m.value / meterThreshold(enemy, 'shock', this.elapsed)) : 1;
   }
@@ -609,7 +629,7 @@ export class DefenseRun {
     const def = B.STATUS[kind];
     const burstTags: Tag[] = kind === 'chill' ? ['Damage.Cold', 'Status.Frozen'] : ['Damage.Electric', 'Status.Paralyzed'];
     if (def.burst > 0) this.hit(enemy, { baseDamage: enemy.maxHp * def.burst, tags: burstTags }, { build: 0 });
-    m.timer = def.duration * (kind === 'shock' ? this.perm.shockTime : kind === 'ignite' ? this.burnTimeScale : 1);
+    m.timer = def.duration * (kind === 'shock' ? this.perm.shockTime : kind === 'ignite' ? this.burnTimeScale : kind === 'chill' ? this.perm.freezeTime : this.perm.stunTime);
     if (kind === 'ignite') { m.pulse = 1; enemy.burnLayers = 1; this.stats.control.ignite += m.timer; return; }
     this.stats.control[kind] += m.timer;
     this.visual(kind === 'chill' ? 'freeze' : kind === 'shock' ? 'paralyze' : 'stun', enemy.x, enemy.y, kind === 'chill' ? '#bfe8ff' : kind === 'shock' ? '#c7f5ff' : '#ffe9a8', 20).target = enemy.id;
@@ -622,7 +642,8 @@ export class DefenseRun {
   /** Fills the meters of the elements this hit carried, from the damage it dealt. */
   private buildFrom(enemy: Enemy, tags: readonly Tag[], dealt: number, scale: number) {
     if (!(dealt > 0) || scale <= 0) return;
-    const k = scale * this.statusBoost;
+    // Blueprint 特殊彈頭: throwables build statuses faster.
+    const k = scale * this.statusBoost * (tags.includes('Skill.Active') ? this.perm.skillBuild : 1);
     if (tags.includes('Damage.Cold')) this.build(enemy, 'chill', dealt * B.STATUS.chill.rate * (1 + this.chillGain) * k);
     if (tags.includes('Damage.Electric')) {
       const conductor = this.synergies.has('conductor') ? Math.min(3, 1 + CONDUCTOR * enemy.toxin / 10) : 1;
@@ -632,7 +653,7 @@ export class DefenseRun {
     if (tags.includes('Damage.Fire')) {
       // Synergy (fire + electric): shocked or paralysed targets catch fire twice as fast.
       const overheat = this.synergies.has('overheat') && (enemy.meters.shock.value > 0 || enemy.meters.shock.timer > 0) ? 2 : 1;
-      this.build(enemy, 'ignite', dealt * B.STATUS.ignite.rate * overheat * k);
+      this.build(enemy, 'ignite', dealt * B.STATUS.ignite.rate * (1 + this.perm.igniteGain) * overheat * k);
     }
   }
   /**
@@ -695,7 +716,9 @@ export class DefenseRun {
     const direct = hit.baseDamage > 0 && !tags.includes('Mechanic.DOT') && !tags.some(t => t.startsWith('Status.'));
     const proc = tags.includes('Mechanic.Proc');
     // Core 冷鋼紀律 never crits but its kinetic damage ignores half the armor; core 痛苦精通 moves the crit onto statuses.
-    const crit = direct && !this.cores.has('coldsteel') && (!!opts.forceCrit || (this.critChance > 0 && this.combatRandom() < this.critChance));
+    // Blueprint 精準投擲: throwables crit more often.
+    const critChance = this.critChance + (tags.includes('Skill.Active') ? this.perm.skillCrit : 0);
+    const crit = direct && !this.cores.has('coldsteel') && (!!opts.forceCrit || (critChance > 0 && this.combatRandom() < critChance));
     const agony = crit && this.cores.has('agony');
     const kinetic = tags.includes('Damage.Kinetic');
     const defense = kinetic && this.cores.has('coldsteel') ? enemy.defense * 0.5 : enemy.defense;
@@ -826,7 +849,7 @@ export class DefenseRun {
     switch (skill.id) {
       case 'grenade': {
         const tags: Tag[] = ['Damage.Blast', 'Mechanic.AOE', 'Mechanic.Explosion', 'Mechanic.Knockback', 'Skill.Active', weapon];
-        const radius = def.radius * range * (evolution === 'hex' ? 1.5 : 1);
+        const radius = def.radius * range * this.perm.blastRadius * (evolution === 'hex' ? 1.5 : 1);
         const damage = base * THROWABLE.grenade * (evolution === 'hex' ? 1.5 : evolution === 'double' ? cardDef('double')!.value : 1);
         const blast = (bx: number, by: number) => {
           for (const { enemy, k } of this.share(this.within(bx, by, radius), bx, by, 'skill')) { this.hit(enemy, { baseDamage: damage * k, tags }); this.knockBack(enemy, 40 * this.perm.knockback); }
@@ -914,8 +937,8 @@ export class DefenseRun {
         for (let i = 0; i < shells; i++) {
           const a = this.combatRandom() * Math.PI * 2, r = Math.sqrt(this.combatRandom()) * radius * (barrage ? 1.3 : 1);
           const sx = Math.min(FIELD.wallX, Math.max(0, x + Math.cos(a) * r)), sy = Math.min(390, Math.max(65, y + Math.sin(a) * r));
-          for (const { enemy, k } of this.share(this.within(sx, sy, 40 * range), sx, sy, 'skill')) this.hit(enemy, { baseDamage: base * THROWABLE.mortar * k, tags });
-          this.visual('blast', sx, sy, def.color, 40 * range);
+          for (const { enemy, k } of this.share(this.within(sx, sy, 40 * range * this.perm.blastRadius), sx, sy, 'skill')) this.hit(enemy, { baseDamage: base * THROWABLE.mortar * k, tags });
+          this.visual('blast', sx, sy, def.color, 40 * range * this.perm.blastRadius);
         }
         break;
       }
@@ -978,8 +1001,8 @@ export class DefenseRun {
     const tags: Tag[] = ['Damage.Blast', 'Damage.Fire', 'Mechanic.AOE', 'Mechanic.Explosion', 'Skill.Active', 'Weapon.minefield'];
     for (const mine of this.mines) {
       if (!this.within(mine.x, mine.y, 22).length) continue;
-      for (const { enemy, k } of this.share(this.within(mine.x, mine.y, (mine.radius ?? 50) * this.skillRange), mine.x, mine.y, 'skill')) { this.hit(enemy, { baseDamage: mine.damage * k, tags }); }
-      this.visual('blast', mine.x, mine.y, SKILLS.minefield.color, (mine.radius ?? 50) * this.skillRange).skill = true;
+      for (const { enemy, k } of this.share(this.within(mine.x, mine.y, (mine.radius ?? 50) * this.skillRange * this.perm.blastRadius), mine.x, mine.y, 'skill')) { this.hit(enemy, { baseDamage: mine.damage * k, tags }); }
+      this.visual('blast', mine.x, mine.y, SKILLS.minefield.color, (mine.radius ?? 50) * this.skillRange * this.perm.blastRadius).skill = true;
       mine.spent = true;
     }
     this.mines = this.mines.filter(m => !m.spent);
@@ -1098,7 +1121,7 @@ export class DefenseRun {
         .sort((a, b) => Math.hypot(a.x - front!.x, a.y - front!.y) - Math.hypot(b.x - front!.x, b.y - front!.y)).slice(0, extra);
       return [front, ...near];
     }
-    if (def.pattern === 'aoe') return [front, ...nearestFirst(this.within(front.x, front.y, def.area!).filter(e => e !== front), front.x, front.y)].slice(0, B.AREA.auto.cap);
+    if (def.pattern === 'aoe') return [front, ...nearestFirst(this.within(front.x, front.y, def.area! * this.perm.blastRadius).filter(e => e !== front), front.x, front.y)].slice(0, B.AREA.auto.cap);
     if (def.pattern === 'chain') {
       const chain = [front], seen = new Set(chain);
       for (let i = 0; i < (def.targets ?? 0) + (this.levels[kind] >= 100 ? 1 : 0); i++) {
@@ -1143,7 +1166,7 @@ export class DefenseRun {
         if (def.toxin) this.poison(t, def.toxin);
         if (def.ignite) this.fireProc(t, damage * k * def.ignite, def.tags);
       });
-      if (def.pattern === 'aoe') this.visual('blast', target.x, target.y, def.color, def.area!);
+      if (def.pattern === 'aoe') this.visual('blast', target.x, target.y, def.color, def.area! * this.perm.blastRadius);
       this.visual('shot', target.x, target.y, def.color, 0, origin.x, origin.y).merc = merc.kind;
       // Pierce (core 冷鋼紀律 only since 2026-10-23): a single shot carries on through enemies behind the target.
       if (this.pierce > 0 && (def.pattern === 'single' || def.pattern === 'heaviest')) {
@@ -1210,7 +1233,7 @@ export class DefenseRun {
         // Frozen and stunned zombies stand still; the chill meter slows them while it fills.
         if (!this.isFrozen(enemy) && !this.isStunned(enemy)) {
           const chill = Math.min(1, enemy.meters.chill.value / meterThreshold(enemy, 'chill', this.elapsed));
-          enemy.x = Math.min(FIELD.wallX - 18, enemy.x + enemy.speed * rush * dt * (1 - B.STATUS.chill.slow * chill) * (shocked ? this.perm.stunField : 1));
+          enemy.x = Math.min(FIELD.wallX - 18, enemy.x + enemy.speed * rush * dt * (1 - Math.min(0.9, B.STATUS.chill.slow * this.perm.chillSlow) * chill) * (shocked ? this.perm.stunField : 1));
         }
       } else if (!this.isParalyzed(enemy)) {
         // Paralysed zombies cannot bite; frozen or stunned ones at the barricade still do.

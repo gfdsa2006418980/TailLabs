@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { calculateValue, calculateDamage, effectiveCooldown, runScore, formatNumber, withFamily } from '../src/tl003/Combat.ts';
 import { DefenseRun, FIELD, THROWABLE, damageSource, freshStatus, meterThreshold } from '../src/tl003/Run.ts';
 import { MERCENARIES, CARDS, SKILLS, ENEMIES } from '../src/tl003/Content.ts';
-import { LocalMetaMirror, META_KEY, emptyMeta, normalizeMeta } from '../src/tl003/Meta.ts';
+import { LocalMetaMirror, META_KEY, TREE_LAYOUT, emptyMeta, legacyRefund, normalizeMeta } from '../src/tl003/Meta.ts';
 import { project, unproject, projectedCircle } from '../src/tl003/Projection.ts';
 import * as B from '../src/tl003/Balance.ts';
 
@@ -346,18 +346,34 @@ test('TL003 a normal stage stops spawning when its clock runs out, then ends on 
   assert.equal(run.nextStage(), true); assert.equal(run.stage, 2); assert.equal(run.wave, 2); assert.equal(run.clearedWave, 1);
   near(run.stageLength, B.stageSeconds(2)); near(run.stageTime, 0);
 });
-test('TL003 start(true) opens with a rest: stage 0, one pick, then shopping until the first stage starts', () => {
+test('TL003 start(true) opens with a rest: stage 0, a mercenary pick and a throwable pick, then shopping until the first stage starts', () => {
   const run = new DefenseRun(123); run.start(true);
-  assert.equal(run.stage, 0); assert.equal(run.phase, 'choice'); assert.equal(run.pendingPicks, 0); assert.equal(run.choices.length, 3);
-  assert.equal(run.choices.filter(c => c.kind === 'merc').length, 2, 'the opening pick offers two recruits');
+  // 2026-10-24: no rifleman and no grenade before the opening picks; the run is guided.
+  assert.equal(run.guided, true); assert.equal(run.mercenaries.length, 0); assert.equal(run.skills.length, 0);
+  assert.equal(run.stage, 0); assert.equal(run.phase, 'choice'); assert.equal(run.pendingPicks, 1, 'two picks banked, the first one up');
+  assert.equal(run.choices.length, 3); assert.ok(run.choices.every(c => c.kind === 'merc'), 'the first pick offers three recruits');
   run.advance(5); assert.equal(run.elapsed, 0); assert.equal(run.upgrade('rifle'), false, 'no shopping while a card is up');
-  run.money = 1e6; assert.equal(run.reroll(), true); assert.equal(run.reroll(), false, 'one reroll per pick');
-  assert.equal(run.choose(run.choices.find(c => c.kind === 'merc').id), true); assert.equal(run.mercenaries.length, 2);
+  run.money = 1e6; assert.equal(run.reroll(), true); assert.ok(run.choices.every(c => c.kind === 'merc'), 'a reroll keeps the kind'); assert.equal(run.reroll(), false, 'one reroll per pick');
+  const merc = run.choices[0]; assert.equal(run.choose(merc.id), true); assert.deepEqual(run.mercenaries.map(m => m.kind), [merc.merc ?? CARDS.find(c => c.id === merc.id).merc]);
+  // The second banked pick: three throwables.
+  assert.equal(run.phase, 'choice'); assert.equal(run.stage, 0); assert.equal(run.choices.length, 3); assert.ok(run.choices.every(c => c.kind === 'skill'), 'then three throwables');
+  assert.equal(run.choose(run.choices[0].id), true); assert.equal(run.skills.length, 1); assert.equal(run.mercenaries.length, 1);
   assert.equal(run.phase, 'intermission'); assert.equal(run.clearedWave, 0); run.advance(5); assert.equal(run.elapsed, 0);
   // The shop is open in the rest (and in battle).
-  assert.equal(run.upgrade('rifle'), true); assert.equal(run.fortify(), true); run.wallHealth = 1; assert.equal(run.repair(), true);
+  const kind = run.mercenaries[0].kind;
+  assert.equal(run.upgrade(kind), true); assert.equal(run.fortify(), true); run.wallHealth = 1; assert.equal(run.repair(), true);
   assert.equal(run.nextStage(), true); assert.equal(run.stage, 1); assert.equal(run.phase, 'running'); assert.equal(run.nextStage(), false);
-  run.advance(1); near(run.elapsed, 1); near(run.stageTime, 1); assert.equal(run.upgrade('rifle'), true);
+  run.advance(1); near(run.elapsed, 1); near(run.stageTime, 1); assert.equal(run.upgrade(kind), true);
+  // Later picks keep alternating (merc, throwable) until both rows are full: six guided picks, 3 + 3, then normal cards.
+  const kinds = ['merc', 'skill'];
+  for (let i = 0; i < 4; i++) {
+    run.phase = 'choice'; run.choices = run.draw();
+    assert.equal(run.choices.length, 3); assert.ok(run.choices.every(c => c.kind === kinds[i % 2]), `pick ${i + 3}: ${run.choices.map(c => c.kind)}`);
+    assert.equal(run.choose(run.choices[0].id), true);
+  }
+  assert.equal(run.mercenaries.length, B.MAX_SQUAD); assert.equal(run.skills.length, B.MAX_SKILLS);
+  assert.equal(new Set(run.mercenaries.map(m => m.kind)).size, 3); assert.equal(new Set(run.skills.map(s => s.id)).size, 3);
+  run.phase = 'choice'; run.choices = run.draw(); assert.ok(run.choices.every(c => c.kind !== 'merc' && c.kind !== 'skill'), 'then normal cards');
   const plain = new DefenseRun(123); plain.start(); assert.equal(plain.stage, 1); assert.equal(plain.phase, 'running');
 });
 test('TL003 boss stages: warning, boss and runners when the clock runs out, spawns until the boss is down; the super boss ends the run', () => {
@@ -425,8 +441,12 @@ test('TL003 meta settlement is idempotent and saves only the permanent DTO', () 
 test('TL003 broken/unavailable storage leaves combat playable; malformed meta is normalized', () => {
   const mirror=new LocalMetaMirror({getItem:()=>{throw Error('blocked')},setItem:()=>{throw Error('blocked')}});assert.equal(mirror.persistent,false);mirror.settle({},2,1);assert.equal(mirror.value.TalentPoints,2);
   assert.deepEqual(normalizeMeta({version:2}),emptyMeta());
-  const value=normalizeMeta({version:1,TalentPoints:-1,HighestClearedWave:NaN,TalentTreeJson:JSON.stringify({nodes:{kinetic_damage:10,bad:-1},unlockedCoreTalents:['coldsteel','layers','agony','rotation','fake'],activeCoreTalents:['coldsteel','layers','layers','agony','rotation','unknown'],enemies:[1]})});
+  const raw={layout:TREE_LAYOUT,nodes:{kinetic_damage:10,bad:-1},unlockedCoreTalents:['coldsteel','layers','agony','rotation','fake'],activeCoreTalents:['coldsteel','layers','layers','agony','rotation','unknown'],enemies:[1]};
+  const value=normalizeMeta({version:1,TalentPoints:-1,HighestClearedWave:NaN,TalentTreeJson:JSON.stringify(raw)});
   assert.equal(value.TalentPoints,0);assert.equal(value.HighestClearedWave,0);const tree=JSON.parse(value.TalentTreeJson);assert.deepEqual(tree.activeCoreTalents,['coldsteel','layers','agony']);assert.ok(!tree.unlockedCoreTalents.includes('fake'));assert.equal(tree.nodes.kinetic_damage,10);assert.equal(tree.enemies,undefined);
+  // The same tree without a layout is an old save: its levels are refunded as points and the map starts empty.
+  const legacy=normalizeMeta({version:1,TalentPoints:-1,HighestClearedWave:NaN,TalentTreeJson:JSON.stringify({...raw,layout:undefined})});
+  assert.equal(legacy.TalentPoints,legacyRefund({kinetic_damage:10,bad:0}));assert.ok(legacy.TalentPoints>0);assert.deepEqual(JSON.parse(legacy.TalentTreeJson).nodes,{});assert.deepEqual(JSON.parse(legacy.TalentTreeJson).activeCoreTalents,['coldsteel','layers','agony']);
 });
 
 test('TL003 portrait projection moves enemies downwards and enlarges them as they approach', () => {

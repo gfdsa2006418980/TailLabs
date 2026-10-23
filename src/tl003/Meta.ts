@@ -6,18 +6,40 @@ export interface TalentTree {
   unlockedCoreTalents: string[]; activeCoreTalents: string[];
   /** v2: the best stage ever cleared (opens core slots) and the highest danger level unlocked (0 = normal only). */
   bestStage?: number; danger?: number;
+  /** Blueprint layout the node levels belong to (TREE_LAYOUT); older layouts are refunded on load. */
+  layout?: number;
+}
+/** 2: the ten-branch, 52-node blueprint (2026-10-24). */
+export const TREE_LAYOUT = 2;
+/** Depth of every node of the old 47-node layout (layout 1), for its refund: cost = ceil(1.12^level × (1 + 0.35 × (depth − 1))). */
+const LEGACY_DEPTH: Record<string, number> = {
+  mercenary_damage: 0, kinetic_damage: 1, crit_rate: 2, crit_power: 3, pierce_training: 4, impact: 5, armor_breaker: 6, fire_dot: 1, slow_burn: 2,
+  igniter: 3, firezone: 4, fuel_stock: 5, corrosion_power: 1, corrosion_time: 2, eroder: 3, toxic_residue: 4, bio_shield: 5, shock_power: 1,
+  shock_time: 2, laser_focus: 3, coil_cooling: 4, stun_field: 5, attack_speed: 1, rifle_specialist: 2, flame_specialist: 3, tesla_specialist: 4,
+  recruiter: 5, veteran: 6, active_skill_damage: 1, active_skill_haste: 2, skill_reach: 3, grenade_payload: 4, molotov_payload: 5, laser_width: 6,
+  barricade_health: 1, repair_efficiency: 2, plating: 3, spikes: 4, builder: 5, field_medic: 6, economy_income: 1, wave_bonus: 2, bounty: 3,
+  starting_funds: 4, logistics: 5, supply_line: 6, lucky: 7,
+};
+/** Talent points spent on old-layout node levels. */
+export function legacyRefund(nodes: Record<string, number>) {
+  let points = 0;
+  for (const [id, level] of Object.entries(nodes)) {
+    const base = 1 + 0.35 * Math.max(0, (LEGACY_DEPTH[id] ?? 1) - 1);
+    for (let l = 0; l < level; l++) points += Math.ceil(1.12 ** l * base);
+  }
+  return points;
 }
 export interface MetaSave { version: 1; TalentPoints: number; TalentTreeJson: string; HighestClearedWave: number }
 export interface MetaProgressionPort { load(): Promise<MetaSave>; save(meta: MetaSave): Promise<void> }
 export const META_KEY = 'taillabs.tl003.meta.v1';
-export const emptyTree = (): TalentTree => ({ tier: 1, maxNodeLevel: 10, nodes: {}, unlockedCoreTalents: [], activeCoreTalents: [], bestStage: 0, danger: 0 });
+export const emptyTree = (): TalentTree => ({ tier: 1, maxNodeLevel: 10, nodes: {}, unlockedCoreTalents: [], activeCoreTalents: [], bestStage: 0, danger: 0, layout: TREE_LAYOUT });
 export const emptyMeta = (): MetaSave => ({ version: 1, TalentPoints: 0, TalentTreeJson: JSON.stringify(emptyTree()), HighestClearedWave: 0 });
 const nonnegativeInt = (v: unknown) => typeof v === 'number' && Number.isSafeInteger(v) && v >= 0 ? v : 0;
 export function normalizeMeta(value: unknown): MetaSave {
   if (!value || typeof value !== 'object') return emptyMeta();
   const input = value as Partial<MetaSave>;
   if (input.version !== 1) return emptyMeta();
-  let tree = emptyTree();
+  let tree = emptyTree(), refund = 0;
   try {
     const raw = JSON.parse(input.TalentTreeJson ?? '{}');
     if (raw && typeof raw === 'object') {
@@ -28,10 +50,12 @@ export function normalizeMeta(value: unknown): MetaSave {
         tree.nodes = Object.fromEntries(Object.entries(raw.nodes).filter(([k]) => /^[a-z_]+$/.test(k)).map(([k, v]) => [k, nonnegativeInt(v)]));
       }
       tree.unlockedCoreTalents = Array.isArray(raw.unlockedCoreTalents) ? [...new Set<string>(raw.unlockedCoreTalents.filter((v: unknown) => typeof v === 'string' && !!coreById(v)))] : [];
+      // An older blueprint layout: every node level is refunded in full and the new tree starts empty (tier, cores and records kept).
+      if (raw.layout !== TREE_LAYOUT) { refund = legacyRefund(tree.nodes); tree.nodes = {}; }
       tree.activeCoreTalents = Array.isArray(raw.activeCoreTalents) ? [...new Set<string>(raw.activeCoreTalents.filter((v: unknown) => typeof v === 'string' && tree.unlockedCoreTalents.includes(v)))].slice(0, 3) : [];
     }
   } catch { /* Corrupt mirror must not prevent a new run. */ }
-  return { version: 1, TalentPoints: nonnegativeInt(input.TalentPoints), TalentTreeJson: JSON.stringify(tree), HighestClearedWave: nonnegativeInt(input.HighestClearedWave) };
+  return { version: 1, TalentPoints: nonnegativeInt(input.TalentPoints) + refund, TalentTreeJson: JSON.stringify(tree), HighestClearedWave: nonnegativeInt(input.HighestClearedWave) };
 }
 export class LocalMetaMirror {
   value: MetaSave;
