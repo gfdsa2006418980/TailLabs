@@ -33,6 +33,8 @@ const MUZZLE: Record<MercKind, [number, number]> = {
 /** Mercenaries whose guns throw brass casings. */
 const SHELLS = new Set<MercKind>(['rifle', 'gunner', 'sniper']);
 /** Zombies in the far 40% of the road (small on screen) are drawn as a bare body: no shadow, eyes or status marks. */
+/** Burning flames drawn per frame at most (2026-10-24, performance); the zombies nearest the barricade keep theirs. */
+const MAX_FLAMES = 60;
 const FAR_X = 0.4 * (FIELD.wallX + 20) - 20;
 /** At most this many damage numbers start per frame; the rest of that frame's hits get none. */
 const MAX_NEW_DAMAGE = 30;
@@ -341,7 +343,7 @@ export class Battlefield {
 
     for (const zone of run.zones) {
       if (zone.kind === 'gas') this.gasZone(zone.x, zone.y, zone.radius, t, zone.remaining);
-      else this.fireZone(zone.x, zone.y, zone.radius, t, zone.remaining);
+      else this.fireZone(zone.x, zone.y, zone.radius, t, zone.remaining, !zone.spread);
     }
     // 地雷陣: dark discs with a blinking red fuse light.
     for (const mine of run.mines) {
@@ -350,13 +352,23 @@ export class Battlefield {
       if (Math.floor(real * 3 + mine.x) % 2 === 0) { this.dot(E, p.x, p.y - 1, '#ff5a3c'); this.light(p.x, p.y - 1, 10, [1, 0.25, 0.15], 0.6, 4); }
     }
     let burningLights = 0;
-    for (const enemy of [...run.enemies].sort((a, b) => a.x - b.x)) {
-      const art = ENEMY_ART[enemy.kind] ?? ENEMY_ART.walker!, p = this.at(enemy.x, enemy.y), s = p.scale / WALL_SCALE * art.scale * (enemy.superBoss ? B.SUPER_BOSS_SCALE : 1);
+    // Per-zombie rectangles are batched by colour (2026-10-24, performance): switching fillStyle for every bar and dot of
+    // hundreds of zombies cost more than drawing them. Shadows go down first, under every body; bars and dots after all.
+    const placed = [...run.enemies].sort((a, b) => a.x - b.x).map(enemy => ({ enemy, p: this.at(enemy.x, enemy.y) }));
+    // Over MAX_FLAMES burning zombies, the farthest go without a flame sprite (the list runs far to near).
+    let flameSkip = Math.max(0, placed.filter(({ enemy }) => (enemy.x >= FAR_X || enemy.kind === 'boss') && run.isBurning(enemy)).length - MAX_FLAMES);
+    const barBacks: number[] = [], barFills = new Map<string, number[]>();
+    const fillRect = (color: string, x: number, y: number, w: number, h: number) => { let list = barFills.get(color); if (!list) barFills.set(color, list = []); list.push(x, y, w, h); };
+    A.fillStyle = '#0b0d0e90';
+    for (const { enemy, p } of placed) {
+      if (enemy.x < FAR_X && enemy.kind !== 'boss') continue;
+      const art = ENEMY_ART[enemy.kind] ?? ENEMY_ART.walker!, s = p.scale / WALL_SCALE * art.scale * (enemy.superBoss ? B.SUPER_BOSS_SCALE : 1);
+      const shadowW = Math.max(2, Math.round(12 * s));
+      A.fillRect(Math.round(p.x - shadowW / 2), Math.round(p.y) - 1, shadowW, Math.max(1, Math.round(2 * s)));
+    }
+    for (const { enemy, p } of placed) {
+      const art = ENEMY_ART[enemy.kind] ?? ENEMY_ART.walker!, s = p.scale / WALL_SCALE * art.scale * (enemy.superBoss ? B.SUPER_BOSS_SCALE : 1);
       const far = enemy.x < FAR_X && enemy.kind !== 'boss';
-      if (!far) {
-        const shadowW = Math.max(2, Math.round(12 * s));
-        A.fillStyle = '#0b0d0e90'; A.fillRect(Math.round(p.x - shadowW / 2), Math.round(p.y) - 1, shadowW, Math.max(1, Math.round(2 * s)));
-      }
       const flash = enemy.hitFlash > 0, knock = flash && !this.reducedMotion ? -1 : 0;
       // At the barricade they claw and chew; the boss roars when it first appears.
       if (enemy.kind === 'boss' && !this.bossSeen.has(enemy.id)) this.bossSeen.set(enemy.id, real);
@@ -367,37 +379,42 @@ export class Battlefield {
       // Frozen zombies stop mid-stride: their animation clock stands still.
       const clock = roaring ? real - this.bossSeen.get(enemy.id)! : frozen ? enemy.id * 0.137 : t + enemy.id * 0.137;
       const name = this.animFrame(anim, clock, !roaring);
-      const box = this.sprite(name, p.x, p.y + 1 + knock, s, this.lit());
+      // Far zombies skip the normal-map layer: they are small and dim, and it halves their cost.
+      const box = this.sprite(name, p.x, p.y + 1 + knock, s, far ? { albedo: this.c.albedo } : this.lit());
       if (!far && ANIMS[`${anim}_eyes`]) this.sprite(this.animFrame(`${anim}_eyes`, clock, !roaring), p.x, p.y + 1 + knock, s, this.glow());
       if (flash && box.w) { E.globalAlpha = 0.85; this.sprite(name, p.x, p.y + 1 + knock, s, { emissive: E }, false, true); E.globalAlpha = 1; }
       if (enemy.kind === 'boss' && box.w) this.light(p.x, box.top + box.h * 0.3, 40 * s, [1, 0.2, 0.15], 0.5, 16);
       if (enemy.hp < enemy.maxHp && box.w) {
         const bw = Math.max(6, box.w - 2), bx = Math.round(p.x - bw / 2), by = box.top - 3;
-        O.fillStyle = COLOR.hpBack; O.fillRect(bx - 1, by - 1, bw + 2, 3); O.fillStyle = enemy.kind === 'boss' ? '#ff7a5c' : COLOR.hp; O.fillRect(bx, by, Math.max(1, Math.round(bw * Math.max(0, enemy.hp / enemy.maxHp))), 1);
+        barBacks.push(bx - 1, by - 1, bw + 2, 3); fillRect(enemy.kind === 'boss' ? '#ff7a5c' : COLOR.hp, bx, by, Math.max(1, Math.round(bw * Math.max(0, enemy.hp / enemy.maxHp))), 1);
         if (!far) {
           let sx = bx;
           for (const [active, color] of [[run.isBurning(enemy), '#ee9d4f'], [enemy.toxin > 0, '#a6c46a'], [frozen, '#9fd8f0'], [paralyzed, '#bff1ea'], [stunned, '#ffe9a8']] as const)
-            if (active) { O.fillStyle = color; O.fillRect(sx, by - 3, 2, 2); sx += 3; }
+            if (active) { fillRect(color, sx, by - 3, 2, 2); sx += 3; }
           // Build-up meters: one pixel row each under the health bar, filling towards the next control.
           let my = by + 2;
           for (const kind of METER_KINDS) {
             const m = enemy.meters[kind]; if (m.value <= 0) continue;
             const fill = Math.min(1, m.value / meterThreshold(enemy, kind, run.elapsed));
-            O.fillStyle = COLOR.hpBack; O.fillRect(bx - 1, my, bw + 2, 2); O.fillStyle = METER_COLOR[kind]; O.fillRect(bx, my, Math.max(1, Math.round(bw * fill)), 1); my += 2;
+            barBacks.push(bx - 1, my, bw + 2, 2); fillRect(METER_COLOR[kind], bx, my, Math.max(1, Math.round(bw * fill)), 1); my += 2;
           }
         }
       }
-      if (run.isBurning(enemy) && box.w) {
+      // Status effects only on near zombies (far ones are body-only); at most MAX_FLAMES burning sprites a frame.
+      if (far) continue;
+      if (run.isBurning(enemy) && box.w && flameSkip-- <= 0) {
         this.sprite(this.animFrame('fire', t + enemy.id * 0.21), p.x, box.top + box.h * 0.55, Math.max(0.5, s * 0.8), this.glow());
         if (burningLights++ < 10) this.light(p.x, box.top + box.h * 0.5, 22 * s + 6, FIRE, 0.7, 8);
       }
       if (frozen && box.w) { this.sprite('fx_ice', p.x, box.top + box.h * 0.75, Math.max(0.6, s * 1.2), this.glow()); this.light(p.x, box.top + box.h * 0.5, 18 * s + 6, ICE, 0.7, 8); }
       if (stunned && box.w && ANIMS.fx_stun) this.sprite(this.animFrame('fx_stun', real + enemy.id * 0.3), p.x, box.top - 1, Math.max(0.6, s), this.glow());
-      if (far) continue;
       if (enemy.toxin > 0 && box.w && Math.floor(real * 6 + enemy.id) % 4 === 0) this.dot(E, p.x + (hash(enemy.id, Math.floor(real * 6)) - 0.5) * box.w, box.top + box.h * 0.3, '#a4dc4c');
       const sparks = paralyzed ? 2 : enemy.meters.shock.value > 0 ? 5 : 0;
       if (sparks && box.w && Math.floor(real * 20 + enemy.id) % sparks === 0) this.dot(E, p.x + (hash(enemy.id, Math.floor(real * 20)) - 0.5) * box.w, box.top + hash(Math.floor(real * 20), enemy.id) * box.h, '#bff1ea');
     }
+    // The batched bars: every dark back first, then each colour once.
+    O.fillStyle = COLOR.hpBack; for (let i = 0; i < barBacks.length; i += 4) O.fillRect(barBacks[i]!, barBacks[i + 1]!, barBacks[i + 2]!, barBacks[i + 3]!);
+    for (const [color, list] of barFills) { O.fillStyle = color; for (let i = 0; i < list.length; i += 4) O.fillRect(list[i]!, list[i + 1]!, list[i + 2]!, list[i + 3]!); }
 
     // Core 亡者徵召: raised corpses walk back up the road, lit by a sickly green glow.
     for (const ally of run.allies) {
@@ -488,37 +505,55 @@ export class Battlefield {
     }
   }
 
-  private fireZone(x: number, y: number, radius: number, t: number, remaining: number) {
-    const ring = projectedCircle(x, y, radius, this.view).map(p => ({ x: p.x * PX, y: p.y * PX }));
-    const minX = Math.floor(Math.min(...ring.map(p => p.x))), maxX = Math.ceil(Math.max(...ring.map(p => p.x)));
-    const minY = Math.floor(Math.min(...ring.map(p => p.y))), maxY = Math.ceil(Math.max(...ring.map(p => p.y)));
-    const E = this.c.emissive, fade = Math.min(1, remaining / 1.2);
-    E.globalAlpha = 0.75 * fade;
-    for (let py = minY; py <= maxY; py++) for (let px = minX; px <= maxX; px++) {
-      const q = unproject(px / PX, py / PX, this.view), r = Math.hypot(q.x - x, q.y - y) / radius;
-      if (r <= 1 && dither(px + Math.floor(t * 8), py, 0.55 - r * 0.35)) this.dot(E, px, py, r > 0.8 ? '#87372f' : '#c8613a');
-    }
-    E.globalAlpha = 1;
-    for (let i = 0; i < 8; i++) {
-      const a = i * 2.4, rr = Math.sqrt((i + 0.5) / 8) * radius * 0.85, p = this.at(x + Math.cos(a) * rr, y + Math.sin(a) * rr);
+  /**
+   * A fire area. `detailed` (the thrown molotov) gets the dithered burning floor, drawn as two batched colours; small
+   * spread fires (延燒, dozens at a time late) only get three flames and a glow (2026-10-24, performance).
+   */
+  private fireZone(x: number, y: number, radius: number, t: number, remaining: number, detailed = true) {
+    const fade = Math.min(1, remaining / 1.2);
+    if (detailed) this.ditherFloor(x, y, radius, Math.floor(t * 8), 0.55, 0.35, 0.8, '#87372f', '#c8613a', 0.75 * fade);
+    const flames = detailed ? 8 : 3;
+    for (let i = 0; i < flames; i++) {
+      const a = i * 2.4, rr = Math.sqrt((i + 0.5) / flames) * radius * 0.85, p = this.at(x + Math.cos(a) * rr, y + Math.sin(a) * rr);
       this.sprite(this.animFrame('fire', t + i * 0.13), p.x, p.y, Math.max(0.5, p.scale / WALL_SCALE), this.glow());
     }
     const centre = this.at(x, y), across = this.at(x, y + radius).x - this.at(x, y - radius).x;
     this.light(centre.x, centre.y - 4, across * 0.9 + 10, FIRE, (1.1 + 0.25 * Math.sin(t * 17) * Math.sin(t * 5.1)) * fade, 10);
   }
-
-  /** 毒氣彈: a slow, dithered purple-green cloud with puffs. */
-  private gasZone(x: number, y: number, radius: number, t: number, remaining: number) {
+  private floorCache = new Map<string, number[]>();
+  /** A dithered disc on the road, edge and core colours each set once (per-dot colour switches were the cost). */
+  private ditherFloor(x: number, y: number, radius: number, shift: number, density: number, falloff: number, edgeAt: number, edge: string, core: string, alpha: number) {
     const ring = projectedCircle(x, y, radius, this.view).map(p => ({ x: p.x * PX, y: p.y * PX }));
     const minX = Math.floor(Math.min(...ring.map(p => p.x))), maxX = Math.ceil(Math.max(...ring.map(p => p.x)));
     const minY = Math.floor(Math.min(...ring.map(p => p.y))), maxY = Math.ceil(Math.max(...ring.map(p => p.y)));
-    const E = this.c.emissive, fade = Math.min(1, remaining / 1.2);
-    E.globalAlpha = 0.55 * fade;
-    for (let py = minY; py <= maxY; py++) for (let px = minX; px <= maxX; px++) {
-      const q = unproject(px / PX, py / PX, this.view), r = Math.hypot(q.x - x, q.y - y) / radius;
-      if (r <= 1 && dither(px + Math.floor(t * 3), py, 0.45 - r * 0.3)) this.dot(E, px, py, r > 0.75 ? '#4a2a58' : '#6a3f7c');
+    // The pixels inside the disc (and their distance from its centre) are worked out once per placement on screen;
+    // only the flickering dither runs every frame (2026-10-24, performance).
+    const key = `${x.toFixed(1)},${y.toFixed(1)},${radius.toFixed(1)},${minX},${minY},${maxX},${maxY}`;
+    let disc = this.floorCache.get(key);
+    if (!disc) {
+      disc = [];
+      for (let py = minY; py <= maxY; py++) for (let px = minX; px <= maxX; px++) {
+        const q = unproject(px / PX, py / PX, this.view), r = Math.hypot(q.x - x, q.y - y) / radius;
+        if (r <= 1) disc.push(px, py, r);
+      }
+      if (this.floorCache.size > 48) this.floorCache.clear();
+      this.floorCache.set(key, disc);
     }
+    const edges: number[] = [], cores: number[] = [];
+    for (let i = 0; i < disc.length; i += 3) {
+      const px = disc[i]!, py = disc[i + 1]!, r = disc[i + 2]!;
+      if (dither(px + shift, py, density - r * falloff)) (r > edgeAt ? edges : cores).push(px, py);
+    }
+    const E = this.c.emissive; E.globalAlpha = alpha;
+    E.fillStyle = edge; for (let i = 0; i < edges.length; i += 2) E.fillRect(edges[i]!, edges[i + 1]!, 1, 1);
+    E.fillStyle = core; for (let i = 0; i < cores.length; i += 2) E.fillRect(cores[i]!, cores[i + 1]!, 1, 1);
     E.globalAlpha = 1;
+  }
+
+  /** 毒氣彈: a slow, dithered purple-green cloud with puffs. */
+  private gasZone(x: number, y: number, radius: number, t: number, remaining: number) {
+    const fade = Math.min(1, remaining / 1.2);
+    this.ditherFloor(x, y, radius, Math.floor(t * 3), 0.45, 0.3, 0.75, '#4a2a58', '#6a3f7c', 0.55 * fade);
     if (ANIMS.fx_toxic) for (let i = 0; i < 6; i++) {
       const a = i * 2.4 + t * 0.3, rr = Math.sqrt((i + 0.5) / 6) * radius * 0.8, p = this.at(x + Math.cos(a) * rr, y + Math.sin(a) * rr);
       this.sprite(this.animFrame('fx_toxic', t + i * 0.2), p.x, p.y, Math.max(0.5, p.scale / WALL_SCALE), this.glow());

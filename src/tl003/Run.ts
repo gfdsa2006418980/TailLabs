@@ -129,6 +129,8 @@ const elementOf = (tags: readonly Tag[]) => { for (const t of tags) { const e = 
 const BLAST_SPLASH_RADIUS = 40;
 /** 地雷陣 (2026-10-23): mines never expire; past this many the oldest are cleared, so the field stays cheap to check. */
 const MINE_CAP = 32;
+/** 延燒: at most this many spread fires at a time; more renew the nearest. */
+const WILDFIRE_CAP = 16;
 /** Share of max HP below which a hit makes no visual event. */
 const TINY_HIT = 0.001;
 /** Spatial grid cell size (model units) and a numeric key per cell; the field spans x −40…800, y 0…420. */
@@ -691,6 +693,16 @@ export class DefenseRun {
     }
     return k;
   }
+  /**
+   * Evolution 延燒 (2026-10-24, performance): a spread fire next to an existing one (or past WILDFIRE_CAP of them) only
+   * renews the nearest one's three seconds instead of adding another area. Returns whether it merged.
+   */
+  private mergeSpread(x: number, y: number) {
+    let nearest: FireZone | undefined, best = Infinity, count = 0;
+    for (const z of this.zones) if (z.spread) { count++; const d = Math.hypot(z.x - x, z.y - y); if (d < best) { best = d; nearest = z; } }
+    if (!nearest || (best > 30 && count < WILDFIRE_CAP)) return false;
+    nearest.remaining = Math.max(nearest.remaining, 3); return true;
+  }
   /** Lingering areas act on at most ZONE_CAP enemies, the nearest to their centre. */
   private igniteZone(zone: FireZone, pulse: boolean) {
     const contacts = new Set<number>();
@@ -790,7 +802,7 @@ export class DefenseRun {
       this.allies.push({ id: this.nextId++, x: enemy.x, y: enemy.y, power: enemy.maxHp * 1.5, age: 0 });
     // Evolution (wildfire): a burning death leaves a small fire behind. It only lights enemies that are not
     // burning yet, at 40% of the dead one's burn, so the chain dies out instead of running through every wave.
-    if (this.evolutions.molotov === 'wildfire' && this.isBurning(enemy))
+    if (this.evolutions.molotov === 'wildfire' && this.isBurning(enemy) && !this.mergeSpread(enemy.x, enemy.y))
       this.zones.push({ x: enemy.x, y: enemy.y, radius: 35, remaining: 3, power: this.skillPower * (B.SKILL_TUNING.molotov ?? 1) * THROWABLE.molotov / 6 * 0.4, pulseTimer: FIELD.step / 2, contacts: new Set(), spread: true });
     this.kills++; this.earn(reward); this.xp += enemy.xp;
     Object.assign(this.visual('kill', enemy.x, enemy.y, ENEMIES[enemy.kind].color, 22), { amount: reward, enemy: enemy.kind, target: enemy.id });

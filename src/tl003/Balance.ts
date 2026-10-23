@@ -197,7 +197,7 @@ export const CARD_PICK_LIMIT = 5;
  * Alive-zombie cap (2026-10-23, performance): past this many, a new zombie is not added; its HP, reward and XP
  * merge into the nearest zombie of the same kind, so the pressure stays and the cost of a frame is bounded.
  */
-export const ENEMY_CAP = 600;
+export const ENEMY_CAP = 400;
 export const BOSS_ESCORT = 6;
 
 /**
