@@ -43,6 +43,68 @@ test('TL003 cards: each card can be picked at most CARD_PICK_LIMIT times, then i
   assert.equal(kineticSeen(B.CARD_PICK_LIMIT), 0, 'at the limit it is never offered again');
 });
 
+// A late endless run: normal cards are capped, synergies/evolutions already owned,
+// and all recruit/throwable slots occupied. Leave selected normal cards below the cap if requested.
+const exhaustedRun = (remaining = []) => {
+  const run = running(); run.level = 166; run.elapsed = 1200;
+  run.recruit('gunner'); run.recruit('cryo'); run.learn('gas'); run.learn('emp');
+  for (const def of CARD_DEFS) {
+    if (def.kind === 'normal') for (let i = 0; i < B.CARD_PICK_LIMIT - (remaining.includes(def.id) ? 1 : 0); i++) run.selectedCards.push(makeCard(def));
+    if (def.kind === 'synergy') run.synergies.add(def.id);
+  }
+  for (const skill of run.skills) run.evolutions[skill.id] = 'already-evolved';
+  return run;
+};
+
+test('TL003 cards: an exhausted pool always fills three slots with repeatable airdrops', () => {
+  for (let slot = 0; slot < 3; slot++) {
+    const run = exhaustedRun();
+    for (let i = 0; i < 20; i++) {
+      const offers = levelUp(run);
+      assert.equal(offers.length, 3, `level ${run.level}`);
+      assert.ok(offers.every(c => c.id === 'airdrop' && c.rarity === 'common'));
+      const money = run.money, earned = run.totalEarnedMoney;
+      assert.equal(run.choose(offers[slot].id), true);
+      near(run.money - money, 25 * offers[slot].value * B.INCOME_GROWTH_PER_MINUTE ** run.pace);
+      near(run.totalEarnedMoney - earned, run.money - money);
+      assert.equal(run.phase, 'running');
+    }
+  }
+});
+
+test('TL003 cards: one or two remaining upgrades keep their slots, with money filling only the gaps', () => {
+  for (const remaining of [['kinetic'], ['kinetic', 'speed'], ['airdrop']]) {
+    const run = exhaustedRun(remaining); run.cardRandom = () => 0.8; // rare, including an ordinary rare airdrop
+    const offers = levelUp(run);
+    assert.equal(offers.length, 3);
+    for (const id of remaining) assert.ok(offers.some(c => c.id === id), id);
+    assert.ok(offers.filter(c => c.id !== 'airdrop').every(c => remaining.includes(c.id)));
+    const airdrops = offers.filter(c => c.id === 'airdrop');
+    assert.equal(airdrops.length, 3 - remaining.filter(id => id !== 'airdrop').length);
+    assert.ok(airdrops.every(c => c.value === airdrops[0].value && c.rarity === airdrops[0].rarity), 'duplicate IDs must grant the displayed reward');
+    const money = run.money;
+    assert.equal(run.choose(airdrops.at(-1).id), true);
+    near(run.money - money, 25 * airdrops.at(-1).value * B.INCOME_GROWTH_PER_MINUTE ** run.pace);
+  }
+});
+
+test('TL003 cards: exhausted banked picks and rerolls finish, then the next stage can start', () => {
+  const run = exhaustedRun(); run.wallHealth = run.wallMaxHealth = 1e12;
+  run.pendingPicks = 3; run.stageTime = run.stageLength; run.enemies = [];
+  run.advance(FIELD.step);
+  assert.equal(run.phase, 'choice'); assert.equal(run.pendingPicks, 2);
+  for (let i = 0; i < 3; i++) {
+    run.freeRerolls = 1;
+    assert.equal(run.reroll(), true); assert.equal(run.choices.length, 3);
+    assert.ok(run.choices.every(c => c.id === 'airdrop'));
+    assert.equal(run.reroll(), false);
+    assert.equal(run.choose(run.choices[2].id), true);
+    assert.equal(run.phase, i < 2 ? 'choice' : 'intermission');
+  }
+  assert.equal(run.pendingPicks, 0); assert.equal(run.choices.length, 0);
+  assert.equal(run.nextStage(), true); assert.equal(run.stage, 2); assert.equal(run.phase, 'running');
+});
+
 test('TL003 cards: about 100 picks fit in a 20-minute run; synergies and evolutions are level-gated', () => {
   let total = 0, level = 1; while (level < 101) { total += B.xpForLevel(level); level++; }
   assert.ok(total > 50000 && total < 90000, `XP for 100 picks ${total}`);

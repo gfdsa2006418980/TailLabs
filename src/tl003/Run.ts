@@ -470,8 +470,8 @@ export class DefenseRun {
   /** Recruit cards still on offer: kinds that could join the squad now. */
   private recruitPool() { return CARD_DEFS.filter(def => def.kind === 'merc' && def.merc && this.canRecruit(def.merc)); }
   /**
-   * Three different cards. Until the squad is full, 1–2 of them recruit a mercenary (two on the very
-   * first choice); a ready evolution takes a slot; the rest roll rarity and weighted picks.
+   * Three different cards, with repeatable airdrops filling any exhausted slots. Until the squad is
+   * full, 1–2 recruit a mercenary; a ready evolution takes a slot; the rest roll rarity and weighted picks.
    */
   private draw(): UpgradeCard[] {
     const offers: UpgradeCard[] = [], owned = this.ownedElements();
@@ -514,6 +514,12 @@ export class DefenseRun {
       for (const def of pool) { roll -= weight(def); if (roll <= 0) { pick = def; break; } }
       const lowest = pick.minRarity ?? 'common', highest = pick.maxRarity ?? 'rare';
       offers.push(makeCard(pick, pick.fixedRarity ?? (rank(rolled) < rank(lowest) ? lowest : rank(rolled) > rank(highest) ? highest : rolled), this.level));
+    }
+    if (offers.length < size) {
+      // Cash remains selectable even after its five ordinary picks. If already offered, copy its
+      // rarity/value too: choose(id) must award the same amount for every visible airdrop slot.
+      const cash = offers.find(c => c.id === 'airdrop') ?? makeCard(cardDef('airdrop')!, 'common', this.level);
+      while (offers.length < size) offers.push({ ...cash });
     }
     // Evolutions are guaranteed separately, so they do not count towards the rare-card pity.
     this.pity = offers.some(o => o.kind !== 'evolution' && rank(o.rarity ?? 'common') >= rank('rare')) ? 0 : this.pity + 1;
