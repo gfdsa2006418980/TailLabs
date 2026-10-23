@@ -42,14 +42,17 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
     <div class="hud-wall" aria-label="拒馬生命">${px('icon_fortify', 2)}<div class="hp-bar"><i id="wall-chip" class="hp-chip"></i><i id="wall-fill" class="hp-fill"></i><span id="wall-value">40</span></div></div>
     <div class="hud-clock" aria-label="本關剩餘時間與關卡"><strong id="time">00:00</strong><span id="wave">W01</span></div>
     <div class="hud-money" id="money-box" aria-label="資金">${px('icon_money', 2)}<strong id="money">0</strong></div>
-    <div class="hud-buttons"><button id="auto-upgrade" class="icon-button auto-button" aria-label="自動升級傭兵" aria-pressed="false" title="資金夠時自動升級最便宜的傭兵">自動</button><button id="speed" class="icon-button speed-button" aria-label="遊戲速度" aria-pressed="false">×1</button><button id="mute" class="icon-button" aria-label="音效開關" aria-pressed="false"></button><button id="pause" class="icon-button" aria-label="暫停遊戲" disabled>${icon('pause')}</button></div>
+    <div class="hud-buttons"><button id="speed" class="icon-button speed-button" aria-label="遊戲速度" aria-pressed="false">×1</button><button id="mute" class="icon-button" aria-label="音效開關" aria-pressed="false"></button><button id="pause" class="icon-button" aria-label="暫停遊戲" disabled>${icon('pause')}</button></div>
   </header>
   <div class="hud-xp" aria-label="戰術等級"><b id="level">1</b><div class="xp-track"><i id="xp-fill"></i></div><span id="dps" class="hud-dps" aria-label="本關每秒傷害"></span></div>
   <div id="boss-banner" class="boss-banner" role="status" hidden>${px('icon_wave', 2)}<div><strong id="boss-title">屍王</strong><div class="boss-track"><i id="boss-fill"></i></div></div><span id="boss-detail"></span></div>
   <div id="stage-bar" class="stage-bar" role="status" hidden><small class="stage-kicker">INTERMISSION</small><strong id="stage-title">第 1 關守住了</strong><b id="stage-dps" class="stage-dps"></b><span id="stage-detail"></span><span class="stage-hint">趁屍潮還沒到，升級傭兵、補強拒馬。</span><button id="next-stage" class="primary">迎戰下一關 ▶</button><button id="stage-abandon" class="quiet-button abandon">放棄這座城市</button></div>
   <div id="toast" class="toast" aria-hidden="true"></div>
   <nav class="hud-bottom" aria-label="傭兵與防守">
-    <button id="repair" class="side-action" aria-label="修復拒馬">${px('icon_repair', 2)}<span class="cost">${px('icon_money', 1)}<span id="repair-cost">6</span></span></button>
+    <div class="side-stack">
+      <button id="fortify" class="side-action" aria-label="補強拒馬">${px('icon_fortify', 2)}<span class="cost">${px('icon_money', 1)}<span id="fortify-cost">10</span></span></button>
+      <button id="repair" class="side-action" aria-label="修復拒馬">${px('icon_repair', 2)}<span class="cost">${px('icon_money', 1)}<span id="repair-cost">6</span></span></button>
+    </div>
     <div class="squad">${SLOTS.map(slot => `<div class="unit" id="unit-${slot}" data-slot="${slot}">
         <button class="orb" id="skill-${slot}" aria-label="主動投擲物欄 ${slot + 1}，按住拖曳至戰場" data-key="${slot + 1}">
           <span class="orb-ring"></span><span class="orb-tag" aria-hidden="true">主動</span><span class="orb-face">${px('icon_skill_grenade', 3)}</span><span class="orb-empty">+</span>
@@ -57,8 +60,12 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
         </button>
         <button class="chip" id="buy-${slot}" aria-label="升級傭兵欄 ${slot + 1}"><span class="chip-merc">${px('icon_merc_rifle', 1)}<b id="level-${slot}">1</b></span>${px('icon_money', 1)}<span id="buy-label-${slot}"></span></button>
       </div>`).join('')}</div>
-    <button id="fortify" class="side-action" aria-label="補強拒馬">${px('icon_fortify', 2)}<span class="cost">${px('icon_money', 1)}<span id="fortify-cost">10</span></span></button>
+    <div class="side-stack">
+      <button id="auto-pick-toggle" class="side-action auto-toggle" aria-label="自動選最高稀有度" aria-pressed="false" title="三選一自動選最高稀有度">${px('icon_auto_pick', 2)}<span class="toggle-label">自動選卡</span></button>
+      <button id="auto-upgrade" class="side-action auto-toggle" aria-label="自動升級傭兵" aria-pressed="false" title="資金夠時自動升級最便宜的傭兵">${px('icon_auto_upgrade', 2)}<span class="toggle-label">自動升級</span></button>
+    </div>
   </nav>
+  <div id="float-note" class="float-note" aria-live="polite"></div>
   <div id="drag-hint" class="drag-hint" hidden>${icon('hand')}</div>
 </main>
 <div class="rotate-hint" aria-hidden="true"><div class="rotate-phone"></div><p>請將手機轉為直向</p></div>
@@ -136,7 +143,7 @@ function showChoice() {
   const dps = run.choices.map(c => run.previewDps(c.id));
   showModal(choiceScreen(run.level, run.choices, run.canReroll ? { cost: run.rerollCost, affordable: run.money >= run.rerollCost } : undefined, run.picksLeft, tip, autoPick, run.pendingPicks, dps), 'choice', false);
   const autoBox = document.getElementById('auto-pick') as HTMLInputElement | null;
-  if (autoBox) autoBox.onchange = () => { autoPick = autoBox.checked; writeFlag(AUTO_PICK_KEY, autoPick ? '1' : '0'); if (autoPick) pickBest(); };
+  if (autoBox) autoBox.onchange = () => setAutoPick(autoBox.checked);
   if (autoPick) pickBest();
   clearTimeout(legendTimer);
   if (run.choices.some(c => c.rarity === 'legendary')) legendTimer = setTimeout(() => { if (run.phase === 'choice') { audio.play('bossDown'); camera.shake(0.25); } }, motionReduced() ? 0 : 900);
@@ -161,6 +168,13 @@ function showChoice() {
 }
 /** Auto pick: the highest rarity on offer (the leftmost among equals), once the cards have landed. */
 let autoPick = readFlag(AUTO_PICK_KEY) === '1';
+/** Auto pick is switched from the HUD toggle or the checkbox on the choice screen; both stay in step. */
+function setAutoPick(on: boolean) {
+  autoPick = on; writeFlag(AUTO_PICK_KEY, on ? '1' : '0');
+  floatNote(on ? '已開啟自動選最高稀有度' : '已關閉自動選最高稀有度', on);
+  const box = document.getElementById('auto-pick') as HTMLInputElement | null; if (box) box.checked = on;
+  if (on && run.phase === 'choice') pickBest();
+}
 const RARITY_RANK: Record<string, number> = { common: 0, uncommon: 1, rare: 2, legendary: 3 };
 function pickBest() {
   const owner = run, level = run.level, left = run.pendingPicks;
@@ -368,12 +382,19 @@ let autoUpgrade = readFlag(AUTO_UPGRADE_KEY) === '1';
 function syncAutoUpgrade() {
   const toggle = el('auto-upgrade');
   toggle.setAttribute('aria-pressed', String(autoUpgrade)); toggle.classList.toggle('on', autoUpgrade);
+  const pickToggle = el('auto-pick-toggle'); pickToggle.setAttribute('aria-pressed', String(autoPick)); pickToggle.classList.toggle('on', autoPick);
   if (!autoUpgrade || !shopOpen()) return;
   const kinds = run.mercenaries.map(m => m.kind).sort((a, b) => run.upgradeCost(a) - run.upgradeCost(b));
   const kind = kinds[0];
   if (kind && visibleMoney() >= run.upgradeCost(kind) && run.upgrade(kind)) { audio.play('buy'); pop(el(`buy-${run.mercenaries.findIndex(m => m.kind === kind)}`), 1.12, 220); }
 }
-el('auto-upgrade').onclick = () => { autoUpgrade = !autoUpgrade; writeFlag(AUTO_UPGRADE_KEY, autoUpgrade ? '1' : '0'); audio.play('pick'); sync(); };
+el('auto-upgrade').onclick = () => { autoUpgrade = !autoUpgrade; writeFlag(AUTO_UPGRADE_KEY, autoUpgrade ? '1' : '0'); audio.play('pick'); floatNote(autoUpgrade ? '已開啟自動升級' : '已關閉自動升級', autoUpgrade); sync(); };
+el('auto-pick-toggle').onclick = () => { setAutoPick(!autoPick); audio.play('pick'); sync(); };
+/** A short notice in the middle of the screen that rises and fades: confirms an automation switch. */
+function floatNote(message: string, on: boolean) {
+  const note = el('float-note'); note.textContent = message; note.classList.toggle('off', !on);
+  note.classList.remove('show'); void note.offsetWidth; note.classList.add('show');
+}
 /** The rest between stages: what comes next and the button that starts it. */
 function syncStageBar() {
   const bar = el('stage-bar'), open = run.phase === 'intermission' && !talents.active;

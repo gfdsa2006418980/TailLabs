@@ -45,9 +45,20 @@ body { background: #050607 }
 .xp-track { flex: 1; height: 4px; background: #0b0d0eaa; box-shadow: 0 0 0 1px #000 }
 .xp-track i { display: block; height: 100%; background: linear-gradient(90deg, var(--fire), var(--gold)); transition: width .35s var(--ease-out); box-shadow: 0 0 6px #ffd88488 }
 
-/* auto upgrade: a top-right toggle beside the speed button, lit like it when on */
-.auto-button { font: 700 11px/1 "Microsoft JhengHei", system-ui, sans-serif; color: var(--bone); letter-spacing: 0 }
-.auto-button.on { color: var(--ink); background: var(--gold); box-shadow: 0 0 10px #ffd88466 }
+/* Bottom corners (2026-10-23): fortify over repair on the left, the two automation toggles on the right. */
+.side-stack { display: grid; gap: 6px; align-content: end }
+.side-stack .side-action { min-height: 54px; padding: 6px 0 5px; gap: 3px }
+.auto-toggle .toggle-label { font: 700 10px/1 "Microsoft JhengHei", system-ui, sans-serif; color: var(--muted); letter-spacing: 0; white-space: nowrap }
+.auto-toggle .px-icon { opacity: .55; filter: grayscale(.7) }
+.auto-toggle.on { background: #3a3216ee; box-shadow: inset 0 0 0 2px var(--gold), 0 0 10px #ffd88455 }
+.auto-toggle.on .px-icon { opacity: 1; filter: none }
+.auto-toggle.on .toggle-label { color: var(--gold) }
+/* The notice for an automation switch: rises from the middle of the screen and fades. */
+.float-note { position: absolute; z-index: 4; left: 50%; top: 46%; transform: translate(-50%, 0); padding: 8px 14px; font: 700 14px/1.2 "Microsoft JhengHei", system-ui, sans-serif; color: var(--ink); background: var(--gold); clip-path: var(--notch); opacity: 0; pointer-events: none; white-space: nowrap }
+.float-note.off { color: #eef0e6; background: #2b3a31 }
+.float-note.show { animation: note-rise 1.6s var(--ease-out) both }
+@keyframes note-rise { 0% { opacity: 0; transform: translate(-50%, 10px) } 15% { opacity: 1; transform: translate(-50%, 0) } 70% { opacity: 1 } 100% { opacity: 0; transform: translate(-50%, -48px) } }
+.reduce-motion .float-note.show { animation-duration: 1.2s }
 
 /* ---------- rest between stages ---------- */
 .stage-bar {
