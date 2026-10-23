@@ -74,7 +74,7 @@ body { background: #050607 }
 .stage-bar .stage-hint { color: var(--muted); font-size: 12px }
 .stage-bar .primary { width: 100%; margin-top: 4px }
 /* the way out stays quiet here: a small underlined link under the main button */
-.stage-bar .quiet-button.abandon { min-height: 36px; margin-top: 0; padding: 6px; font-size: 12px; color: #b9a39c; box-shadow: none; text-decoration: underline; text-underline-offset: 3px }
+.stage-bar .quiet-button.abandon { min-height: 36px; margin-top: 0; padding: 6px; font-size: 12px; color: #b9a39c; background: transparent; box-shadow: none; text-decoration: underline; text-underline-offset: 3px }
 .stage-bar .quiet-button.abandon.armed { color: #fff; background: #87372f; text-decoration: none }
 
 /* ---------- boss banner ---------- */

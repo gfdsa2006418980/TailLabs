@@ -164,8 +164,6 @@ html.reduce-motion .pick-cover { display: none }
 .kind-curse .pick-stat { color: #ffb3a8 }
 .choice-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px 14px }
 .reroll-used { color: var(--muted); font-size: 12px }
-.auto-pick { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; color: #d9dccf; font-size: 13px; cursor: pointer }
-.auto-pick input { width: 18px; height: 18px; accent-color: var(--gold) }
 
 /* v2: card DPS estimate, damage breakdown, danger levels */
 .pick-dps { display: block; margin-top: 2px; font: 700 11px/1.2 Consolas, monospace }

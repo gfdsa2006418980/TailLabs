@@ -31,7 +31,7 @@ export function deployScreen(effects: PermanentEffects, talentPoints: number, be
     ${showTips ? `<ul class="deploy-tips">${tips.map(([icon, label]) => `<li>${px(icon, 2)}<span>${label}</span></li>`).join('')}</ul>` : ''}
     <div class="screen-actions">
       ${danger.unlocked > 0 ? `<div class="danger-pick" role="group" aria-label="危險等級">${levels.map(d => `<button type="button" data-danger="${d}" aria-pressed="${d === danger.selected}">${d === 0 ? '一般' : '危險 ' + d}</button>`).join('')}</div>
-      <p class="danger-note">${danger.selected === 0 ? '一般難度。' : `每過一關喪屍多強一點，到第 20 關等於往後推 ${danger.selected * 10} 關；喪屍血量 ×${Number((1.5 ** danger.selected).toFixed(2))}、防禦 ×${Number((1.2 ** danger.selected).toFixed(2))}。戰功 ×${danger.selected + 1}。`}</p>` : ''}
+      <p class="danger-note">${danger.selected === 0 ? '一般難度。' : `喪屍更強，戰功 ×${danger.selected + 1}。`}</p>` : ''}
       <button id="start" class="primary go">部署 <span>▶</span></button>
       <button id="open-talents" class="camp-button">${px('icon_star', 2)}<b>指揮藍圖</b>${talentPoints > 0 ? `<span class="badge">${formatNumber(talentPoints)}</span>` : '<span></span>'}</button>
       ${bestWave > 0 ? `<p class="best">最佳 <b>第 ${bestWave} 關</b></p>` : ''}
@@ -58,7 +58,7 @@ export const cardIcon = (id: string) => {
 };
 const KIND_TAG: Record<string, string> = { synergy: '連動', evolution: '質變', curse: '詛咒', merc: '招募', skill: '主動' };
 /** `tip`: the new-player guide's note for the first pick (HTML). */
-export function choiceScreen(level: number, cards: readonly UpgradeCard[], reroll?: { cost: number; affordable: boolean }, picks = 1, tip?: string, autoPick = false, queued = 0, dps: readonly number[] = []) {
+export function choiceScreen(level: number, cards: readonly UpgradeCard[], reroll?: { cost: number; affordable: boolean }, picks = 1, tip?: string, queued = 0, dps: readonly number[] = []) {
   const market = cards.length > 3 || picks > 1;
   return `<div class="screen choice-screen${market ? ' market' : ''}">
     <div class="choice-head"><small>${market ? 'BLACK MARKET' : 'FIELD SUPPLY'}</small><b id="modal-title">Lv ${level}<span class="sr-only">，戰地補給，選擇一張</span></b>${market ? `<span class="picks-left">再選 ${picks} 張</span>` : queued > 0 ? `<span class="picks-left">還有 ${queued} 次</span>` : ''}</div>
@@ -82,7 +82,6 @@ export function choiceScreen(level: number, cards: readonly UpgradeCard[], rerol
     <p class="pick-detail" id="pick-detail" aria-live="polite"></p>
     <div class="choice-foot">
       ${reroll ? `<button id="reroll" class="reroll" ${reroll.affordable ? '' : 'disabled'}>重抽（限 1 次）${reroll.cost === 0 ? '<b>免費</b>' : `${px('icon_money', 1)} ${formatNumber(reroll.cost)}`}</button>` : '<span class="reroll-used">本次已重抽</span>'}
-      <label class="auto-pick"><input type="checkbox" id="auto-pick" ${autoPick ? 'checked' : ''}> 自動選最高稀有度</label>
     </div>
   </div>`;
 }

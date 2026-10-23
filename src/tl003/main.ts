@@ -141,9 +141,7 @@ function showChoice() {
   choiceResolving = false;
   const tip = coach.enabled && !coach.has('choice') ? CHOICE_TIP : undefined;
   const dps = run.choices.map(c => run.previewDps(c.id));
-  showModal(choiceScreen(run.level, run.choices, run.canReroll ? { cost: run.rerollCost, affordable: run.money >= run.rerollCost } : undefined, run.picksLeft, tip, autoPick, run.pendingPicks, dps), 'choice', false);
-  const autoBox = document.getElementById('auto-pick') as HTMLInputElement | null;
-  if (autoBox) autoBox.onchange = () => setAutoPick(autoBox.checked);
+  showModal(choiceScreen(run.level, run.choices, run.canReroll ? { cost: run.rerollCost, affordable: run.money >= run.rerollCost } : undefined, run.picksLeft, tip, run.pendingPicks, dps), 'choice', false);
   if (autoPick) pickBest();
   clearTimeout(legendTimer);
   if (run.choices.some(c => c.rarity === 'legendary')) legendTimer = setTimeout(() => { if (run.phase === 'choice') { audio.play('bossDown'); camera.shake(0.25); } }, motionReduced() ? 0 : 900);
@@ -172,7 +170,6 @@ let autoPick = readFlag(AUTO_PICK_KEY) === '1';
 function setAutoPick(on: boolean) {
   autoPick = on; writeFlag(AUTO_PICK_KEY, on ? '1' : '0');
   floatNote(on ? '已開啟自動選最高稀有度' : '已關閉自動選最高稀有度', on);
-  const box = document.getElementById('auto-pick') as HTMLInputElement | null; if (box) box.checked = on;
   if (on && run.phase === 'choice') pickBest();
 }
 const RARITY_RANK: Record<string, number> = { common: 0, uncommon: 1, rare: 2, legendary: 3 };
@@ -402,12 +399,21 @@ function syncStageBar() {
   if (!open) return;
   const next = run.stage + 1;
   text('stage-title', run.stage === 0 ? '佈防準備' : `第 ${run.stage} 關守住了`);
-  el('next-stage').textContent = run.stage === 0 ? '開始防守 ▶' : `迎戰第 ${next} 關 ▶`;
+  el('next-stage').textContent = run.stage === 0 ? '開始防守 ▶' : `迎戰第 ${next} 關 ▶ ${Math.max(1, Math.ceil(REST_IDLE - restIdle))}`;
   const growth = run.prevStageDps > 0 ? run.lastStageDps / run.prevStageDps - 1 : 0;
   text('stage-dps', run.stage > 0 ? `本關 DPS ${formatNumber(run.lastStageDps)}${run.prevStageDps > 0 ? `（比上一關 ${growth >= 0 ? '+' : ''}${(growth * 100).toFixed(0)}%）` : ''}` : '');
   text('stage-detail', `第 ${next} 關：${next === B.STAGE_COUNT ? `${B.stageSeconds(next)} 秒後超級屍王來襲` : B.isBossStage(next) ? `${B.stageSeconds(next)} 秒後屍王來襲` : `撐過 ${B.stageSeconds(next)} 秒的屍潮`}`);
 }
 function nextStage() { if (run.nextStage()) { audio.play('pick'); displayedPhase = ''; sync(); } }
+/** Seconds without a tap or key in the rest after a stage before the next stage starts by itself (2026-10-23). */
+const REST_IDLE = 5;
+let restIdle = 0;
+for (const type of ['pointerdown', 'keydown'] as const) document.addEventListener(type, () => { restIdle = 0; }, { capture: true });
+function advanceRest(realDt: number) {
+  if (run.phase !== 'intermission' || run.stage === 0 || dialog.open || talents.active) { restIdle = 0; return; }
+  restIdle += realDt;
+  if (restIdle >= REST_IDLE) { restIdle = 0; nextStage(); }
+}
 el('next-stage').onclick = nextStage;
 bindAbandon(el<HTMLButtonElement>('stage-abandon'));
 /** The run's money minus coins still flying in: what the counter shows and what buttons offer. */
@@ -636,7 +642,7 @@ function step(now: number) {
   else if (aimClient) Object.assign(aim, battlefield.point(aimClient.x, aimClient.y));
   // A coaching bubble holds the battle until it is answered.
   if (!coach.holding) run.advance(realDt * view.timeScale * gameSpeed);
-  uiClock += realDt; react(realDt); guide(); coach.place();
+  uiClock += realDt; react(realDt); guide(); coach.place(); advanceRest(realDt);
   if (uiClock >= 0.08 || displayedPhase !== phaseKey()) { sync(); uiClock = 0; }
   tickMoney(realDt); coinTarget();
   battlefield.draw(run, aim, view, realDt);
