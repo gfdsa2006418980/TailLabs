@@ -32,10 +32,10 @@ export function deployScreen(effects: PermanentEffects, talentPoints: number, be
     <div class="screen-actions">
       ${danger.unlocked > 0 ? `<div class="danger-pick" role="group" aria-label="危險等級">${levels.map(d => `<button type="button" data-danger="${d}" aria-pressed="${d === danger.selected}">${d === 0 ? '一般' : '危險 ' + d}</button>`).join('')}</div>
       <p class="danger-note">${danger.selected === 0 ? '一般難度。' : `喪屍更強，戰功 ×${danger.selected + 1}。`}</p>` : ''}
-      <button id="start" class="primary go">部署 <span>▶</span></button>
+      <button id="start" class="primary go">部署 <span>${px('icon_play', 2)}</span></button>
       <button id="open-talents" class="camp-button">${px('icon_star', 2)}<b>指揮藍圖</b>${talentPoints > 0 ? `<span class="badge">${formatNumber(talentPoints)}</span>` : '<span></span>'}</button>
       ${bestWave > 0 ? `<p class="best">最佳 <b>第 ${bestWave} 關</b></p>` : ''}
-      <button id="replay-briefing" class="briefing-button" type="button">▶ 作戰簡報</button>
+      <button id="replay-briefing" class="briefing-button" type="button">${px('icon_play_light', 1)} 作戰簡報</button>
     </div>
   </div>`;
 }

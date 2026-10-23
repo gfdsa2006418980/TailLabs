@@ -626,6 +626,9 @@ sprite("icon_auto_pick", IC, (c) => {
   c.rect(4, 1, 6, 12, "O"); c.rect(5, 2, 4, 10, "Y");
   c.poly([7, 4, 8, 6, 9, 6, 8, 8, 8, 10, 7, 9, 6, 10, 6, 8, 5, 6, 6, 6], "w");
 });
+// Play: a chunky arrowhead for the go buttons, dark for the gold buttons and light for the dark ones.
+sprite("icon_play", { w: 8, h: 9, outline: "k" }, (c) => { c.poly([0, 0, 7, 4, 0, 8], "q"); c.poly([1, 2, 4, 4, 1, 6], "Q"); });
+sprite("icon_play_light", { w: 8, h: 9, outline: "k" }, (c) => { c.poly([0, 0, 7, 4, 0, 8], "T"); c.poly([1, 2, 4, 4, 1, 6], "w"); });
 sprite("icon_money", { w: 9, h: 9, outline: "k" }, (c) => { c.circ(4, 4, 4, "O"); c.circ(4, 4, 3, "Y"); c.vline(4, 2, 5, "o"); });
 sprite("icon_star", { w: 9, h: 9, outline: "k" }, (c) => { c.poly([4, 0, 5, 3, 8, 3, 6, 5, 7, 8, 4, 6, 1, 8, 2, 5, 0, 3, 3, 3], "O"); c.poly([4, 1, 5, 4, 4, 5, 3, 4], "Y"); c.px(4, 2, "w"); });
 sprite("icon_wave", IC, (c) => { c.circ(7, 6, 6, "w"); c.rect(4, 10, 7, 4, "w"); c.rect(3, 5, 3, 3, "k"); c.rect(8, 5, 3, 3, "k"); c.px(4, 6, "R"); c.px(9, 6, "R"); c.rect(5, 12, 1, 2, "k"); c.rect(7, 12, 1, 2, "k"); c.rect(9, 12, 1, 2, "k"); });

@@ -46,7 +46,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
   </header>
   <div class="hud-xp" aria-label="戰術等級"><b id="level">1</b><div class="xp-track"><i id="xp-fill"></i></div><span id="dps" class="hud-dps" aria-label="本關每秒傷害"></span></div>
   <div id="boss-banner" class="boss-banner" role="status" hidden>${px('icon_wave', 2)}<div><strong id="boss-title">屍王</strong><div class="boss-track"><i id="boss-fill"></i></div></div><span id="boss-detail"></span></div>
-  <div id="stage-bar" class="stage-bar" role="status" hidden><small class="stage-kicker">INTERMISSION</small><strong id="stage-title">第 1 關守住了</strong><b id="stage-dps" class="stage-dps"></b><span id="stage-detail"></span><span class="stage-hint">趁屍潮還沒到，升級傭兵、補強拒馬。</span><button id="next-stage" class="primary">迎戰下一關 ▶</button><button id="stage-abandon" class="quiet-button abandon">放棄這座城市</button></div>
+  <div id="stage-bar" class="stage-bar" role="status" hidden><small class="stage-kicker">INTERMISSION</small><strong id="stage-title">第 1 關守住了</strong><b id="stage-dps" class="stage-dps"></b><span id="stage-detail"></span><span class="stage-hint">趁屍潮還沒到，升級傭兵、補強拒馬。</span><button id="next-stage" class="primary">迎戰下一關</button><button id="stage-abandon" class="quiet-button abandon">放棄這座城市</button></div>
   <div id="toast" class="toast" aria-hidden="true"></div>
   <nav class="hud-bottom" aria-label="傭兵與防守">
     <div class="side-stack">
@@ -62,7 +62,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
       </div>`).join('')}</div>
     <div class="side-stack">
       <button id="auto-pick-toggle" class="side-action auto-toggle" aria-label="自動選最高稀有度" aria-pressed="false" title="三選一自動選最高稀有度">${px('icon_auto_pick', 2)}<span class="toggle-label">自動選卡</span></button>
-      <button id="auto-upgrade" class="side-action auto-toggle" aria-label="自動升級傭兵" aria-pressed="false" title="資金夠時自動升級最便宜的傭兵">${px('icon_auto_upgrade', 2)}<span class="toggle-label">自動升級</span></button>
+      <button id="auto-upgrade" class="side-action auto-toggle" aria-label="自動升級傭兵與拒馬" aria-pressed="false" title="資金夠時自動升級傭兵與補強拒馬（先買便宜的）">${px('icon_auto_upgrade', 2)}<span class="toggle-label">自動升級</span></button>
     </div>
   </nav>
   <div id="float-note" class="float-note" aria-live="polite"></div>
@@ -164,7 +164,7 @@ function showChoice() {
     button.onclick = () => resolveChoice(i);
   });
 }
-/** Auto pick: the highest rarity on offer (the leftmost among equals), once the cards have landed. */
+/** Auto pick: the highest rarity on offer (a random one among equals), once the cards have landed. */
 let autoPick = readFlag(AUTO_PICK_KEY) === '1';
 /** Auto pick is switched from the HUD toggle or the checkbox on the choice screen; both stay in step. */
 function setAutoPick(on: boolean) {
@@ -177,9 +177,11 @@ function pickBest() {
   const owner = run, level = run.level, left = run.pendingPicks;
   setTimeout(() => {
     if (!autoPick || run !== owner || run.phase !== 'choice' || run.level !== level || run.pendingPicks !== left) return;
-    let best = 0;
-    run.choices.forEach((c, i) => { if (RARITY_RANK[c.rarity ?? 'common']! > RARITY_RANK[run.choices[best]!.rarity ?? 'common']!) best = i; });
-    resolveChoice(best);
+    // Among several cards of the top rarity, one at random (2026-10-24), not always the leftmost.
+    const rank = (i: number) => RARITY_RANK[run.choices[i]!.rarity ?? 'common']!;
+    const indices = run.choices.map((_, i) => i), top = Math.max(...indices.map(rank));
+    const best = indices.filter(i => rank(i) === top);
+    resolveChoice(best[Math.floor(Math.random() * best.length)]!);
   }, motionReduced() ? 0 : 700);
 }
 function resolveChoice(index: number) {
@@ -381,9 +383,11 @@ function syncAutoUpgrade() {
   toggle.setAttribute('aria-pressed', String(autoUpgrade)); toggle.classList.toggle('on', autoUpgrade);
   const pickToggle = el('auto-pick-toggle'); pickToggle.setAttribute('aria-pressed', String(autoPick)); pickToggle.classList.toggle('on', autoPick);
   if (!autoUpgrade || !shopOpen()) return;
-  const kinds = run.mercenaries.map(m => m.kind).sort((a, b) => run.upgradeCost(a) - run.upgradeCost(b));
-  const kind = kinds[0];
-  if (kind && visibleMoney() >= run.upgradeCost(kind) && run.upgrade(kind)) { audio.play('buy'); pop(el(`buy-${run.mercenaries.findIndex(m => m.kind === kind)}`), 1.12, 220); }
+  // The cheapest of the mercenary upgrades and the barricade (fortify grows ×1.35 a buy against ×1.15, so they take turns).
+  const options: { cost: number; buy: () => boolean; button: HTMLElement }[] = run.mercenaries.map((m, slot) => ({ cost: run.upgradeCost(m.kind), buy: () => run.upgrade(m.kind), button: el(`buy-${slot}`) }));
+  if (run.canFortify) options.push({ cost: run.fortifyCost, buy: () => run.fortify(), button: el('fortify') });
+  const best = options.sort((a, b) => a.cost - b.cost)[0];
+  if (best && visibleMoney() >= best.cost && best.buy()) { audio.play('buy'); pop(best.button, 1.12, 220); }
 }
 el('auto-upgrade').onclick = () => { autoUpgrade = !autoUpgrade; writeFlag(AUTO_UPGRADE_KEY, autoUpgrade ? '1' : '0'); audio.play('pick'); floatNote(autoUpgrade ? '已開啟自動升級' : '已關閉自動升級', autoUpgrade); sync(); };
 el('auto-pick-toggle').onclick = () => { setAutoPick(!autoPick); audio.play('pick'); sync(); };
@@ -399,7 +403,10 @@ function syncStageBar() {
   if (!open) return;
   const next = run.stage + 1;
   text('stage-title', run.stage === 0 ? '佈防準備' : `第 ${run.stage} 關守住了`);
-  el('next-stage').textContent = run.stage === 0 ? '開始防守 ▶' : `迎戰第 ${next} 關 ▶ ${Math.max(1, Math.ceil(REST_IDLE - restIdle))}`;
+  // Rebuilt only when the words change (it ticks every UI update): the label, the drawn arrow, the auto-start countdown.
+  const label = run.stage === 0 ? '開始防守' : `迎戰第 ${next} 關`, count = run.stage === 0 ? '' : String(Math.max(1, Math.ceil(REST_IDLE - restIdle)));
+  const button = el('next-stage'), key = label + '|' + count;
+  if (button.dataset.key !== key) { button.dataset.key = key; button.innerHTML = `<span>${label}</span>${px('icon_play', 2)}${count ? `<b class="rest-count">${count}</b>` : ''}`; }
   const growth = run.prevStageDps > 0 ? run.lastStageDps / run.prevStageDps - 1 : 0;
   text('stage-dps', run.stage > 0 ? `本關 DPS ${formatNumber(run.lastStageDps)}${run.prevStageDps > 0 ? `（比上一關 ${growth >= 0 ? '+' : ''}${(growth * 100).toFixed(0)}%）` : ''}` : '');
   text('stage-detail', `第 ${next} 關：${next === B.STAGE_COUNT ? `${B.stageSeconds(next)} 秒後超級屍王來襲` : B.isBossStage(next) ? `${B.stageSeconds(next)} 秒後屍王來襲` : `撐過 ${B.stageSeconds(next)} 秒的屍潮`}`);

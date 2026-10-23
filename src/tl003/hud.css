@@ -267,3 +267,7 @@ html, body, button, canvas { touch-action: manipulation }
   .hud-buttons { gap: 3px }
   .hud-buttons .icon-button { width: 30px; height: 30px }
 }
+
+/* the go button in the rest: label, drawn arrow, countdown */
+#next-stage { display: flex; align-items: center; justify-content: center; gap: 8px }
+#next-stage .rest-count { min-width: 1.4em; padding: 2px 6px; font: 700 13px/1 Consolas, monospace; color: var(--gold); background: var(--ink) }

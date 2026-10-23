@@ -36,7 +36,7 @@ export function storyScreen(kicker: string, done: string) {
     <div class="story-lines" id="story-lines" aria-live="polite"></div>
     <div class="story-actions">
       <button id="story-skip" class="story-skip" type="button">略過 ▸▸</button>
-      <button id="story-done" class="primary go" type="button" hidden>${done} <span>▶</span></button>
+      <button id="story-done" class="primary go" type="button" hidden>${done} <span><i class="px-icon" data-icon="icon_play" style="--px:2px" aria-hidden="true"></i></span></button>
     </div>
   </div>`;
 }
