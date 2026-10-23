@@ -51,10 +51,10 @@ export const cardIcon = (id: string) => {
 };
 const KIND_TAG: Record<string, string> = { synergy: '連動', evolution: '質變', curse: '詛咒', merc: '招募', skill: '主動' };
 /** `tip`: the new-player guide's note for the first pick (HTML). */
-export function choiceScreen(level: number, cards: readonly UpgradeCard[], reroll?: { cost: number; affordable: boolean }, picks = 1, tip?: string) {
+export function choiceScreen(level: number, cards: readonly UpgradeCard[], reroll?: { cost: number; affordable: boolean }, picks = 1, tip?: string, autoPick = false, queued = 0) {
   const market = cards.length > 3 || picks > 1;
   return `<div class="screen choice-screen${market ? ' market' : ''}">
-    <div class="choice-head"><small>${market ? 'BLACK MARKET' : 'FIELD SUPPLY'}</small><b id="modal-title">Lv ${level}<span class="sr-only">，戰地補給，選擇一張</span></b>${market ? `<span class="picks-left">再選 ${picks} 張</span>` : ''}</div>
+    <div class="choice-head"><small>${market ? 'BLACK MARKET' : 'FIELD SUPPLY'}</small><b id="modal-title">Lv ${level}<span class="sr-only">，戰地補給，選擇一張</span></b>${market ? `<span class="picks-left">再選 ${picks} 張</span>` : queued > 0 ? `<span class="picks-left">還有 ${queued} 次</span>` : ''}</div>
     ${tip ? `<p class="choice-tip">${tip}</p>` : ''}
     <div class="pick-row">${cards.map((card, i) => {
       const rarity = card.rarity ?? 'common', tag = KIND_TAG[card.kind ?? ''];
@@ -72,7 +72,10 @@ export function choiceScreen(level: number, cards: readonly UpgradeCard[], rerol
     </div>`;
     }).join('')}</div>
     <p class="pick-detail" id="pick-detail" aria-live="polite"></p>
-    ${reroll ? `<button id="reroll" class="reroll" ${reroll.affordable ? '' : 'disabled'}>重抽 ${reroll.cost === 0 ? '<b>免費</b>' : `${px('icon_money', 1)} ${formatNumber(reroll.cost)}`}</button>` : ''}
+    <div class="choice-foot">
+      ${reroll ? `<button id="reroll" class="reroll" ${reroll.affordable ? '' : 'disabled'}>重抽（限 1 次）${reroll.cost === 0 ? '<b>免費</b>' : `${px('icon_money', 1)} ${formatNumber(reroll.cost)}`}</button>` : '<span class="reroll-used">本次已重抽</span>'}
+      <label class="auto-pick"><input type="checkbox" id="auto-pick" ${autoPick ? 'checked' : ''}> 自動選最高稀有度</label>
+    </div>
   </div>`;
 }
 

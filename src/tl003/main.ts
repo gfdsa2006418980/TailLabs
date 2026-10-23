@@ -9,6 +9,7 @@ import { formatNumber } from './Combat.ts';
 import { DefenseRun } from './Run.ts';
 import { LocalMetaMirror, META_KEY } from './Meta.ts';
 import { TalentScreen } from './TalentScreen.ts';
+import * as B from './Balance.ts';
 import { cardIcon, choiceScreen, deployScreen, formatCount, resultScreen } from './Screens.ts';
 import type { Report } from './Screens.ts';
 import { countUp, motionReduced, pop, setReducedMotion } from './Motion.ts';
@@ -39,12 +40,13 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
   <canvas id="battlefield" aria-label="喪屍由畫面上方遠處逐漸逼近下方拒馬，傭兵在下方自動射擊。選取投擲物後可在戰場指定目標。" tabindex="0"></canvas>
   <header class="hud-top">
     <div class="hud-wall" aria-label="拒馬生命">${px('icon_fortify', 2)}<div class="hp-bar"><i id="wall-chip" class="hp-chip"></i><i id="wall-fill" class="hp-fill"></i><span id="wall-value">40</span></div></div>
-    <div class="hud-clock" aria-label="堅守時間"><strong id="time">00:00</strong><span id="wave">W01</span></div>
+    <div class="hud-clock" aria-label="本關剩餘時間與關卡"><strong id="time">00:00</strong><span id="wave">W01</span></div>
     <div class="hud-money" id="money-box" aria-label="資金">${px('icon_money', 2)}<strong id="money">0</strong></div>
     <div class="hud-buttons"><button id="speed" class="icon-button speed-button" aria-label="遊戲速度" aria-pressed="false">×1</button><button id="mute" class="icon-button" aria-label="音效開關" aria-pressed="false"></button><button id="pause" class="icon-button" aria-label="暫停遊戲" disabled>${icon('pause')}</button></div>
   </header>
   <div class="hud-xp" aria-label="戰術等級"><b id="level">1</b><div class="xp-track"><i id="xp-fill"></i></div></div>
   <div id="boss-banner" class="boss-banner" role="status" hidden>${px('icon_wave', 2)}<div><strong id="boss-title">屍王</strong><div class="boss-track"><i id="boss-fill"></i></div></div><span id="boss-detail"></span></div>
+  <div id="stage-bar" class="stage-bar" role="status" hidden><strong id="stage-title">第 1 關完成</strong><span id="stage-detail"></span><button id="next-stage" class="primary">下一關 ▶</button><button id="stage-abandon" class="quiet-button abandon">放棄本局，返回標題</button></div>
   <div id="toast" class="toast" aria-hidden="true"></div>
   <nav class="hud-bottom" aria-label="傭兵與防守">
     <button id="repair" class="side-action" aria-label="修復拒馬">${px('icon_repair', 2)}<span class="cost">${px('icon_money', 1)}<span id="repair-cost">6</span></span></button>
@@ -55,6 +57,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
         </button>
         <button class="chip" id="buy-${slot}" aria-label="升級傭兵欄 ${slot + 1}"><span class="chip-merc">${px('icon_merc_rifle', 1)}<b id="level-${slot}">1</b></span>${px('icon_money', 1)}<span id="buy-label-${slot}"></span></button>
       </div>`).join('')}</div>
+    <button id="auto-upgrade" class="auto-toggle" aria-pressed="false" title="資金夠時自動升級最便宜的傭兵">自動升級</button>
     <button id="fortify" class="side-action" aria-label="補強拒馬">${px('icon_fortify', 2)}<span class="cost">${px('icon_money', 1)}<span id="fortify-cost">10</span></span></button>
   </nav>
   <div id="drag-hint" class="drag-hint" hidden>${icon('hand')}</div>
@@ -69,6 +72,7 @@ let storage: Storage | undefined;
 try { storage = window.localStorage; } catch { /* Memory-only fallback. */ }
 const MOTION_KEY = 'taillabs.tl003.motion.v1', HINT_KEY = 'taillabs.tl003.hint.v1', TIPS_KEY = 'taillabs.tl003.tips.v1', SPEED_KEY = 'taillabs.tl003.speed.v1';
 /** New-player guide: the opening briefing, the first fall, and the coach's finished steps. */
+const AUTO_PICK_KEY = 'taillabs.tl003.autopick.v1', AUTO_UPGRADE_KEY = 'taillabs.tl003.autoupgrade.v1';
 const INTRO_KEY = 'taillabs.tl003.intro.v1', FALLEN_KEY = 'taillabs.tl003.fallen.v1', COACH_KEY = 'taillabs.tl003.coach.v1';
 const readFlag = (key: string) => { try { return storage?.getItem(key) ?? null; } catch { return null; } };
 const writeFlag = (key: string, value: string) => { try { storage?.setItem(key, value); } catch { /* convenience only */ } };
@@ -88,20 +92,21 @@ const coach = new Coach(storage, COACH_KEY);
 /** Game time of the last coaching bubble, so steps never arrive back to back. */
 let coachAt = -Infinity;
 const talents = new TalentScreen(dialog, meta, {
-  close: () => { if (run.phase === 'ready') newRun(); displayedPhase = ''; sync(); },
+  // Closing the blueprint goes back to the title (deploy screen); a finished run is left behind.
+  close: () => { if (run.phase === 'ready' || run.phase === 'over' || run.phase === 'victory') reset(); else { displayedPhase = ''; sync(); } },
   deploy: () => startRun(),
 });
 let displayedPhase = '', previous = performance.now(), uiClock = 0, shownMoney = 0;
 /** A pick can level up again at once: each level's choice is its own screen. */
 let cuedRun: DefenseRun | undefined, cuedKey = '';
-const phaseKey = () => run.phase === 'choice' ? `choice:${run.level}:${run.picksLeft}:${run.choices.length}` : run.phase;
+const phaseKey = () => run.phase === 'choice' ? `choice:${run.level}:${run.pendingPicks}:${run.picksLeft}:${run.choices.length}` : run.phase === 'intermission' ? `intermission:${run.stage}` : run.phase;
 const clock = (seconds: number) => `${Math.floor(seconds / 60).toString().padStart(2, '0')}:${Math.floor(seconds % 60).toString().padStart(2, '0')}`;
 function newRun() { run = new DefenseRun(undefined, meta.effects); camera.reset(); battlefield.clear(); shownMoney = 0; shownSquad = ''; coach.dismiss(); coachAt = -Infinity; resetWatchers(); }
 function reset() { meta.refresh(); aim = undefined; newRun(); displayedPhase = ''; sync(); }
 function startRun() {
   if (!meta.beginRun()) return;
   writeFlag(TIPS_KEY, '1');
-  aim = undefined; newRun(); run.start(); displayedPhase = ''; sync();
+  aim = undefined; newRun(); run.start(true); displayedPhase = ''; sync();
 }
 battlefield.feedback.onCoin = () => { pop(el('money-box'), 1.14, 140); audio.play('coin'); };
 
@@ -126,7 +131,10 @@ const CHOICE_TIP = '<b>戰地補給：</b>每次升級從三張裡選一張。�
 function showChoice() {
   choiceResolving = false;
   const tip = coach.enabled && !coach.has('choice') ? CHOICE_TIP : undefined;
-  showModal(choiceScreen(run.level, run.choices, run.canReroll ? { cost: run.rerollCost, affordable: run.money >= run.rerollCost } : undefined, run.picksLeft, tip), 'choice', false);
+  showModal(choiceScreen(run.level, run.choices, run.canReroll ? { cost: run.rerollCost, affordable: run.money >= run.rerollCost } : undefined, run.picksLeft, tip, autoPick, run.pendingPicks), 'choice', false);
+  const autoBox = document.getElementById('auto-pick') as HTMLInputElement | null;
+  if (autoBox) autoBox.onchange = () => { autoPick = autoBox.checked; writeFlag(AUTO_PICK_KEY, autoPick ? '1' : '0'); if (autoPick) pickBest(); };
+  if (autoPick) pickBest();
   clearTimeout(legendTimer);
   if (run.choices.some(c => c.rarity === 'legendary')) legendTimer = setTimeout(() => { if (run.phase === 'choice') { audio.play('bossDown'); camera.shake(0.25); } }, motionReduced() ? 0 : 900);
   else if (run.choices.some(c => c.rarity === 'rare')) audio.play('ready');
@@ -147,6 +155,18 @@ function showChoice() {
     button.addEventListener('mouseenter', show); button.addEventListener('focus', () => { if (button.matches(':focus-visible')) show(); });
     button.onclick = () => resolveChoice(i);
   });
+}
+/** Auto pick: the highest rarity on offer (the leftmost among equals), once the cards have landed. */
+let autoPick = readFlag(AUTO_PICK_KEY) === '1';
+const RARITY_RANK: Record<string, number> = { common: 0, uncommon: 1, rare: 2, legendary: 3 };
+function pickBest() {
+  const owner = run, level = run.level, left = run.pendingPicks;
+  setTimeout(() => {
+    if (!autoPick || run !== owner || run.phase !== 'choice' || run.level !== level || run.pendingPicks !== left) return;
+    let best = 0;
+    run.choices.forEach((c, i) => { if (RARITY_RANK[c.rarity ?? 'common']! > RARITY_RANK[run.choices[best]!.rarity ?? 'common']!) best = i; });
+    resolveChoice(best);
+  }, motionReduced() ? 0 : 700);
 }
 function resolveChoice(index: number) {
   const screen = dialog.querySelector<HTMLElement>('.choice-screen');
@@ -201,6 +221,14 @@ function presentReport(first: boolean) {
   void countUp(points, 0, data.points, { delay: 950, duration: Math.min(900, 200 + data.points * 60), format: v => `+${Math.round(v)}`, onTick: () => audio.play('coin') })
     .then(() => { if (!points.isConnected) return; pop(points, 1.3, 320); if (data.points > 0) audio.play('buy'); });
 }
+/** Leaving a run early: a second tap confirms; the run is settled like a loss (points earned so far are kept). */
+function bindAbandon(button: HTMLButtonElement) {
+  let armed = false;
+  button.onclick = () => {
+    if (!armed) { armed = true; button.textContent = '確定放棄？已得戰功照樣結算'; button.classList.add('armed'); return; }
+    meta.settle(run, run.score, run.clearedWave); report = undefined; reset();
+  };
+}
 function pauseMenu() {
   const counts = ELEMENTS.map(([id, name, iconName]) => `<span class="${id}" title="${name}">${px(iconName, 2)}<b>${run.selectedCards.filter(c => c.category === name).length}</b></span>`).join('');
   const cards = run.selectedCards.length ? run.selectedCards.map(c => `<span title="${c.name}">${px(cardIcon(c.id), 2)}</span>`).join('') : '<small>—</small>';
@@ -210,8 +238,10 @@ function pauseMenu() {
       <div class="setting"><span>音量</span><span class="volume-control"><button id="mute-menu" class="icon-button" type="button" aria-label="音效開關"></button><input id="volume" type="range" min="0" max="100" step="5" aria-label="音效音量"></span></div>
       <label class="setting"><span>減少畫面晃動</span><input id="motion" type="checkbox" ${reducedMotion ? 'checked' : ''}></label>
     </div>
-    <button id="resume" class="primary">返回戰場 <span>→</span></button>`, 'pause');
+    <button id="resume" class="primary">返回戰場 <span>→</span></button>
+    <button id="abandon" class="quiet-button abandon">放棄本局，返回標題</button>`, 'pause');
   el('resume').onclick = () => { run.resume(); sync(); }; el('resume').focus();
+  bindAbandon(el<HTMLButtonElement>('abandon'));
   el('mute-menu').onclick = toggleMute;
   const volume = el<HTMLInputElement>('volume');
   volume.addEventListener('input', () => {
@@ -233,7 +263,7 @@ function syncPhase() {
     if (run.phase === 'over') audio.play('gameOver');
     if (run.phase === 'victory') audio.play('victory');
   }
-  text('announcement', run.phase === 'choice' ? '戰地補給到達，選擇一張。' : run.phase === 'over' ? '防線失守。本局結束。' : run.phase === 'running' ? '防守開始。' : '');
+  text('announcement', run.phase === 'choice' ? '戰地補給到達，選擇一張。' : run.phase === 'intermission' ? `第 ${run.stage} 關完成。可以升級與補強，準備好就前往下一關。` : run.phase === 'over' ? '防線失守。本局結束。' : run.phase === 'running' ? `第 ${run.stage} 關開始。` : '');
   if (run.phase === 'ready') {
     const deploy = () => { displayedPhase = 'ready'; showModal(deployScreen(meta.effects, meta.value.TalentPoints, meta.value.HighestClearedWave, !readFlag(TIPS_KEY)), 'deploy'); bindDeploy(); };
     // First open: the briefing comes before the deploy screen.
@@ -283,14 +313,14 @@ function sync() {
   text('wall-value', formatNumber(Math.ceil(run.wallHealth)));
   el('wall-fill').style.width = `${100 * wallRatio}%`; el('wall-chip').style.width = `${100 * wallRatio}%`;
   el('wall-fill').closest('.hud-wall')!.classList.toggle('critical', wallRatio < 0.3);
-  text('wave', `W${run.wave.toString().padStart(2, '0')}`); text('time', clock(run.elapsed));
+  text('wave', run.stage === 0 ? `1/${B.STAGE_COUNT}關` : run.endless ? `第${run.stage}關` : `${run.stage}/${B.STAGE_COUNT}關`); text('time', clock(Math.ceil(run.stageLeft)));
   text('level', run.level.toString()); el('xp-fill').style.width = `${Math.min(100, run.xp / run.xpNeeded * 100)}%`;
   if (run.phase === 'running' && run.wave !== shownWave) {
-    if (shownWave && run.wave > shownWave) toast(`<small>WAVE</small><b>${run.wave.toString().padStart(2, '0')}</b>`);
+    if (shownWave && run.wave > shownWave) toast(run.bossStage ? `<small>STAGE ${run.wave.toString().padStart(2, '0')}</small><b>${run.superBossStage ? '超級屍王' : '屍王關'}</b>` : `<small>STAGE</small><b>${run.wave.toString().padStart(2, '0')}</b>`, run.bossStage ? 'danger' : '');
     shownWave = run.wave;
   }
   if (run.level !== shownLevel) { if (run.level > shownLevel) pop(el('level'), 1.5, 300); shownLevel = run.level; }
-  syncBoss();
+  syncBoss(); syncStageBar(); syncAutoUpgrade();
   const squad = run.mercenaries.map(m => m.kind).join() + '|' + run.skills.map(s => s.id).join();
   if (squad !== shownSquad) {
     // A recruit card drops the new mercenary into its slot.
@@ -307,7 +337,7 @@ function sync() {
     // A thin bar under the chip fills towards the next level milestone.
     const level = merc ? run.levels[merc.kind] : 0, next = nextMilestone(level), prev = [0, 10, 25, 50, 100].filter(m => m <= level).at(-1) ?? 0;
     buy.style.setProperty('--milestone', merc && next ? ((level - prev) / (next - prev)).toFixed(3) : '0');
-    const affordable = run.phase === 'running' && !!merc && visibleMoney() >= cost;
+    const affordable = shopOpen() && !!merc && visibleMoney() >= cost;
     buy.disabled = !affordable;
     if (affordable && !wasAffordable[slot]) pop(buy, 1.12, 220);
     wasAffordable[slot] = affordable;
@@ -322,9 +352,35 @@ function sync() {
   for (const action of ['repair', 'fortify'] as const) {
     const cost = action === 'repair' ? run.repairCost : run.fortifyCost;
     text(`${action}-cost`, formatNumber(cost));
-    el<HTMLButtonElement>(action).disabled = run.phase !== 'running' || (action === 'repair' && !run.canRepair) || (action === 'fortify' && !run.canFortify) || visibleMoney() < cost || (action === 'repair' && run.wallHealth >= run.wallMaxHealth);
+    el<HTMLButtonElement>(action).disabled = !shopOpen() || (action === 'repair' && !run.canRepair) || (action === 'fortify' && !run.canFortify) || visibleMoney() < cost || (action === 'repair' && run.wallHealth >= run.wallMaxHealth);
   }
 }
+/** Money is spent in battle and in the rest between stages. */
+const shopOpen = () => run.phase === 'running' || run.phase === 'intermission';
+/** Auto upgrade: whenever the cheapest mercenary upgrade is affordable, buy it. */
+let autoUpgrade = readFlag(AUTO_UPGRADE_KEY) === '1';
+function syncAutoUpgrade() {
+  const toggle = el('auto-upgrade');
+  toggle.setAttribute('aria-pressed', String(autoUpgrade)); toggle.classList.toggle('on', autoUpgrade);
+  if (!autoUpgrade || !shopOpen()) return;
+  const kinds = run.mercenaries.map(m => m.kind).sort((a, b) => run.upgradeCost(a) - run.upgradeCost(b));
+  const kind = kinds[0];
+  if (kind && visibleMoney() >= run.upgradeCost(kind) && run.upgrade(kind)) { audio.play('buy'); pop(el(`buy-${run.mercenaries.findIndex(m => m.kind === kind)}`), 1.12, 220); }
+}
+el('auto-upgrade').onclick = () => { autoUpgrade = !autoUpgrade; writeFlag(AUTO_UPGRADE_KEY, autoUpgrade ? '1' : '0'); audio.play('pick'); sync(); };
+/** The rest between stages: what comes next and the button that starts it. */
+function syncStageBar() {
+  const bar = el('stage-bar'), open = run.phase === 'intermission' && !talents.active;
+  if (bar.hidden === open) bar.hidden = !open;
+  if (!open) return;
+  const next = run.stage + 1;
+  text('stage-title', run.stage === 0 ? '出擊準備' : `第 ${run.stage} 關完成`);
+  el('next-stage').textContent = run.stage === 0 ? '出擊 ▶' : '下一關 ▶';
+  text('stage-detail', `下一關：第 ${next} 關・${next === B.STAGE_COUNT ? `${B.stageSeconds(next)} 秒後超級屍王來襲` : B.isBossStage(next) ? `${B.stageSeconds(next)} 秒後屍王來襲` : `撐過 ${B.stageSeconds(next)} 秒`}。花資金升級、補強，準備好就出發。`);
+}
+function nextStage() { if (run.nextStage()) { audio.play('pick'); displayedPhase = ''; sync(); } }
+el('next-stage').onclick = nextStage;
+bindAbandon(el<HTMLButtonElement>('stage-abandon'));
 /** The run's money minus coins still flying in: what the counter shows and what buttons offer. */
 const visibleMoney = () => Math.max(0, run.money - battlefield.feedback.pending);
 /** Money counter ticks towards the visible money. */
@@ -342,10 +398,10 @@ function syncBoss() {
   if (!active) return;
   banner.classList.toggle('incoming', !boss);
   if (boss) {
-    text('boss-title', '屍王'); text('boss-detail', `${Math.ceil(100 * boss.hp / boss.maxHp)}%`);
+    text('boss-title', boss.superBoss ? '超級屍王' : '屍王'); text('boss-detail', `${Math.ceil(100 * boss.hp / boss.maxHp)}%`);
     el('boss-fill').style.width = `${Math.max(0, 100 * boss.hp / boss.maxHp)}%`;
   } else {
-    text('boss-title', '屍王逼近'); text('boss-detail', Math.ceil(warning!).toString()); el('boss-fill').style.width = '100%';
+    text('boss-title', run.superBossStage ? '超級屍王逼近' : '屍王逼近'); text('boss-detail', Math.ceil(warning!).toString()); el('boss-fill').style.width = '100%';
     // One screen-reader announcement per rush, not one per UI tick.
     if (bossAnnounced !== run.nextBossAt) { bossAnnounced = run.nextBossAt; text('announcement', '屍王即將帶隊衝鋒。'); }
   }
@@ -418,6 +474,7 @@ window.addEventListener('keydown', event => {
     if (pick >= 0 && !event.repeat && run.phase === 'choice' && !talents.active) { event.preventDefault(); resolveChoice(pick); }
     return;
   }
+  if (run.phase === 'intermission' && (event.key === 'Enter' || event.key === ' ') && !event.repeat) { event.preventDefault(); nextStage(); return; }
   if (event.key === 'Escape') { if (aim) aim = undefined; else run.pause(); sync(); return; }
   const index = ['1', '2', '3'].indexOf(event.key);
   if (index >= 0 && run.phase === 'running' && skillReady(index)) aim = { slot: index, x: 470, y: 235, valid: true };
@@ -447,21 +504,19 @@ function cueFor(event: VisualEvent): Cue | undefined {
   return undefined;
 }
 /** Turns this frame's new combat events and state changes into sound cues and camera moves. */
+let ragedStage = -1;
 function react(realDt: number) {
   if (watchedRun !== run) { watchedRun = run; lastWall = run.wallHealth; wasWarning = false; lastBossId = 0; wallLoss = 0; }
   for (const event of run.events) {
     if (heard.has(event)) continue;
     // Refraction side beams start at an enemy (x < 800): no extra laser sound or shake.
     heard.add(event); const cue = event.kind === 'laser' && (event.fromX ?? 0) < 800 ? undefined : cueFor(event); if (cue) audio.play(cue);
-    if (event.kind === 'blast') {
+    // Only throwables shake the screen; auto attacks, chain blasts and ordinary kills never do (dizzying at high attack speed).
+    if (event.kind === 'blast' && event.skill) {
       if (event.color === '#e6764b') { camera.shake(0.22); camera.punch(0.02); }
       else { camera.shake(0.45); camera.punch(0.045); camera.freeze(0.05); }
-    } else if (event.kind === 'laser' && (event.fromX ?? 0) >= 800) { camera.shake(0.3); camera.punch(0.03); camera.freeze(0.04); }
-    else if (event.kind === 'kill') {
-      if (event.enemy === 'boss') { camera.freeze(0.15); camera.slowMotion(0.3, 0.9); camera.shake(0.75); camera.flash(0.7); camera.punch(0.07); }
-      else if (event.enemy === 'elite') { camera.freeze(0.06); camera.shake(0.15); }
-      else if (event.enemy === 'brute') camera.shake(0.06);
-    }
+    } else if (event.kind === 'laser' && event.skill && (event.fromX ?? 0) >= 800) { camera.shake(0.3); camera.punch(0.03); camera.freeze(0.04); }
+    else if (event.kind === 'kill' && event.enemy === 'boss') { camera.freeze(0.15); camera.slowMotion(0.3, 0.9); camera.shake(0.75); camera.flash(0.7); camera.punch(0.07); }
   }
   // The barricade loses health continuously while zombies chew on it: kick in bursts, not every frame.
   if (run.phase === 'running' && run.wallHealth < lastWall - 1e-6) wallLoss += lastWall - run.wallHealth;
@@ -470,6 +525,9 @@ function react(realDt: number) {
     audio.play('wall'); camera.shake(Math.min(0.3, 0.08 + wallLoss / run.wallMaxHealth * 2)); camera.hurt(0.7); pop(el('wall-value'), 1.2, 160);
     wallLoss = 0; wallKick = 0;
   }
+  // Overtime: once per stage, when the leftovers start to rage.
+  const raging = run.phase === 'running' && run.overtime > 0;
+  if (raging && ragedStage !== run.stage) { ragedStage = run.stage; audio.play('bossWarning'); toast('<small>OVERTIME</small><b>喪屍狂暴</b>', 'danger'); text('announcement', '加時：場上喪屍越咬越狠，快清場。'); }
   const warning = run.bossWarning !== undefined;
   if (warning && !wasWarning) { audio.play('bossWarning'); toast('<small>WARNING</small><b>屍王逼近</b>', 'danger'); }
   wasWarning = warning;
@@ -528,7 +586,7 @@ function guide() {
   if (run.events.some(e => e.kind === 'shot' && e.merc))
     offer('shoot', '你的士兵會<b>自動射擊</b>進入射程的喪屍，不用操作。<br>每種傭兵射程不同：步槍手只打得到道路的下半段。');
   if (run.kills > 0)
-    offer('kill', '擊倒喪屍會掉落<b>資金</b>（右上），並累積<b>經驗</b>（上方細條）。<br>經驗滿了就會進入戰地補給。', { target: el('money-box') });
+    offer('kill', '擊倒喪屍會掉落<b>資金</b>（右上），並累積<b>經驗</b>（上方細條）。<br>每關結束後，累積的經驗會換成戰地補給讓你挑選。', { target: el('money-box') });
   if (coach.has('kill') && rifle && visibleMoney() >= run.upgradeCost(rifle.kind))
     offer('upgrade', '資金夠了！點<b>傭兵下方的按鈕</b>花資金升級，傷害會提高。', { target: el('buy-0'), act: true });
   if (run.canRepair && run.wallHealth < run.wallMaxHealth && visibleMoney() >= run.repairCost)

@@ -45,6 +45,24 @@ body { background: #050607 }
 .xp-track { flex: 1; height: 4px; background: #0b0d0eaa; box-shadow: 0 0 0 1px #000 }
 .xp-track i { display: block; height: 100%; background: linear-gradient(90deg, var(--fire), var(--gold)); transition: width .35s var(--ease-out); box-shadow: 0 0 6px #ffd88488 }
 
+/* auto upgrade toggle, above the squad */
+.auto-toggle {
+  position: absolute; left: 50%; top: 2px; transform: translateX(-50%); padding: 3px 10px; font: 700 11px/1.2 inherit;
+  color: #b9bfb0; background: #0d1012cc; border: 0; clip-path: var(--notch); box-shadow: inset 0 0 0 1px #3c4438; cursor: pointer;
+}
+.auto-toggle.on { color: var(--ink); background: var(--gold); box-shadow: inset 0 0 0 1px #000 }
+
+/* ---------- rest between stages ---------- */
+.stage-bar {
+  position: absolute; z-index: 3; left: 50%; top: 38%; width: min(300px, calc(100% - 32px)); transform: translate(-50%, -50%);
+  display: grid; gap: 8px; justify-items: center; padding: 14px 14px 12px; text-align: center;
+  background: #0d1012e6; clip-path: var(--notch); box-shadow: inset 0 0 0 1px #4a5a43; animation: banner-in .35s var(--ease-out) both;
+}
+.stage-bar[hidden] { display: none }
+.stage-bar strong { color: var(--gold); font-size: 16px; letter-spacing: 2px; text-shadow: 1px 1px 0 #000 }
+.stage-bar span { color: #d9dccf; font-size: 12px; line-height: 1.5 }
+.stage-bar button { min-width: 140px }
+
 /* ---------- boss banner ---------- */
 .boss-banner {
   position: absolute; z-index: 2; left: 50%; top: calc(var(--safe-top) + 56px); width: min(260px, calc(100% - 60px));
@@ -210,3 +228,6 @@ html.reduce-motion .toast.show { animation-name: toast-fade !important; animatio
 /* 2026-10-23: skills are 主動投擲物; a small tag on each orb says so. */
 .orb-tag { position: absolute; top: 2px; left: 3px; padding: 1px 3px; font: 700 9px/1 "Microsoft JhengHei", sans-serif; color: var(--ink); background: var(--merc-color); clip-path: var(--notch); pointer-events: none; z-index: 1 }
 .unit.no-skill .orb-tag { opacity: .35 }
+
+.abandon { justify-self: center; margin-top: 2px; padding: 8px 12px; min-height: 40px; font-size: 12px; color: #c9a59c }
+.abandon.armed { color: #fff; background: #87372f }

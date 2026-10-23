@@ -1,10 +1,10 @@
-// TL003 balance acceptance with an active-play bot (spends money, aims skills, picks cards).
-// Targets: first run 2–3 min ending at the first boss rush (2026-10-22 decision, replaces spec v0.4 §7's
-// 20–40 s), and §9 (DPS ×2.00/min, income ×1.85–1.95/min).
+// TL003 balance acceptance with an active-play bot (spends money, aims skills, picks cards, fortifies in the rests).
+// Targets since the 2026-10-23 stage rework: a zero-talent run clears a stage or two; about half of the T1 blueprint
+// clears all 20 stages; §9 (DPS ×2.00/min, income ×1.85–1.95/min) is kept as a reference.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { BUILDS, firstRunStats, playRun, seedFor, treeWithLevels, dpsGrowth, incomeGrowth } from '../tools/tl003-balance.mjs';
-import { compileTalents } from '../src/tl003/Talents.ts';
+import { TALENTS, compileTalents } from '../src/tl003/Talents.ts';
 import * as B from '../src/tl003/Balance.ts';
 import { DefenseRun, FIELD } from '../src/tl003/Run.ts';
 import { CARDS, SKILLS } from '../src/tl003/Content.ts';
@@ -17,14 +17,12 @@ const median = values => { const s = [...values].sort((a, b) => a - b); return s
 const runAt = (level, seeds, maxSeconds = 1200) =>
   Array.from({ length: seeds }, (_, i) => playRun({ seed: seedFor(i), effects: compileTalents(treeWithLevels(level)), maxSeconds }));
 
-test('TL003 balance: an active zero-talent first run lasts 2–3 minutes, keeps buying and falls to the first boss', PLAYTEST_PENDING, () => {
+test('TL003 balance: an active zero-talent first run clears a stage or two, keeps buying and falls before the first boss stage', PLAYTEST_PENDING, () => {
   for (const build of Object.keys(BUILDS)) {
-    const s = firstRunStats(48, 'active', build, 600);
-    assert.equal(s.victories, 0, `${build}: first run must never win`);
-    assert.ok(s.medianSeconds >= 120 && s.medianSeconds <= 180, `${build}: median survival ${s.medianSeconds}s`);
-    assert.ok(s.seconds >= 120 && s.seconds <= 240, `${build}: average survival ${s.seconds}s`);
-    assert.ok(s.purchases >= 15, `${build}: only ${s.purchases} purchases per first run`);
-    assert.ok(s.firstBossLosses >= 0.6, `${build}: only ${s.firstBossLosses} of first runs end at the first boss rush`);
+    const runs = Array.from({ length: 8 }, (_, i) => playRun({ seed: seedFor(i), build }));
+    const cleared = median(runs.map(r => r.clearedWave));
+    assert.ok(runs.every(r => !r.victory), `${build}: a first run must never win`);
+    assert.ok(cleared >= 1 && cleared < B.BOSS_FIRST_STAGE, `${build}: median stages cleared ${cleared}`);
   }
 });
 
@@ -44,13 +42,14 @@ test('TL003 balance: in long runs panel DPS grows about ×2 and income about ×1
   assert.ok(income >= 1.75 && income <= 2.0, `income growth ×${income}/min`);
 });
 
-test('TL003 balance: survival grows gradually with talents instead of jumping from 2 min to 20 min', PLAYTEST_PENDING, () => {
-  const at = level => median(runAt(level, 5).map(r => r.seconds));
-  const t1 = at(1), t4 = at(4), t8 = at(8), t20 = at(20);
-  assert.ok(t1 <= 300, `Lv1 tree survives ${t1}s`);
-  assert.ok(t4 >= 240 && t4 <= 720, `Lv4 tree survives ${t4}s`);
-  assert.ok(t8 > t4 && t8 <= 1000, `Lv8 tree survives ${t8}s`);
-  assert.ok(t20 >= 1200, `Lv20 tree should reach the 20-minute milestone, got ${t20}s`);
+// The 2026-10-23 target: about half of the T1 blueprint (all 47 nodes at Lv5) to clear the 20 stages.
+const wholeTree = level => { const tree = treeWithLevels(0); for (const n of TALENTS) tree.nodes[n.id] = level; return tree; };
+test('TL003 balance: stages cleared grow with the whole blueprint; about half of T1 is needed for all 20', PLAYTEST_PENDING, () => {
+  const at = level => median(Array.from({ length: 3 }, (_, i) => playRun({ seed: seedFor(i), effects: compileTalents(wholeTree(level)), build: 'economy' })).map(r => r.victory ? B.STAGE_COUNT : r.clearedWave));
+  const l0 = at(0), l3 = at(3), l7 = at(7);
+  assert.ok(l0 <= 3, `Lv0 blueprint clears ${l0}`);
+  assert.ok(l3 > l0 && l3 < B.STAGE_COUNT, `Lv3 blueprint clears ${l3}`);
+  assert.equal(l7, B.STAGE_COUNT, `Lv7 blueprint clears ${l7}`);
 });
 
 test('TL003 balance: structural guards keep income and the barricade from outscaling the horde', () => {
@@ -58,8 +57,8 @@ test('TL003 balance: structural guards keep income and the barricade from outsca
   assert.ok(Math.abs(B.KILL_REWARD_GROWTH_PER_MINUTE * B.SPAWN_GROWTH_PER_MINUTE - B.INCOME_GROWTH_PER_MINUTE) < 1e-9);
   // Barricade HP bought per money grows sub-linearly.
   assert.ok(Math.log(1 + B.FORTIFY_HEALTH_GAIN) / Math.log(B.FORTIFY_COST_GROWTH) < 1);
-  // Each boss rush outgrows the normal enemy curve, so beating one boss does not carry a run forever.
-  assert.ok(B.BOSS_RUSH_HP_GROWTH > 1);
+  // Each boss stage's boss outgrows the normal enemy curve, so beating one boss does not carry a run forever.
+  assert.ok(B.BOSS_HP_PER_STAGE > 1);
   // The first upgrade is within reach of an opening minute's kills; recruits are free (cards).
   assert.ok(B.UPGRADE_BASE_COST * B.UPGRADE_COST_GROWTH <= 15);
   assert.equal(B.MAX_SQUAD, 3); assert.equal(B.MAX_SKILLS, 3);
@@ -73,32 +72,43 @@ test('TL003 balance: the opening grenade is ready at deployment and recharges in
   run.learn('molotov'); assert.equal(run.skills[1].cooldown, 0, 'a skill picked later arrives ready');
 });
 
-test('TL003 balance: a boss rush is announced, then charges with an escort on a fixed schedule', () => {
-  const run = new DefenseRun(11); run.start(); run.wallHealth = run.wallMaxHealth = 1e300;
-  run.mercenaries[0].shotTimer = 1e9; // nobody shoots, so every spawn stays on the field
-  // Wave XP opens the card choice, which pauses the run; keep picking so time can reach the boss.
-  // Recruits from the cards are kept silent too, so every runner stays countable.
-  const step = until => { while (run.elapsed + 1e-9 < until) { if (run.phase === 'choice') run.choose(run.choices[0].id); run.mercenaries.forEach(m => { m.shotTimer = 1e9; }); run.advance(FIELD.step); } };
-  step(B.BOSS_FIRST_SECONDS - B.BOSS_WARNING_SECONDS - 1);
+test('TL003 balance: boss stages 4, 7, … 19 and a super boss on 20; the boss is announced, then charges with an escort', () => {
+  const bossStages = Array.from({ length: B.STAGE_COUNT }, (_, i) => i + 1).filter(B.isBossStage);
+  assert.deepEqual(bossStages, [4, 7, 10, 13, 16, 19, 20]);
+  const atStage = stage => {
+    const run = new DefenseRun(11); run.start(); run.stage = stage; run.wallHealth = run.wallMaxHealth = 1e300;
+    run.mercenaries[0].shotTimer = 1e9; // nobody shoots, so every spawn stays on the field
+    return run;
+  };
+  const step = (run, until) => { while (run.stageTime + 1e-9 < until && run.phase === 'running') { run.mercenaries.forEach(m => { m.shotTimer = 1e9; }); run.advance(FIELD.step); } };
+  const run = atStage(4), length = B.stageSeconds(4);
+  step(run, length - B.BOSS_WARNING_SECONDS - 1);
   assert.equal(run.bossWarning, undefined); assert.equal(run.boss, undefined);
-  step(B.BOSS_FIRST_SECONDS - 5);
-  assert.ok(run.bossWarning > 4 && run.bossWarning <= 5 + 1e-6, `warning ${run.bossWarning}`);
+  step(run, length - 3);
+  assert.ok(run.bossWarning > 2 && run.bossWarning <= 3 + 1e-6, `warning ${run.bossWarning}`);
   const before = run.enemies.filter(e => e.kind === 'runner').length;
-  step(B.BOSS_FIRST_SECONDS + 0.05);
-  const first = run.boss; assert.ok(first, 'boss spawned');
+  step(run, length + 0.05);
+  const boss = run.boss; assert.ok(boss, 'boss spawned');
   assert.equal(run.enemies.filter(e => e.kind === 'boss').length, 1);
   assert.ok(run.enemies.filter(e => e.kind === 'runner').length >= before + B.BOSS_ESCORT);
-  assert.equal(run.nextBossAt, B.BOSS_FIRST_SECONDS + B.BOSS_INTERVAL_SECONDS);
-  step(B.BOSS_FIRST_SECONDS + B.BOSS_INTERVAL_SECONDS + 0.05);
-  const second = run.enemies.filter(e => e.kind === 'boss').at(-1);
-  const expected = B.ENEMY_HP_GROWTH_PER_MINUTE ** (B.BOSS_INTERVAL_SECONDS / 60) * B.BOSS_RUSH_HP_GROWTH;
-  assert.ok(Math.abs(second.maxHp / first.maxHp / expected - 1) < 0.01, `second boss ×${second.maxHp / first.maxHp}`);
+  // The horde keeps coming until the boss is down.
+  const count = run.enemies.length; step(run, length + 5); assert.ok(run.enemies.length > count);
+  // The last stage's super boss: more HP and attack than a boss at the same moment.
+  const last = atStage(20), plain = atStage(19);
+  last.elapsed = plain.elapsed = 600; last.stageTime = B.stageSeconds(20) - 0.01; plain.stageTime = B.stageSeconds(19) - 0.01;
+  last.advance(FIELD.step); plain.advance(FIELD.step);
+  assert.ok(last.boss.superBoss && !plain.boss.superBoss);
+  assert.ok(Math.abs(last.boss.maxHp / plain.boss.maxHp / (B.SUPER_BOSS_HP * B.BOSS_HP_PER_STAGE) - 1) < 0.01);
+  assert.ok(Math.abs(last.boss.attack / plain.boss.attack / B.SUPER_BOSS_ATTACK - 1) < 0.01);
+  assert.ok(last.enemies.filter(e => e.kind === 'runner').length >= B.SUPER_BOSS_ESCORT);
 });
 
 test('TL003 balance: boss strength ignores permanent player power', () => {
   const weak = new DefenseRun(5), strong = new DefenseRun(5, compileTalents(treeWithLevels(30)));
-  // Max health too: a repair card would otherwise cap the barricade back to 40 and end the run before the boss.
-  for (const run of [weak, strong]) { run.start(); run.wallHealth = run.wallMaxHealth = 1e300; run.mercenaries[0].shotTimer = 1e9; while (!run.boss && run.phase !== 'over') { if (run.phase === 'choice') run.choose(run.choices[0].id); run.advance(FIELD.step); } }
+  for (const run of [weak, strong]) {
+    run.start(); run.stage = 4; run.wallHealth = run.wallMaxHealth = 1e300; run.mercenaries[0].shotTimer = 1e9;
+    while (!run.boss && run.phase === 'running') { run.mercenaries.forEach(m => { m.shotTimer = 1e9; }); run.advance(FIELD.step); }
+  }
   assert.equal(weak.boss.maxHp, strong.boss.maxHp); assert.equal(weak.boss.attack, strong.boss.attack);
 });
 

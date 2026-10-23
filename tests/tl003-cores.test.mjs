@@ -20,7 +20,12 @@ test('TL003 cores: cold steel: kinetic damage ignores half the armor, never crit
   for (const run of [base, cold]) { run.critChance = 1; run.enemies = [enemy({ defense: 100 })]; shoot(run); }
   near(1e6 - base.enemies[0].hp, base.damageFor('rifle') * 1.5 * 100 / 200);
   near(1e6 - cold.enemies[0].hp, cold.damageFor('rifle') * 100 / 150);
-  assert.equal(cold.pierce, 2);
+  assert.equal(cold.pierce, 2); assert.equal(base.pierce, 0);
+  // The only source of pierce: a single shot carries on through two enemies behind it, keeping pierceRetention per enemy.
+  const pierce = withCores('coldsteel'), front = enemy({ x: 600 }), back = enemy({ id: 9001, x: 400 }), back2 = enemy({ id: 9002, x: 300 }), back3 = enemy({ id: 9003, x: 200 });
+  pierce.enemies = [front, back, back2, back3]; shoot(pierce);
+  const r = pierce.perm.pierceRetention, hit = 1e6 - front.hp;
+  near(1e6 - back.hp, hit * r); near(1e6 - back2.hp, hit * r * r); near(back3.hp, 1e6);
   // Only kinetic damage: a cold hit (the cryo trooper's) still meets the full armor... and armor does not stop cold anyway.
   const cryo = withCores('coldsteel'); cryo.recruit('cryo'); cryo.enemies = [enemy({ defense: 100, resist: 0.5, x: 600 })];
   cryo.mercenaries[1].shotTimer = 0; cryo.advance(FIELD.step);
@@ -112,7 +117,8 @@ test('TL003 cores: 以牆為彈 adds 8% of the barricade per second to each gun,
   near(extra, run.wallHealth * B.BULWARK_SHARE * run.intervalFor('rifle'));
   near(run.wallVulnerability, B.BULWARK_WALL_DAMAGE);
   // Ordinary three-card choices with rerolls: the old black market is gone.
-  take(run, 'kinetic'); run.money = 1e6; run.phase = 'running'; run.xp = run.xpNeeded; run.advance(FIELD.step);
+  // Level-ups are banked; open the pick by hand (one level up, a fresh draw).
+  take(run, 'kinetic'); run.money = 1e6; run.level++; run.choices = run.draw(); run.phase = 'choice';
   assert.equal(run.choices.length, 3); assert.ok(!run.choices.some(c => c.kind === 'curse')); assert.equal(run.reroll(), true);
 });
 test('TL003 cores: 亡者徵召 fixes the barricade at 1 max health; it cannot be fortified', () => {
@@ -134,10 +140,10 @@ test('TL003 wildfire lights only unburnt enemies, at 40% of the dead one\'s burn
   assert.ok(dying.hp <= 0); near(fresh.burnPower, 40); near(lit.burnPower, 5); assert.equal(lit.burnFlammability, 0);
 });
 
-test('TL003 balance: several status cards merge into one application per hit; the flamer grows +6.5% a level', () => {
+test('TL003 balance: several status cards merge into one application per hit; the flamer grows FLAME_DAMAGE_PER_LEVEL a level', () => {
   const run = plain(); take(run, 'burn'); take(run, 'burn'); const e = enemy(); run.enemies = [e]; shoot(run);
   near(e.burnPower, 2 * makeCard(cardDef('burn')).value * run.damageFor('rifle'), 1e-3); assert.equal(e.burnFlammability, 0);
   const layers = withCores('layers'); take(layers, 'burn'); take(layers, 'burn'); const f = enemy(); layers.enemies = [f]; shoot(layers);
   assert.equal(f.burnLayers, 2);
-  const base = plain(); const lv1 = base.damageFor('flame'); base.levels.flame = 2; near(base.damageFor('flame'), lv1 * 1.065);
+  const base = plain(); const lv1 = base.damageFor('flame'); base.levels.flame = 2; near(base.damageFor('flame'), lv1 * B.FLAME_DAMAGE_PER_LEVEL);
 });

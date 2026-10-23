@@ -5,6 +5,9 @@ import { calculateValue, effectiveCooldown, withFamily } from '../src/tl003/Comb
 import { MERCENARIES, SKILLS } from '../src/tl003/Content.ts';
 import { compileTalents, isRevealed, talentCost, canBreakthrough, TALENTS } from '../src/tl003/Talents.ts';
 import { emptyTree } from '../src/tl003/Meta.ts';
+import { STAGE_COUNT, stageSeconds } from '../src/tl003/Balance.ts';
+/** Long enough for all stages (each ends with some mop-up after its clock): a cap for runs that stall, not a target. */
+export const MAX_RUN_SECONDS = Array.from({ length: STAGE_COUNT }, (_, i) => stageSeconds(i + 1)).reduce((a, b) => a + b, 0) * 2;
 
 /** The nine nodes of the first star map (still present with the same ids). */
 export const LEGACY_NODES = ['mercenary_damage', 'kinetic_damage', 'barricade_health', 'economy_income', 'fire_dot', 'repair_efficiency', 'attack_speed', 'active_skill_damage', 'active_skill_haste'];
@@ -16,7 +19,7 @@ export const seedFor = i => Math.imul(i + 1, 2654435761) >>> 0;
  */
 export const BUILDS = {
   kinetic: ['merc_sniper', 'merc_grenadier', 'merc_gunner', 'merc_tesla', 'merc_cryo', 'skill_strafe', 'skill_mortar', 'skill_snipe',
-    'kinetic', 'physical', 'crit', 'critDamage', 'speed', 'training', 'pierce', 'active', 'shock', 'voltage', 'coil', 'wall', 'plating', 'income', 'haste', 'radius', 'bio', 'burn', 'fire', 'repair'],
+    'kinetic', 'physical', 'crit', 'critDamage', 'speed', 'training', 'active', 'shock', 'voltage', 'coil', 'wall', 'plating', 'income', 'haste', 'radius', 'bio', 'burn', 'fire', 'repair'],
   fire: ['merc_flame', 'merc_engineer', 'merc_tesla', 'merc_cryo', 'merc_grenadier', 'skill_molotov', 'skill_minefield', 'skill_emp',
     'burn', 'fire', 'burnTime', 'elemental', 'speed', 'shock', 'active', 'haste', 'radius', 'acid', 'bio', 'kinetic', 'wall', 'plating', 'income', 'repair'],
   economy: ['merc_gunner', 'merc_grenadier', 'merc_tesla', 'merc_sniper', 'merc_chemist', 'skill_mortar', 'skill_strafe', 'skill_gas',
@@ -29,8 +32,8 @@ export const BUILDS = {
  *  active  — reacts every 0.25 s: casts every ready skill at the enemy closest to the wall,
  *            repairs under 50 %, fills the squad, then buys the cheapest upgrade or fortify.
  */
-export function playRun({ seed = 1, effects, policy = 'active', build = 'kinetic', maxSeconds = FIELD.victorySeconds, reaction = 15 } = {}) {
-  const run = new DefenseRun(seed, effects); run.start();
+export function playRun({ seed = 1, effects, policy = 'active', build = 'kinetic', maxSeconds = MAX_RUN_SECONDS, reaction = 15 } = {}) {
+  const run = new DefenseRun(seed, effects); run.start(true);
   const prefs = BUILDS[build];
   const dps = [], earned = [];
   let purchases = 0, bossesKilled = 0;
@@ -38,6 +41,7 @@ export function playRun({ seed = 1, effects, policy = 'active', build = 'kinetic
   const limit = Math.round((maxSeconds + 1) / FIELD.step);
   for (let tick = 0; tick <= limit && run.elapsed < maxSeconds + 1e-6; tick++) {
     if (run.phase === 'choice') { run.choose(pickCard(run, prefs)); tick--; continue; }
+    if (run.phase === 'intermission') { if (policy === 'active') purchases += act(run); run.nextStage(); tick--; continue; }
     if (run.phase !== 'running') break;
     if (policy === 'active' && tick % reaction === 0) purchases += act(run);
     const minute = Math.floor(run.elapsed / 60);
@@ -79,6 +83,12 @@ function kindDps(run, kind, level = run.levels[kind], copies = run.mercenaries.f
  */
 export function act(run) {
   let bought = 0;
+  // In the rest between stages a player puts part of the money into the barricade before the guns
+  // (otherwise a wall that never took damage stays at its opening size until one rush breaks it at once).
+  if (run.phase === 'intermission') {
+    const budget = run.money * 0.3; let spent = 0;
+    for (let guard = 0; guard < 60 && spent + run.fortifyCost <= budget; guard++) { const cost = run.fortifyCost; if (!run.fortify()) break; spent += cost; bought++; }
+  }
   const front = run.enemies.reduce((best, e) => (!best || e.x > best.x ? e : best), undefined);
   if (front && front.x > 0) run.skills.forEach((s, slot) => { if (s.cooldown <= 0) run.cast(slot, Math.min(front.x, FIELD.wallX - 5), front.y); });
   for (let guard = 0; guard < 60; guard++) {
@@ -173,7 +183,7 @@ export function metaLoop({ runs = 60, policy = 'active', build = 'kinetic', seed
 }
 
 /** maxSeconds caps rare snowballing runs so the sample stays fast; capped runs count as that long. */
-export function firstRunStats(count = 128, policy = 'active', build = 'kinetic', maxSeconds = FIELD.victorySeconds) {
+export function firstRunStats(count = 128, policy = 'active', build = 'kinetic', maxSeconds = MAX_RUN_SECONDS) {
   const runs = Array.from({ length: count }, (_, i) => playRun({ seed: seedFor(i), policy, build, maxSeconds }));
   const avg = key => runs.reduce((s, r) => s + r[key], 0) / runs.length;
   const sorted = runs.map(r => r.seconds).sort((a, b) => a - b);

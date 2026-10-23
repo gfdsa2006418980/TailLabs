@@ -8,12 +8,13 @@ import * as B from './Balance.ts';
 import { SPAWN_GROWTH_SPEED } from './Balance.ts';
 export { SPAWN_GROWTH_SPEED };
 
-export const FIELD = { width: 960, height: 420, wallX: 750, step: 1 / 60, waveSeconds: 30, victorySeconds: 1200 } as const;
+export const FIELD = { width: 960, height: 420, wallX: 750, step: 1 / 60 } as const;
 /** Triple the exponential growth speed, preserving the opening base cadence. */
 export function spawnIntervalAt(seconds: number) {
   return (seconds < 12 ? 3 : 1.8) / 1.1 ** (SPAWN_GROWTH_SPEED * Math.max(0, seconds) / 60);
 }
-export type Phase = 'ready' | 'running' | 'choice' | 'paused' | 'over' | 'victory';
+/** 'intermission': between stages, picking banked cards and shopping before the next stage. */
+export type Phase = 'ready' | 'running' | 'choice' | 'intermission' | 'paused' | 'over' | 'victory';
 /** The three build-up meters: 冷凍 → 冰凍, 電能 → 麻痺, 爆裂 → 暈眩. */
 export type MeterKind = 'chill' | 'shock' | 'stun';
 export const METER_KINDS: readonly MeterKind[] = ['chill', 'shock', 'stun'];
@@ -39,6 +40,10 @@ export interface Enemy {
   hitFlash: number;
   /** Core 元素輪替: the element of the last hit. Core 千層烈焰: stacked burn layers. */
   lastElement?: string; burnLayers?: number;
+  /** How many zombies this one stands for after the alive cap merged others into it. */
+  merged?: number;
+  /** The last stage's super boss: drawn bigger. */
+  superBoss?: boolean;
 }
 export interface Mercenary { id: number; kind: MercKind; shotTimer: number; shots?: number; focusTarget?: number; focusStacks?: number }
 export interface SkillSlot { id: SkillId; cooldown: number }
@@ -51,8 +56,8 @@ export interface VisualEvent {
 }
 /** Ground areas: a fire zone (燃燒瓶, 延燒) or a gas cloud (毒氣彈). */
 export interface FireZone { kind?: 'fire' | 'gas'; x: number; y: number; radius: number; remaining: number; power: number; pulseTimer: number; contacts: Set<number>; spread?: boolean }
-/** 地雷陣: armed mines that explode when an enemy steps close. */
-export interface Mine { x: number; y: number; remaining: number; damage: number }
+/** 地雷陣: armed mines that stay on the road until an enemy steps close (a minefield that builds up over casts). */
+export interface Mine { x: number; y: number; damage: number; spent?: boolean }
 const mercY = (slot: number) => 130 + slot * 92;
 /** The very first choice of a run offers its mercenaries and one ammo card of an element. */
 const STARTERS = ['kinetic', 'burn', 'bio', 'shock', 'chill'];
@@ -84,6 +89,8 @@ export function meterThreshold(enemy: Enemy, kind: MeterKind, elapsed: number) {
 }
 const PROC_TAGS: Record<'Cold' | 'Electric', Tag[]> = { Cold: ['Damage.Cold', 'Mechanic.Proc'], Electric: ['Damage.Electric', 'Mechanic.Proc'] };
 const BLAST_SPLASH_RADIUS = 40;
+/** 地雷陣 (2026-10-23): mines never expire; past this many the oldest are cleared, so the field stays cheap to check. */
+const MINE_CAP = 32;
 /** Share of max HP below which a hit makes no visual event. */
 const TINY_HIT = 0.001;
 /** Spatial grid cell size (model units) and a numeric key per cell; the field spans x −40…800, y 0…420. */
@@ -111,6 +118,8 @@ export class DefenseRun {
   levels = Object.fromEntries(Object.keys(MERCENARIES).map(k => [k, 1])) as Record<MercKind, number>;
   events: VisualEvent[] = []; zones: FireZone[] = []; mines: Mine[] = [];
   endless = false;
+  /** Current stage (1-based), seconds into it, and level-ups banked for the next rest. */
+  stage = 1; stageTime = 0; pendingPicks = 0;
   /** Card-driven rules. Bonuses add up; percentages are fractions. */
   critChance = 0; critDamage = 1.5; pierce = 0; burnTimeBonus = 0; toxinGain = 0; shockGain = 0; chillGain = 0; stunGain = 0; thorns = 0;
   synergies = new Set<string>(); evolutions: Partial<Record<SkillId, string>> = {};
@@ -125,7 +134,9 @@ export class DefenseRun {
   private seed: number; private combatSeed: number; private cardSeed: number;
   /** Evolutions offered but not taken come back after a few levels instead of blocking a slot forever. */
   private evolutionDeferred: Record<string, number> = {}; private accumulator = 0; private spawnTimer = 0;
-  private nextId = 1; private completedWaves = 0; private bossRushes = 0;
+  private nextId = 1; private bossRushes = 0; private bossSpawned = false;
+  /** Where a finished pick returns: the rest between stages, or the battle (tests force a choice mid-battle). */
+  private afterChoice: 'running' | 'intermission' = 'running';
   constructor(seed = Math.floor(Math.random() * 0xffffffff), permanent?: PermanentEffects) {
     this.seed = seed >>> 0; this.combatSeed = (Math.imul(seed >>> 0, 2246822519) ^ 0x9e3779b9) >>> 0;
     this.cardSeed = (Math.imul(seed >>> 0, 3266489917) ^ 0x85ebca6b) >>> 0;
@@ -157,29 +168,67 @@ export class DefenseRun {
   private cardRandom() { this.cardSeed = (Math.imul(this.cardSeed, 1664525) + 1013904223) >>> 0; return this.cardSeed / 0x100000000; }
   /** A separate stream for crits, so enemy spawns never depend on how many shots landed. */
   private combatRandom() { this.combatSeed = (Math.imul(this.combatSeed, 1664525) + 1013904223) >>> 0; return this.combatSeed / 0x100000000; }
-  get wave() { return !this.endless && this.elapsed >= FIELD.victorySeconds ? 40 : Math.floor(this.elapsed / FIELD.waveSeconds) + 1; }
-  get clearedWave() { return Math.floor((this.elapsed + 1e-8) / FIELD.waveSeconds); }
+  /** The stage number (kept as 'wave' for the HUD and saves). */
+  get wave() { return this.stage; }
+  /** Stages fully cleared. */
+  get clearedWave() { return this.phase === 'intermission' || this.phase === 'victory' || (this.phase === 'choice' && this.afterChoice === 'intermission') ? this.stage : this.stage - 1; }
+  get stageLength() { return B.stageSeconds(Math.max(1, this.stage)); }
+  /** Seconds until the stage's boss charges in, or until the spawns stop on other stages (0 after). */
+  get stageLeft() { return Math.max(0, this.stageLength - this.stageTime); }
+  get bossStage() { return B.isBossStage(this.stage); }
+  /** Stage time when this stage's boss charged in and when it fell. */
+  private bossAt = 0; private bossDownAt = 0;
+  /**
+   * Seconds of overtime; 0 before. On a normal stage it starts OVERTIME_GRACE after the clock; on a boss stage
+   * OVERTIME_GRACE after the boss falls, or BOSS_OVERTIME_GRACE after it charged in if it is still standing.
+   */
+  get overtime() {
+    if (!this.bossStage) return Math.max(0, this.stageTime - this.stageLength - B.OVERTIME_GRACE);
+    if (!this.bossSpawned) return 0;
+    return Math.max(0, this.stageTime - (this.bossDown ? this.bossDownAt + B.OVERTIME_GRACE : this.bossAt + B.BOSS_OVERTIME_GRACE));
+  }
+  /** Barricade damage multiplier in overtime: ×2 every OVERTIME_DOUBLING seconds. */
+  get overtimeFactor() { return 2 ** (this.overtime / B.OVERTIME_DOUBLING); }
+  get superBossStage() { return this.stage === B.STAGE_COUNT; }
+  /** The stage's boss has been beaten: no more spawns, the stage ends when the road is clear. */
+  bossDown = false;
   get xpNeeded() { return B.xpForLevel(this.level); }
   get score() { return runScore(this.elapsed, this.totalEarnedMoney); }
-  /** When the next boss rush charges in. */
-  get nextBossAt() { return B.BOSS_FIRST_SECONDS + this.bossRushes * B.BOSS_INTERVAL_SECONDS; }
-  /** Seconds until the next boss rush while it is being announced; undefined otherwise. */
-  get bossWarning() { const left = this.nextBossAt - this.elapsed; return left > 0 && left <= B.BOSS_WARNING_SECONDS ? left : undefined; }
+  /** Identifies the coming boss rush (one announcement each). */
+  get nextBossAt() { return this.bossRushes + 1; }
+  /** Seconds until this boss stage's rush while it is being announced; undefined otherwise. */
+  get bossWarning() {
+    if (this.phase !== 'running' || !this.bossStage || this.bossSpawned || this.stageLeft > B.BOSS_WARNING_SECONDS) return undefined;
+    return Math.max(1e-6, this.stageLeft);
+  }
   get boss() { return this.enemies.find(e => e.kind === 'boss' && e.hp > 0); }
-  /** The opening squad: a rifleman with a grenade, ready at deployment. */
-  start() {
+  /**
+   * The opening squad: a rifleman with a grenade, ready at deployment. With `opening` (the game and the bots) the
+   * run starts in a rest before stage 1 with one pick (two recruits and an ammo card); without it (unit tests) the
+   * battle starts at once.
+   */
+  start(opening = false) {
     if (this.phase !== 'ready') return;
     this.mercenaries.push({ id: this.nextId++, kind: 'rifle', shotTimer: 0 });
     this.skills.push({ id: 'grenade', cooldown: this.skillCooldown('grenade') * B.SKILL_START_CHARGE });
     this.phase = 'running';
     if (this.perm.startMoney > 0) this.earn(this.perm.startMoney);
+    if (opening) { this.stage = 0; this.pendingPicks = 1; this.openPick(); }
   }
   pause() { if (this.phase === 'running') this.phase = 'paused'; }
   resume() { if (this.phase === 'paused') this.phase = 'running'; }
-  continueEndless() { if (this.phase === 'victory') { this.endless = true; this.phase = 'running'; } }
+  /** After the victory screen: keep playing stages at the longest length, starting with a rest. */
+  continueEndless() { if (this.phase === 'victory') { this.endless = true; this.openPick(); } }
+  /** Leaves the rest and starts the next stage. */
+  nextStage(): boolean {
+    if (this.phase !== 'intermission') return false;
+    this.stage++; this.stageTime = 0; this.bossSpawned = false; this.bossDown = false; this.afterChoice = 'running'; this.phase = 'running'; return true;
+  }
+  /** Money can be spent in battle and during the rest between stages. */
+  private get shopOpen() { return this.phase === 'running' || this.phase === 'intermission'; }
   upgradeCost(kind: MercKind) { return Math.ceil(calculateValue(B.UPGRADE_BASE_COST * B.UPGRADE_COST_GROWTH ** this.levels[kind], ['Economy.UpgradeCost'], this.modifiers)); }
   private get squadScale() { return this.cores.has('lonewolf') ? 4 : this.cores.has('uniform') ? 1.3 ** Math.max(0, this.mercenaries.length - 1) : 1; }
-  private static levelScale(level: number, growth: number) { return growth ** (level - 1) * (level >= 10 ? 2 : 1) * (level >= 50 ? 3 : 1); }
+  private static levelScale(level: number, growth: number) { return growth ** (level - 1) * (level >= 10 ? B.MILESTONE_LV10 : 1) * (level >= 50 ? B.MILESTONE_LV50 : 1); }
   damageFor(kind: MercKind) {
     return MERCENARIES[kind].damage * DefenseRun.levelScale(this.levels[kind], kind === 'flame' ? B.FLAME_DAMAGE_PER_LEVEL : B.MERC_DAMAGE_PER_LEVEL) * this.squadScale * (B.MERC_TUNING[kind] ?? 1);
   }
@@ -189,7 +238,7 @@ export class DefenseRun {
     return MERCENARIES.rifle.damage * DefenseRun.levelScale(level, B.MERC_DAMAGE_PER_LEVEL) * this.squadScale;
   }
   intervalFor(kind: MercKind) {
-    return MERCENARIES[kind].interval / (this.attackSpeed * (1 + this.attackSpeedBonus)) / (this.levels[kind] >= 25 ? 1.5 : 1)
+    return MERCENARIES[kind].interval / (this.attackSpeed * (1 + this.attackSpeedBonus)) / (this.levels[kind] >= 25 ? B.MILESTONE_LV25_SPEED : 1) / (B.MERC_SPEED_TUNING[kind] ?? 1)
       / (kind === 'tesla' ? this.perm.teslaSpeed : 1) / (this.cores.has('lonewolf') ? 1.5 : 1);
   }
   /** Seconds to this mercenary's next shot; core 集火射擊 shortens it while it keeps one target. */
@@ -225,7 +274,7 @@ export class DefenseRun {
   }
   upgrade(kind: MercKind): boolean {
     const cost = this.upgradeCost(kind);
-    if (this.phase !== 'running' || !this.mercenaries.some(m => m.kind === kind) || this.money < cost) return false;
+    if (!this.shopOpen || !this.mercenaries.some(m => m.kind === kind) || this.money < cost) return false;
     this.money -= cost; this.levels[kind]++; return true;
   }
   get repairCost() { return Math.ceil(B.REPAIR_BASE_COST * B.REPAIR_COST_GROWTH ** this.wallLevel * this.perm.repairCost); }
@@ -233,13 +282,13 @@ export class DefenseRun {
   /** Core 掠奪者 disables paid repairs. */
   get canRepair() { return !this.cores.has('plunder'); }
   repair(): boolean {
-    if (!this.canRepair || this.phase !== 'running' || this.wallHealth >= this.wallMaxHealth || this.money < this.repairCost) return false;
+    if (!this.canRepair || !this.shopOpen || this.wallHealth >= this.wallMaxHealth || this.money < this.repairCost) return false;
     this.money -= this.repairCost; this.wallHealth = Math.min(this.wallMaxHealth, this.wallHealth + calculateValue(this.wallMaxHealth * B.REPAIR_FRACTION, ['Defense.Repair'], this.modifiers)); return true;
   }
   /** Core 亡者徵召 locks the barricade at 1 max health. */
   get canFortify() { return !this.cores.has('raisedead'); }
   fortify(): boolean {
-    if (!this.canFortify || this.phase !== 'running' || this.money < this.fortifyCost) return false;
+    if (!this.canFortify || !this.shopOpen || this.money < this.fortifyCost) return false;
     this.money -= this.fortifyCost; const increase = this.wallMaxHealth * B.FORTIFY_HEALTH_GAIN;
     this.wallMaxHealth += increase; this.wallHealth += increase; this.wallLevel++; return true;
   }
@@ -258,7 +307,6 @@ export class DefenseRun {
       case 'wall': { if (!this.canFortify) break; const n = this.wallMaxHealth * v; this.wallHealth += n; this.wallMaxHealth += n; break; }
       case 'crit': this.critChance += v; break;
       case 'critDamage': this.critDamage += v; break;
-      case 'pierce': this.pierce += Math.max(1, Math.floor(v)); break;
       case 'reduction': this.wallReduction = 1 - (1 - this.wallReduction) * (1 - Math.min(0.95, v)); break;
       case 'thorns': this.thorns += v; break;
       case 'airdrop': this.earn(calculateValue(25 * v * B.INCOME_GROWTH_PER_MINUTE ** (this.elapsed / 60), ['Economy.WaveReward'], this.modifiers)); break;
@@ -275,7 +323,9 @@ export class DefenseRun {
     }
     // Core 黑市補給: two picks from five, then the battle resumes.
     if (this.picksLeft > 1) { this.picksLeft--; this.choices = this.choices.filter(c => c !== card); return true; }
-    this.choices = []; this.phase = 'running'; this.checkLevel(); return true;
+    this.choices = []; this.checkLevel();
+    if (this.afterChoice === 'intermission') this.openPick(); else this.phase = 'running';
+    return true;
   }
   /** Black-market curses: the bonus now, the penalty for the rest of the run. */
   private applyCurse(id: string, v: number) {
@@ -289,10 +339,24 @@ export class DefenseRun {
     if (id === 'curse_stim') { this.critChance += v; shrinkWall(0.8); }
   }
   private earn(amount: number) { this.money += amount; this.totalEarnedMoney += amount; }
+  /** Level-ups are banked during a stage and picked in the rest after it. */
   private checkLevel() {
-    if (this.phase !== 'running' || this.xp < this.xpNeeded) return;
-    this.xp -= this.xpNeeded; this.level++;
-    this.rerollsThisLevel = 0; this.choices = this.draw(); this.phase = 'choice';
+    while (this.xp >= this.xpNeeded) { this.xp -= this.xpNeeded; this.level++; this.pendingPicks++; }
+  }
+  /** The next banked pick, or the shop once none are left. */
+  private openPick() {
+    this.afterChoice = 'intermission';
+    if (this.pendingPicks <= 0) { this.phase = 'intermission'; return; }
+    this.pendingPicks--; this.rerollsThisLevel = 0; this.choices = this.draw(); this.phase = 'choice';
+  }
+  /** The boss is down and the road is clear: lingering areas fade (mines stay), the stage pays its clear bonus, the squad rests. */
+  private endStage() {
+    this.zones = []; this.blasts = []; this.invalidateGrid();
+    const share = this.stageLength / 30;
+    this.earn(calculateValue(5 * share * B.WAVE_REWARD_GROWTH_PER_MINUTE ** (this.elapsed / 60), ['Economy.WaveReward'], this.modifiers));
+    this.xp += Math.round(2 * share); this.checkLevel();
+    if (!this.endless && this.stage >= B.STAGE_COUNT) { this.phase = 'victory'; return; }
+    this.openPick();
   }
   private count(id: string) { return this.selectedCards.filter(c => c.id === id).length; }
   /** Elements already in the build: from cards, mercenaries and skills. Synergies need two of them. */
@@ -356,7 +420,7 @@ export class DefenseRun {
     let forceRare = this.pity >= PITY_DRAWS - 1;
     while (offers.length < size) {
       const rarity = this.rollRarity(forceRare); forceRare = false;
-      const allowed = (def: CardDef, r: Rarity) => !offers.some(o => o.id === def.id) && (first ? STARTERS.includes(def.id)
+      const allowed = (def: CardDef, r: Rarity) => !offers.some(o => o.id === def.id) && this.count(def.id) < B.CARD_PICK_LIMIT && (first ? STARTERS.includes(def.id)
         // A legendary roll is only for the normal cards that can be legendary (not skills or synergies).
         : r === 'legendary' ? def.kind === 'normal' && def.maxRarity === 'legendary'
         : def.kind === 'normal' ? rank(def.minRarity ?? 'common') <= rank(r) && rank(r) <= rank(def.maxRarity ?? 'rare')
@@ -380,12 +444,13 @@ export class DefenseRun {
     return offers;
   }
   /** §11: re-draw the three cards for battlefield money; the price follows income and rises per reroll. */
-  get rerollCost() { return this.freeRerolls > 0 ? 0 : Math.ceil(8 * B.INCOME_GROWTH_PER_MINUTE ** (this.elapsed / 60) * 1.6 ** this.rerollsThisLevel); }
-  /** Kept for the UI; every core allows rerolls since 黑市補給 became 以牆為彈 (2026-10-23). */
-  get canReroll() { return true; }
+  get rerollCost() { return this.freeRerolls > 0 ? 0 : Math.ceil(8 * B.INCOME_GROWTH_PER_MINUTE ** (this.elapsed / 60)); }
+  /** One reroll per pick (2026-10-23); a free reroll from the talents pays for it. */
+  get canReroll() { return this.rerollsThisLevel < B.REROLLS_PER_PICK; }
   reroll(): boolean {
-    if (this.phase !== 'choice' || this.money < this.rerollCost) return false;
-    if (this.freeRerolls > 0) this.freeRerolls--; else { this.money -= this.rerollCost; this.rerollsThisLevel++; }
+    if (this.phase !== 'choice' || !this.canReroll || this.money < this.rerollCost) return false;
+    if (this.freeRerolls > 0) this.freeRerolls--; else this.money -= this.rerollCost;
+    this.rerollsThisLevel++;
     this.choices = this.draw(); return true;
   }
   private visual(kind: VisualEvent['kind'], x: number, y: number, color: string, radius = 0, fromX?: number, fromY?: number) {
@@ -439,6 +504,11 @@ export class DefenseRun {
     const tags: Tag[] = kind === 'chill' ? ['Damage.Cold', 'Status.Frozen'] : kind === 'shock' ? ['Damage.Electric', 'Status.Paralyzed'] : ['Damage.Blast', 'Status.Stunned'];
     this.visual(kind === 'chill' ? 'freeze' : kind === 'shock' ? 'paralyze' : 'stun', enemy.x, enemy.y, kind === 'chill' ? '#bfe8ff' : kind === 'shock' ? '#c7f5ff' : '#ffe9a8', 20).target = enemy.id;
     if (def.burst > 0) this.hit(enemy, { baseDamage: enemy.maxHp * def.burst, tags }, { build: 0 });
+  }
+  /** Fills a meter to its threshold at once (冰霜彈, 電磁脈衝); nothing happens to a zombie already under that control. */
+  private trigger(enemy: Enemy, kind: MeterKind) {
+    const m = enemy.meters[kind];
+    if (m.timer <= 0) this.build(enemy, kind, Math.max(1e-9, meterThreshold(enemy, kind, this.elapsed) - m.value));
   }
   /** Fills the meters of the elements this hit carried, from the damage it dealt. */
   private buildFrom(enemy: Enemy, tags: readonly Tag[], dealt: number, scale: number) {
@@ -643,6 +713,8 @@ export class DefenseRun {
     const def = SKILLS[skill.id], evolution = this.evolutions[skill.id];
     const origin = mercPosition(slot), base = this.skillPower * (B.SKILL_TUNING[skill.id] ?? 1), range = this.skillRange;
     const weapon = `Weapon.${skill.id}` as Tag;
+    // Everything this cast draws is a throwable's: only those shake the screen (2026-10-23).
+    const firstEvent = this.events.length;
     switch (skill.id) {
       case 'grenade': {
         const tags: Tag[] = ['Damage.Blast', 'Mechanic.AOE', 'Mechanic.Explosion', 'Mechanic.Knockback', 'Skill.Active', weapon];
@@ -711,7 +783,8 @@ export class DefenseRun {
       }
       case 'cryobomb': {
         const radius = def.radius * range, tags: Tag[] = ['Damage.Cold', 'Mechanic.AOE', 'Skill.Active', weapon];
-        for (const { enemy, k } of this.share(this.within(x, y, radius), x, y, 'skill')) this.hit(enemy, { baseDamage: base * 4 * k, tags }, { build: 2 });
+        // 2026-10-23: freezes everyone it reaches outright (the escalation still applies to the next freeze).
+        for (const { enemy, k } of this.share(this.within(x, y, radius), x, y, 'skill')) { this.hit(enemy, { baseDamage: base * 4 * k, tags }, { build: 2 }); this.trigger(enemy, 'chill'); }
         this.visual('blast', x, y, def.color, radius);
         break;
       }
@@ -734,7 +807,8 @@ export class DefenseRun {
       }
       case 'emp': {
         const radius = def.radius * range, tags: Tag[] = ['Damage.Electric', 'Mechanic.AOE', 'Skill.Active', weapon];
-        for (const { enemy, k } of this.share(this.within(x, y, radius), x, y, 'skill')) this.hit(enemy, { baseDamage: base * 3 * k, tags }, { build: 3 });
+        // 2026-10-23: paralyses everyone it reaches outright.
+        for (const { enemy, k } of this.share(this.within(x, y, radius), x, y, 'skill')) { this.hit(enemy, { baseDamage: base * 3 * k, tags }, { build: 3 }); this.trigger(enemy, 'shock'); }
         this.visual('blast', x, y, def.color, radius);
         break;
       }
@@ -749,34 +823,37 @@ export class DefenseRun {
       }
       case 'snipe': {
         const tags: Tag[] = ['Damage.Kinetic', 'Damage.Cold', 'Skill.Active', weapon];
-        const target = this.within(x, y, def.radius * range).sort((a, b) => b.hp - a.hp)[0];
+        // 2026-10-23: always the living enemy with the most HP on the whole field, wherever it is aimed.
+        let target: Enemy | undefined;
+        for (const e of this.enemies) if (e.hp > 0 && (!target || e.hp > target.hp)) target = e;
         if (target) { this.hit(target, { baseDamage: base * 30, tags }, { forceCrit: true }); this.visual('shot', target.x, target.y, def.color, 0, origin.x, origin.y); }
         break;
       }
       case 'minefield': {
         for (let i = 0; i < 4; i++) {
           const a = Math.PI / 4 + i * Math.PI / 2, r = def.radius * range;
-          this.mines.push({ x: Math.min(FIELD.wallX - 20, Math.max(0, x + Math.cos(a) * r)), y: Math.min(390, Math.max(65, y + Math.sin(a) * r)), remaining: 20, damage: base * 4 });
+          this.mines.push({ x: Math.min(FIELD.wallX - 20, Math.max(0, x + Math.cos(a) * r)), y: Math.min(390, Math.max(65, y + Math.sin(a) * r)), damage: base * 4 });
         }
+        if (this.mines.length > MINE_CAP) this.mines.splice(0, this.mines.length - MINE_CAP);
         break;
       }
     }
+    for (let i = firstEvent; i < this.events.length; i++) this.events[i]!.skill = true;
     skill.cooldown = this.skillCooldown(skill.id);
     this.resolveBlasts();
     this.enemies = this.enemies.filter(e => e.hp > 0); this.checkLevel(); return true;
   }
   /** 地雷陣: a mine goes off when a zombie steps within reach, burning and blasting everyone near. */
-  private advanceMines(dt: number) {
+  private advanceMines() {
     if (!this.mines.length) return;
     const tags: Tag[] = ['Damage.Blast', 'Damage.Fire', 'Mechanic.AOE', 'Mechanic.Explosion', 'Skill.Active', 'Weapon.minefield'];
     for (const mine of this.mines) {
-      mine.remaining -= dt;
-      if (mine.remaining <= 0 || !this.enemies.some(e => e.hp > 0 && Math.abs(e.x - mine.x) < 22 && Math.abs(e.y - mine.y) < 22)) continue;
+      if (!this.within(mine.x, mine.y, 22).length) continue;
       for (const { enemy, k } of this.share(this.within(mine.x, mine.y, 50 * this.skillRange), mine.x, mine.y, 'skill')) { this.hit(enemy, { baseDamage: mine.damage * k, tags }); this.burn(enemy, mine.damage * 0.5 * k, 3, tags); }
-      this.visual('blast', mine.x, mine.y, SKILLS.minefield.color, 50 * this.skillRange);
-      mine.remaining = 0;
+      this.visual('blast', mine.x, mine.y, SKILLS.minefield.color, 50 * this.skillRange).skill = true;
+      mine.spent = true;
     }
-    this.mines = this.mines.filter(m => m.remaining > 0);
+    this.mines = this.mines.filter(m => !m.spent);
   }
   /** Queued explosions: 毒爆 (toxin, once per zombie) and core 屍爆連鎖 (kinetic). Each may queue more; bounded per step. */
   private resolveBlasts() {
@@ -836,22 +913,33 @@ export class DefenseRun {
       }
     }
     const def = ENEMIES[kind], minutes = this.elapsed / 60;
-    const hp = def.hp * B.ENEMY_HP_SCALE * B.ENEMY_HP_GROWTH_PER_MINUTE ** minutes * (kind === 'boss' ? B.BOSS_RUSH_HP_GROWTH ** (this.bossRushes - 1) : 1);
+    const hp = def.hp * B.ENEMY_HP_SCALE * B.ENEMY_HP_GROWTH_PER_MINUTE ** minutes * (kind === 'boss' ? B.BOSS_HP_FIRST * B.BOSS_HP_PER_STAGE ** (this.stage - 1) : 1);
     // The boss charges down the centre of the road; everyone else picks a random lane.
     const y = kind === 'boss' ? 200 + this.random() * 50 : 100 + this.random() * 260;
+    const reward = def.reward * B.KILL_REWARD_GROWTH_PER_MINUTE ** minutes;
+    // Past the cap a new zombie joins the nearest one of its kind instead of adding another body.
+    if (kind !== 'boss' && this.enemies.length >= B.ENEMY_CAP) {
+      let host: Enemy | undefined, best = Infinity;
+      for (const e of this.enemies) { if (e.kind !== kind || e.hp <= 0) continue; const d = (e.x + 20) ** 2 + (e.y - y) ** 2; if (d < best) { best = d; host = e; } }
+      if (host) { host.hp += hp; host.maxHp += hp; host.reward += reward; host.xp += def.xp; host.merged = (host.merged ?? 1) + 1; return; }
+    }
     // Each zombie's defense varies a little around its kind's value (drawn from the combat stream: the horde stays the same).
     const defense = def.defense * (1 - B.DEFENSE_SPREAD + 2 * B.DEFENSE_SPREAD * this.combatRandom());
     this.invalidateGrid();
     this.enemies.push({ id: this.nextId++, kind, x: -20, y, hp, maxHp: hp, defense, resist: def.resist,
       speed: def.speed * (0.96 + this.random() * 0.08), attack: def.attack * B.ENEMY_ATTACK_GROWTH_PER_MINUTE ** minutes,
-      reward: def.reward * B.KILL_REWARD_GROWTH_PER_MINUTE ** minutes, xp: def.xp, burnPower: 0, burnDuration: 0, burnFlammability: 0,
+      reward, xp: def.xp, burnPower: 0, burnDuration: 0, burnFlammability: 0,
       toxin: 0, toxinDuration: 0, toxinBurst: false, meters: { chill: newMeter(), shock: newMeter(), stun: newMeter() }, hitFlash: 0 });
   }
-  /** A boss and its runner pack, on a fixed schedule independent of the player's power. */
+  /** A boss and its runner pack, on a fixed schedule independent of the player's power. The last stage's is a super boss. */
   private bossRush() {
-    this.bossRushes++;
+    this.bossRushes++; this.bossSpawned = true; this.bossAt = this.stageTime;
     this.spawn('boss');
-    for (let i = 0; i < B.BOSS_ESCORT; i++) this.spawn('runner');
+    if (this.superBossStage) {
+      const boss = this.enemies.at(-1)!;
+      boss.hp *= B.SUPER_BOSS_HP; boss.maxHp *= B.SUPER_BOSS_HP; boss.attack *= B.SUPER_BOSS_ATTACK; boss.superBoss = true;
+    }
+    for (let i = 0; i < (this.superBossStage ? B.SUPER_BOSS_ESCORT : B.BOSS_ESCORT); i++) this.spawn('runner');
   }
   advance(seconds: number) {
     if (this.phase !== 'running' || !Number.isFinite(seconds) || seconds <= 0) return;
@@ -892,7 +980,7 @@ export class DefenseRun {
     }
     return [front];
   }
-  /** One auto attack: damage by pattern, then the kind's own extras (burn, toxin), pierce and Lv100 bonuses. */
+  /** One auto attack: damage by pattern, then the kind's own extras (burn, toxin), pierce (core 冷鋼紀律) and Lv100 bonuses. */
   private fire(merc: Mercenary, slot: number) {
     const targets = this.targetsFor(merc.kind);
     const target = targets[0];
@@ -928,7 +1016,7 @@ export class DefenseRun {
       });
       if (def.pattern === 'aoe') this.visual('blast', target.x, target.y, def.color, def.area!);
       this.visual('shot', target.x, target.y, def.color, 0, origin.x, origin.y).merc = merc.kind;
-      // Pierce: a single shot carries on through enemies behind the target, 40% weaker each time.
+      // Pierce (core 冷鋼紀律 only since 2026-10-23): a single shot carries on through enemies behind the target.
       if (this.pierce > 0 && (def.pattern === 'single' || def.pattern === 'heaviest')) {
         const behind = this.enemies.filter(e => e !== target && e.hp > 0 && e.x >= 0 && e.x < target.x && Math.abs(e.y - target.y) < 45).sort((a, b) => b.x - a.x).slice(0, this.pierce);
         behind.forEach((e, i) => this.hit(e, { baseDamage: damage * this.perm.pierceRetention ** (i + 1), tags: def.tags }));
@@ -940,10 +1028,14 @@ export class DefenseRun {
   }
   private step(dt: number) {
     this.invalidateGrid();
-    this.elapsed += dt;
-    this.spawnTimer -= dt;
-    while (this.spawnTimer <= 0) { this.spawn(); this.spawnTimer += spawnIntervalAt(this.elapsed); }
-    if (this.elapsed + 1e-8 >= this.nextBossAt) this.bossRush();
+    this.elapsed += dt; this.stageTime += dt;
+    // The horde keeps coming until the clock runs out, or on a boss stage until the boss is down.
+    const timeUp = this.stageTime + 1e-8 >= this.stageLength;
+    if (this.bossStage ? !this.bossDown : !timeUp) {
+      this.spawnTimer -= dt;
+      while (this.spawnTimer <= 0) { this.spawn(); this.spawnTimer += spawnIntervalAt(this.elapsed); }
+    }
+    if (this.bossStage && !this.bossSpawned && timeUp) this.bossRush();
     for (const event of this.events) event.life -= dt;
     this.events = this.events.filter(e => e.life > 0);
     for (const zone of this.zones) {
@@ -955,7 +1047,7 @@ export class DefenseRun {
       this.igniteZone(zone, pulse);
     }
     this.zones = this.zones.filter(z => z.remaining > 1e-9);
-    this.advanceMines(dt);
+    this.advanceMines();
     // Talent 軍需運輸: passive income every 10 seconds, growing with the income curve.
     if (this.perm.passiveIncome > 0) {
       this.passiveTimer += dt;
@@ -992,7 +1084,7 @@ export class DefenseRun {
         }
       } else if (!this.isParalyzed(enemy)) {
         // Paralysed zombies cannot bite; frozen or stunned ones at the barricade still do.
-        this.wallHealth -= enemy.attack * dt * (1 - this.wallReduction) * this.wallVulnerability * (enemy.toxin > 0 ? this.perm.bioShield : 1);
+        this.wallHealth -= enemy.attack * this.overtimeFactor * dt * (1 - this.wallReduction) * this.wallVulnerability * (enemy.toxin > 0 ? this.perm.bioShield : 1);
         if (this.wallHealth <= 0) { this.wallHealth = 0; this.phase = 'over'; break; }
         if (this.thorns > 0) {
           // Spikes: a share of the squad's reference shot per second, as kinetic damage (no per-tick events).
@@ -1016,8 +1108,8 @@ export class DefenseRun {
     });
     this.resolveBlasts();
     this.enemies = this.enemies.filter(e => e.hp > 0);
-    if (this.clearedWave > this.completedWaves) { this.earn(calculateValue(5 * B.WAVE_REWARD_GROWTH_PER_MINUTE ** (this.elapsed / 60), ['Economy.WaveReward'], this.modifiers)); this.xp += 2; this.completedWaves = this.clearedWave; }
-    if (!this.endless && this.elapsed + 1e-8 >= FIELD.victorySeconds) { this.elapsed = FIELD.victorySeconds; this.phase = 'victory'; return; }
     this.checkLevel();
+    if (this.bossSpawned && !this.bossDown && !this.boss) { this.bossDown = true; this.bossDownAt = this.stageTime; }
+    if ((this.bossStage ? this.bossDown : this.stageTime + 1e-8 >= this.stageLength) && !this.enemies.length) this.endStage();
   }
 }

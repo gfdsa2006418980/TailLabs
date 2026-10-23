@@ -23,7 +23,7 @@ const SPECS: Record<Branch, NodeSpec[]> = {
     { id: 'kinetic_damage', name: '動能專精', growth: 1.08, describe: '所有動能傷害', flavor: '火藥多放一點。' },
     { id: 'crit_rate', name: '射擊精度', growth: 1.05, describe: '暴擊率（每級 +0.5%）', flavor: '準星對齊，再扣。' },
     { id: 'crit_power', name: '要害訓練', growth: 1.04, describe: '暴擊傷害', flavor: '知道哪裡最痛。' },
-    { id: 'pierce_training', name: '穿甲訓練', growth: 1.04, describe: '穿透後保留的傷害（上限 95%）', flavor: '別讓子彈停下來。' },
+    { id: 'pierce_training', name: '穿甲訓練', growth: 1.04, describe: '穿透後保留的傷害（冷鋼紀律，上限 95%）', flavor: '別讓子彈停下來。' },
     { id: 'impact', name: '震退裝藥', growth: 1.05, describe: '手榴彈擊退距離', flavor: '把它們推回去。' },
     { id: 'armor_breaker', name: '破甲戰術', growth: 1.06, describe: '對裝甲兵、精英與屍王的傷害', flavor: '大的先打。' },
   ],
@@ -161,7 +161,8 @@ export function isRevealed(tree: TalentTree, id: string): boolean {
     (a === id && talentLevel(tree, b) > 0) || (b === id && talentLevel(tree, a) > 0));
 }
 export function canBreakthrough(tree: TalentTree): boolean {
-  return TALENTS.some(node => talentLevel(tree, node.id) >= tree.maxNodeLevel);
+  // 2026-10-23: every node must reach the tier cap before the next tier opens.
+  return TALENTS.every(node => talentLevel(tree, node.id) >= tree.maxNodeLevel);
 }
 export const talentMultiplier = (tree: TalentTree, id: string) => (talentById(id)?.growth ?? 1) ** talentLevel(tree, id);
 

@@ -9,27 +9,38 @@ const running = (seed = 1) => { const run = new DefenseRun(seed); run.start(); r
 const take = (run, id, rarity) => { run.phase = 'choice'; run.choices = [makeCard(cardDef(id), rarity)]; assert.equal(run.choose(id), true); };
 const enemy = (over = {}) => ({ id: 9000, kind: 'walker', x: 500, y: 225, hp: 1e6, maxHp: 1e6, defense: 0, speed: 0, attack: 0, reward: 1, xp: 0,
   burnPower: 0, burnDuration: 0, burnFlammability: 0, ...freshStatus(), hitFlash: 0, ...over });
-const levelUp = run => { run.phase = 'running'; run.xp = run.xpNeeded; run.advance(FIELD.step); assert.equal(run.phase, 'choice'); return run.choices; };
+// Level-ups are banked until the rest; card tests open one pick by hand (one level up, a fresh draw).
+const levelUp = run => { run.level++; run.rerollsThisLevel = 0; run.choices = run.draw(); run.phase = 'choice'; return run.choices; };
 
-test('TL003 cards: rarity scales magnitudes; legendary is for evolutions and the few cards marked for it', () => {
+test('TL003 cards: rarity scales magnitudes (× CARD_POWER); legendary is for evolutions only', () => {
   const kinetic = cardDef('kinetic');
-  // 2026-10-23: one fixed value per rarity at every tactical level (no late +1% cards).
-  near(makeCard(kinetic, 'uncommon').value, kinetic.value * RARITIES.uncommon.mult);
-  near(makeCard(kinetic, 'rare', 30).modifier.value, kinetic.value * RARITIES.rare.mult);
+  // 2026-10-23: one fixed value per rarity at every tactical level (no late +1% cards), times CARD_POWER.
+  near(makeCard(kinetic, 'uncommon').value, kinetic.value * RARITIES.uncommon.mult * B.CARD_POWER);
+  near(makeCard(kinetic, 'rare', 30).modifier.value, kinetic.value * RARITIES.rare.mult * B.CARD_POWER);
   for (const def of CARD_DEFS.filter(d => d.kind === 'normal')) near(makeCard(def, 'common', 100).value, makeCard(def, 'common', 2).value);
-  near(makeCard(cardDef('kinetic'), 'common', 80).value, 0.1); near(makeCard(cardDef('crit'), 'common', 80).value, 0.03);
+  near(makeCard(cardDef('kinetic'), 'common', 80).value, 0.1 * B.CARD_POWER); near(makeCard(cardDef('crit'), 'common', 80).value, 0.03 * B.CARD_POWER);
   const w = rarityWeights(1); near(w.common + w.uncommon + w.rare + w.legendary, 100);
   assert.ok(rarityWeights(30).common < w.common && rarityWeights(500).common === 35, 'common share shrinks with level, floored at 35');
   assert.ok(CARD_DEFS.filter(d => d.fixedRarity === 'legendary').every(d => d.kind === 'evolution'));
-  // 2026-10-23: 穿甲彈芯 is legendary-only (+2); 爆裂彈頭 starts at rare (10%) up to legendary (20%); 緊急工兵 is gone.
-  assert.deepEqual(CARD_DEFS.filter(d => d.kind === 'normal' && d.maxRarity === 'legendary').map(d => d.id).sort(), ['blastAmmo', 'pierce']);
-  assert.equal(makeCard(cardDef('pierce'), 'legendary').short, '普攻穿透 +2');
-  near(makeCard(cardDef('blastAmmo'), 'rare').value, 0.1); near(makeCard(cardDef('blastAmmo'), 'legendary').value, 0.2);
-  assert.equal(cardDef('repair'), undefined);
+  // 2026-10-23: 穿甲彈芯, 爆裂彈頭 and 緊急工兵 are gone; no normal card reaches legendary any more.
+  for (const id of ['pierce', 'blastAmmo', 'repair']) assert.equal(cardDef(id), undefined, id);
+  assert.deepEqual(CARD_DEFS.filter(d => d.kind === 'normal' && d.maxRarity === 'legendary').map(d => d.id), []);
+  assert.deepEqual(cardDef('refract').recipe, ['crit', 'coil', 'coil']);
+  // Legendary rolls fall back to rare for normal cards.
   const run = running(); take(run, 'kinetic'); const seen = new Set();
   for (let i = 0; i < 400; i++) { for (const c of levelUp(run)) if (c.kind === 'normal') seen.add(c.id + ':' + c.rarity); run.phase = 'running'; run.choices = []; }
-  for (const key of seen) { const [id, rarity] = key.split(':'); if (id === 'pierce') assert.equal(rarity, 'legendary'); if (id === 'blastAmmo') assert.ok(rarity === 'rare' || rarity === 'legendary', key); if (rarity === 'legendary') assert.ok(id === 'pierce' || id === 'blastAmmo', key); }
-  assert.ok(seen.has('pierce:legendary') && seen.has('blastAmmo:legendary'), 'both legendary cards do show up');
+  assert.ok(![...seen].some(key => key.endsWith(':legendary')), [...seen].filter(key => key.endsWith(':legendary')).join());
+  assert.ok([...seen].some(key => key.endsWith(':rare')), 'rare cards do show up');
+});
+
+test('TL003 cards: each card can be picked at most CARD_PICK_LIMIT times, then it leaves the pool', () => {
+  const kineticSeen = picks => {
+    const run = running(); for (let i = 0; i < picks; i++) take(run, 'kinetic');
+    let seen = 0; for (let i = 0; i < 300; i++) { if (levelUp(run).some(c => c.id === 'kinetic')) seen++; run.phase = 'running'; run.choices = []; }
+    return seen;
+  };
+  assert.ok(kineticSeen(B.CARD_PICK_LIMIT - 1) > 0, 'one pick below the limit it is still offered');
+  assert.equal(kineticSeen(B.CARD_PICK_LIMIT), 0, 'at the limit it is never offered again');
 });
 
 test('TL003 cards: about 100 picks fit in a 20-minute run; synergies and evolutions are level-gated', () => {
@@ -45,7 +56,7 @@ test('TL003 cards: three unique offers; the first choice offers two recruits and
   const run = running(); const first = levelUp(run);
   assert.equal(new Set(first.map(c => c.id)).size, 3);
   assert.equal(first.filter(c => c.kind === 'merc').length, 2, first.map(c => c.id).join());
-  assert.ok(first.filter(c => c.kind !== 'merc').every(c => ['kinetic', 'burn', 'bio', 'shock', 'chill', 'blastAmmo'].includes(c.id)));
+  assert.ok(first.filter(c => c.kind !== 'merc').every(c => ['kinetic', 'burn', 'bio', 'shock', 'chill'].includes(c.id)));
 });
 
 test('TL003 cards: until the squad is full every choice offers 1–2 recruits; then none', () => {
@@ -85,11 +96,16 @@ test('TL003 cards: pity guarantees a rare after a streak of plain draws', () => 
   assert.equal(run.pity, 0);
 });
 
-test('TL003 cards: reroll costs battlefield money, rises per reroll and redraws', () => {
+test('TL003 cards: one reroll per pick at a fixed battlefield-money price; a free reroll is used first', () => {
   const run = running(); take(run, 'kinetic'); levelUp(run);
-  const cost = run.rerollCost; run.money = 0; assert.equal(run.reroll(), false);
-  run.money = 1e6; assert.equal(run.reroll(), true); near(run.money, 1e6 - cost);
-  assert.ok(run.rerollCost > cost); assert.equal(run.choices.length, 3); assert.equal(run.phase, 'choice');
+  const cost = run.rerollCost; assert.equal(cost, Math.ceil(8 * B.INCOME_GROWTH_PER_MINUTE ** (run.elapsed / 60)));
+  run.money = 0; assert.equal(run.reroll(), false); assert.equal(run.canReroll, true, 'a refused reroll is not used up');
+  run.money = 1e6; const before = run.choices; assert.equal(run.reroll(), true); near(run.money, 1e6 - cost);
+  assert.notEqual(run.choices, before); assert.equal(run.choices.length, 3); assert.equal(run.phase, 'choice');
+  assert.equal(run.rerollCost, cost, 'the price does not rise per reroll');
+  assert.equal(B.REROLLS_PER_PICK, 1); assert.equal(run.canReroll, false); assert.equal(run.reroll(), false); near(run.money, 1e6 - cost);
+  const free = running(); take(free, 'kinetic'); levelUp(free); free.freeRerolls = 1; free.money = 0;
+  assert.equal(free.rerollCost, 0); assert.equal(free.reroll(), true); assert.equal(free.freeRerolls, 0); assert.equal(free.reroll(), false);
 });
 
 test('TL003 cards: synergies only enter the pool once both elements are in the build', () => {
@@ -119,11 +135,13 @@ test('TL003 cards: evolutions change the skill (high explosive, double throw, ov
   const over = running(); over.learn('laser'); over.evolutions.laser = 'overload'; over.cast(1, 200, 222); near(over.skills[1].cooldown, 45 * 1.5);
 });
 
-test('TL003 cards: crits, pierce, plating, spikes and airdrop', () => {
+test('TL003 cards: crits, no pierce without 冷鋼紀律, plating, spikes and airdrop', () => {
   const crit = running(); take(crit, 'crit'); crit.critChance = 1; const a = enemy(); crit.enemies = [a]; crit.mercenaries[0].shotTimer = 0; crit.advance(FIELD.step);
   near(1e6 - a.hp, crit.damageFor('rifle') * 1.5); assert.ok(crit.events.some(e => e.kind === 'hit' && e.crit));
-  const pierce = running(); take(pierce, 'pierce', 'rare'); const front = enemy({ x: 600 }), back = enemy({ id: 9001, x: 400 });
-  pierce.enemies = [front, back]; pierce.mercenaries[0].shotTimer = 0; pierce.advance(FIELD.step); near(1e6 - back.hp, (1e6 - front.hp) * 0.6);
+  // Pierce only comes from the 冷鋼紀律 core now (see the cores tests); a plain shot stops at its target.
+  const plain = running(); const front = enemy({ x: 600 }), back = enemy({ id: 9001, x: 400 });
+  plain.enemies = [front, back]; plain.mercenaries[0].shotTimer = 0; plain.advance(FIELD.step);
+  assert.equal(plain.pierce, 0); assert.ok(front.hp < 1e6); near(back.hp, 1e6);
   const plating = makeCard(cardDef('plating')).value;
   const plate = running(); take(plate, 'plating'); near(plate.wallReduction, plating); take(plate, 'plating'); near(plate.wallReduction, 1 - (1 - plating) ** 2);
   const spikes = running(); take(spikes, 'spikes'); const chewer = enemy({ x: FIELD.wallX - 18 }); spikes.enemies = [chewer]; spikes.advance(1); assert.ok(chewer.hp < 1e6);

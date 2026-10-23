@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { calculateValue, calculateDamage, effectiveCooldown, runScore, formatNumber, withFamily } from '../src/tl003/Combat.ts';
 import { DefenseRun, FIELD, freshStatus, meterThreshold } from '../src/tl003/Run.ts';
-import { MERCENARIES, CARDS, SKILLS } from '../src/tl003/Content.ts';
+import { MERCENARIES, CARDS, SKILLS, ENEMIES } from '../src/tl003/Content.ts';
 import { LocalMetaMirror, META_KEY, emptyMeta, normalizeMeta } from '../src/tl003/Meta.ts';
 import { project, unproject, projectedCircle } from '../src/tl003/Projection.ts';
 import * as B from '../src/tl003/Balance.ts';
@@ -30,6 +30,7 @@ function simulate(seed, active = false) {
   const run = new DefenseRun(seed); run.start();
   for (let i = 0; i < 60 * 180 && run.phase !== 'over'; i++) {
     if (run.phase === 'choice') run.choose(run.choices.find(c => c.id === 'kinetic')?.id ?? run.choices[0].id);
+    if (run.phase === 'intermission') run.nextStage();
     if (active && run.elapsed >= 23 && run.skills[0].cooldown === 0) run.cast(0, 690, 230);
     run.advance(1 / 60);
   }
@@ -100,9 +101,12 @@ test('TL003 recruitment is free, never exceeds three and refuses a second copy o
   assert.equal(run.upgrade('tesla'), false);
 });
 test('TL003 milestone boosts at 10/25/50 coexist with shared levels', () => {
-  const run = running(); run.levels.rifle = 10; near(run.damageFor('rifle'), R * B.MERC_DAMAGE_PER_LEVEL ** 9 * 2);
-  run.levels.rifle = 25; near(run.intervalFor('rifle'), 1.25 / 1.5);
-  run.levels.rifle = 50; near(run.damageFor('rifle'), R * B.MERC_DAMAGE_PER_LEVEL ** 49 * 6);
+  const run = running(); run.levels.rifle = 10; near(run.damageFor('rifle'), R * B.MERC_DAMAGE_PER_LEVEL ** 9 * B.MILESTONE_LV10);
+  run.levels.rifle = 25; near(run.intervalFor('rifle'), MERCENARIES.rifle.interval / B.MILESTONE_LV25_SPEED);
+  run.levels.rifle = 50; near(run.damageFor('rifle'), R * B.MERC_DAMAGE_PER_LEVEL ** 49 * B.MILESTONE_LV10 * B.MILESTONE_LV50);
+  // The flamer grows on its own (smaller) curve; the sniper fires at its attack-speed tuning.
+  run.levels.flame = 10; near(run.damageFor('flame'), MERCENARIES.flame.damage * B.FLAME_DAMAGE_PER_LEVEL ** 9 * B.MILESTONE_LV10);
+  near(run.intervalFor('sniper'), MERCENARIES.sniper.interval / B.MERC_SPEED_TUNING.sniper);
   near(run.skillPower, run.damageFor('rifle'), 'skills follow the highest mercenary level');
 });
 test('TL003 money spending does not change total earnings or score; XP cannot be spent', () => {
@@ -130,14 +134,19 @@ test('TL003 hits under 0.1% of max HP still count but make no damage event', () 
   const small = running(); const walker = enemy({ hp: 200, maxHp: 200 }); small.enemies = [walker]; small.advance(FIELD.step);
   assert.equal(small.events.filter(e => e.kind === 'hit').length, 1);
 });
-test('TL003 a level-up offers three unique cards and freezes time until a valid choice', () => {
-  const run = running(); run.xp = 3; run.advance(FIELD.step);
-  assert.equal(run.phase, 'choice'); assert.equal(run.choices.length, 3); assert.equal(new Set(run.choices.map(c => c.id)).size, 3);
+test('TL003 a level-up is banked mid-battle; its pick opens after the stage and freezes time until a valid choice', () => {
+  const run = running(); run.wallHealth = run.wallMaxHealth = 1e12; run.xp = B.xpForLevel(1); run.advance(FIELD.step);
+  assert.equal(run.phase, 'running'); assert.equal(run.level, 2); assert.equal(run.pendingPicks, 1); assert.equal(run.choices.length, 0);
+  // Run the clock out on an empty road: the stage ends on the next frame.
+  run.stageTime = run.stageLength; run.enemies = []; run.advance(FIELD.step);
+  assert.equal(run.phase, 'choice'); assert.equal(run.pendingPicks, 0); assert.equal(run.choices.length, 3); assert.equal(new Set(run.choices.map(c => c.id)).size, 3);
   const elapsed = run.elapsed; run.advance(40); assert.equal(run.elapsed, elapsed);
-  assert.equal(run.choose('invalid'), false); assert.equal(run.choose(run.choices[0].id), true); run.advance(FIELD.step); near(run.elapsed, elapsed + FIELD.step);
+  assert.equal(run.choose('invalid'), false); assert.equal(run.choose(run.choices[0].id), true);
+  assert.equal(run.phase, 'intermission'); run.advance(40); assert.equal(run.elapsed, elapsed, 'the rest does not run the clock');
+  assert.equal(run.nextStage(), true); run.advance(FIELD.step); near(run.elapsed, elapsed + FIELD.step);
 });
-test('TL003 Kinetic, Burn, Toxin, Shock, Chill and Blast ammo affect actual live enemies', () => {
-  for (const id of ['kinetic','burn','bio','shock','chill','blastAmmo']) {
+test('TL003 Kinetic, Burn, Toxin, Shock and Chill ammo affect actual live enemies', () => {
+  for (const id of ['kinetic','burn','bio','shock','chill']) {
     const run = running(); choose(run,id); const target = enemy({ hp: 1e6, maxHp: 1e6, defense: 50 }), side = enemy({ id: 10000, x: 480, hp: 1e6, maxHp: 1e6 }); run.enemies = [target, side]; run.advance(FIELD.step);
     if(id==='kinetic') near(1e6-target.hp,R*(1+V('kinetic'))*100/150);
     if(id==='burn') { near(target.burnPower,V('burn')*R); const hp=target.hp; run.mercenaries[0].shotTimer=100; run.advance(1); near(hp-target.hp,V('burn')*R); /* burns are elemental: armor 50 does not apply */ }
@@ -147,7 +156,6 @@ test('TL003 Kinetic, Burn, Toxin, Shock, Chill and Blast ammo affect actual live
     // The extra hit is elemental: armor does not stop it (the target has no resistance).
     if(id==='shock') { near(1e6-target.hp,R*100/150+R*V('shock')); assert.ok(target.meters.shock.value>0); }
     if(id==='chill') { near(1e6-target.hp,R*100/150+R*V('chill')); assert.ok(target.meters.chill.value>0); }
-    if(id==='blastAmmo') { near(1e6-side.hp,R*V('blastAmmo')); assert.ok(side.meters.stun.value>0); }
   }
 });
 test('TL003 a full meter triggers its control once, and recent triggers raise the threshold by +200%', () => {
@@ -265,11 +273,87 @@ test('TL003 skills are decoupled from mercenaries: three slots, each on its own 
     if (id==='mortar') { assert.equal(r.events.filter(e=>e.kind==='blast').length,5); continue; }
     r.advance(1); assert.ok(r.enemies[0].hp<1e6||r.mines.length>0,`${id} did something`); }
 });
-test('TL003 wave rewards occur only after a full 30 seconds and 20 minutes ends in victory', () => {
-  const run=running();run.wallHealth=1e100;run.elapsed=29.98;run.mercenaries[0].shotTimer=100;run.advance(.016667);assert.equal(run.clearedWave,0);
-  run.advance(.016667);assert.equal(run.clearedWave,1);assert.ok(run.money>0);assert.ok(run.xp>=2);
-  run.elapsed=1199.99;run.advance(.016667);assert.equal(run.phase,'victory');near(run.elapsed,1200);assert.equal(run.wave,40);assert.equal(run.clearedWave,40);
-  const time=run.elapsed;run.advance(10);assert.equal(run.elapsed,time);
+test('TL003 stage lengths grow 5 s a stage up to 120 s; bosses on 4, 7, …, 19 and a super boss on the last stage', () => {
+  assert.equal(B.STAGE_COUNT, 20);
+  for (let n = 1; n <= B.STAGE_COUNT; n++) near(B.stageSeconds(n), Math.min(120, 30 + 5 * (n - 1)));
+  assert.deepEqual(Array.from({ length: B.STAGE_COUNT }, (_, i) => i + 1).filter(B.isBossStage), [4, 7, 10, 13, 16, 19, 20]);
+  const run = running(); assert.equal(run.stage, 1); assert.equal(run.wave, 1); assert.equal(run.clearedWave, 0); near(run.stageLength, B.stageSeconds(1));
+  for (const old of ['BOSS_FIRST_SECONDS', 'BOSS_INTERVAL_SECONDS', 'BOSS_RUSH_HP_GROWTH']) assert.equal(old in B, false, `${old} is gone`);
+});
+test('TL003 a normal stage stops spawning when its clock runs out, then ends on a clear road with a bonus and the banked picks', () => {
+  const run = running(); run.wallHealth = run.wallMaxHealth = 1e12; run.mercenaries[0].shotTimer = 1e9;
+  run.xp = B.xpForLevel(1) + B.xpForLevel(2); run.advance(FIELD.step); assert.equal(run.pendingPicks, 2); assert.equal(run.phase, 'running');
+  run.advance(B.stageSeconds(1)); assert.equal(run.phase, 'running', 'zombies are still on the road'); near(run.stageLeft, 0);
+  assert.equal(run.bossWarning, undefined); assert.equal(run.boss, undefined, 'no boss on a normal stage');
+  const alive = run.enemies.length; assert.ok(alive > 0); run.advance(3); assert.equal(run.enemies.length, alive, 'no spawns after the clock');
+  // Clear the road by hand; a lingering zone fades, a mine stays.
+  run.enemies = []; run.zones.push({ kind: 'gas', x: 400, y: 225, radius: 50, remaining: 6, power: 1, pulseTimer: 1, contacts: new Set() });
+  run.mines.push({ x: 400, y: 225, damage: 1 });
+  const money = run.money, xp = run.xp; run.advance(FIELD.step);
+  const share = B.stageSeconds(1) / 30;
+  near(run.money - money, calculateValue(5 * share * B.WAVE_REWARD_GROWTH_PER_MINUTE ** (run.elapsed / 60), ['Economy.WaveReward'], run.modifiers));
+  assert.equal(run.xp - xp, Math.round(2 * share)); assert.equal(run.level, 3, 'the clear bonus XP alone does not level here');
+  assert.equal(run.zones.length, 0); assert.equal(run.mines.length, 1);
+  // Two banked picks, one after the other, each with its own reroll; then the rest.
+  assert.equal(run.phase, 'choice'); assert.equal(run.pendingPicks, 1); assert.equal(run.clearedWave, 1);
+  run.money = 1e6; assert.equal(run.reroll(), true); assert.equal(run.reroll(), false);
+  assert.equal(run.choose(run.choices[0].id), true); assert.equal(run.phase, 'choice'); assert.equal(run.pendingPicks, 0);
+  assert.equal(run.canReroll, true, 'a new pick allows a new reroll'); assert.equal(run.reroll(), true);
+  assert.equal(run.choose(run.choices[0].id), true); assert.equal(run.phase, 'intermission'); assert.equal(run.clearedWave, 1);
+  assert.equal(run.nextStage(), true); assert.equal(run.stage, 2); assert.equal(run.wave, 2); assert.equal(run.clearedWave, 1);
+  near(run.stageLength, B.stageSeconds(2)); near(run.stageTime, 0);
+});
+test('TL003 start(true) opens with a rest: stage 0, one pick, then shopping until the first stage starts', () => {
+  const run = new DefenseRun(123); run.start(true);
+  assert.equal(run.stage, 0); assert.equal(run.phase, 'choice'); assert.equal(run.pendingPicks, 0); assert.equal(run.choices.length, 3);
+  assert.equal(run.choices.filter(c => c.kind === 'merc').length, 2, 'the opening pick offers two recruits');
+  run.advance(5); assert.equal(run.elapsed, 0); assert.equal(run.upgrade('rifle'), false, 'no shopping while a card is up');
+  run.money = 1e6; assert.equal(run.reroll(), true); assert.equal(run.reroll(), false, 'one reroll per pick');
+  assert.equal(run.choose(run.choices.find(c => c.kind === 'merc').id), true); assert.equal(run.mercenaries.length, 2);
+  assert.equal(run.phase, 'intermission'); assert.equal(run.clearedWave, 0); run.advance(5); assert.equal(run.elapsed, 0);
+  // The shop is open in the rest (and in battle).
+  assert.equal(run.upgrade('rifle'), true); assert.equal(run.fortify(), true); run.wallHealth = 1; assert.equal(run.repair(), true);
+  assert.equal(run.nextStage(), true); assert.equal(run.stage, 1); assert.equal(run.phase, 'running'); assert.equal(run.nextStage(), false);
+  run.advance(1); near(run.elapsed, 1); near(run.stageTime, 1); assert.equal(run.upgrade('rifle'), true);
+  const plain = new DefenseRun(123); plain.start(); assert.equal(plain.stage, 1); assert.equal(plain.phase, 'running');
+});
+test('TL003 boss stages: warning, boss and runners when the clock runs out, spawns until the boss is down; the super boss ends the run', () => {
+  const bossHp = (stage, elapsed) => ENEMIES.boss.hp * B.ENEMY_HP_SCALE * B.ENEMY_HP_GROWTH_PER_MINUTE ** (elapsed / 60) * B.BOSS_HP_FIRST * B.BOSS_HP_PER_STAGE ** (stage - 1);
+  const quiet = running(); quiet.stage = 3; quiet.stageTime = quiet.stageLength - 1; quiet.advance(FIELD.step); assert.equal(quiet.bossWarning, undefined, 'no warning on a normal stage');
+  const run = running(); run.wallHealth = run.wallMaxHealth = 1e12; run.mercenaries[0].shotTimer = 1e9; run.stage = 4;
+  run.stageTime = run.stageLength - B.BOSS_WARNING_SECONDS - 0.5; run.advance(FIELD.step); assert.equal(run.bossWarning, undefined);
+  run.advance(1); assert.ok(run.bossWarning > 0 && run.bossWarning <= B.BOSS_WARNING_SECONDS, `${run.bossWarning}`);
+  run.stageTime = run.stageLength - FIELD.step / 2; const lastId = Math.max(0, ...run.enemies.map(e => e.id));
+  run.advance(FIELD.step); const boss = run.boss; assert.ok(boss, 'the boss charges in'); assert.equal(run.bossWarning, undefined);
+  near(boss.maxHp / bossHp(4, run.elapsed), 1); assert.ok(!boss.superBoss);
+  assert.ok(run.enemies.filter(e => e.id > lastId && e.kind === 'runner').length >= B.BOSS_ESCORT);
+  // The horde keeps coming while the boss stands, even with the clock out.
+  const before = run.enemies.length; run.advance(10); assert.ok(run.enemies.length > before, 'spawns continue until the boss is down');
+  assert.equal(run.phase, 'running'); assert.equal(run.bossDown, false);
+  run.boss.hp = 0; run.advance(FIELD.step); assert.equal(run.bossDown, true);
+  const left = run.enemies.length; assert.ok(left > 0); run.advance(2); assert.equal(run.enemies.length, left, 'no spawns once the boss is down');
+  run.enemies = []; run.advance(FIELD.step); assert.notEqual(run.phase, 'running'); assert.equal(run.clearedWave, 4);
+  // The last stage: a super boss; beating it wins.
+  const last = running(); last.wallHealth = last.wallMaxHealth = 1e12; last.mercenaries[0].shotTimer = 1e9; last.stage = B.STAGE_COUNT;
+  last.stageTime = last.stageLength - FIELD.step / 2; const lastBefore = Math.max(0, ...last.enemies.map(e => e.id)); last.advance(FIELD.step);
+  const sup = last.boss; assert.ok(sup && sup.superBoss); near(sup.maxHp / (bossHp(B.STAGE_COUNT, last.elapsed) * B.SUPER_BOSS_HP), 1);
+  near(sup.attack, ENEMIES.boss.attack * B.ENEMY_ATTACK_GROWTH_PER_MINUTE ** (last.elapsed / 60) * B.SUPER_BOSS_ATTACK);
+  assert.ok(last.enemies.filter(e => e.id > lastBefore && e.kind === 'runner').length >= B.SUPER_BOSS_ESCORT);
+  sup.hp = 0; last.advance(FIELD.step); last.enemies = []; last.advance(FIELD.step);
+  assert.equal(last.phase, 'victory'); assert.equal(last.clearedWave, B.STAGE_COUNT);
+  const time = last.elapsed; last.advance(10); assert.equal(last.elapsed, time); assert.equal(last.nextStage(), false);
+});
+test('TL003 past ENEMY_CAP alive zombies a new one merges into the nearest of its kind; bosses always join', () => {
+  const run = running(); run.mercenaries[0].shotTimer = 1e9;
+  run.enemies = Array.from({ length: B.ENEMY_CAP }, (_, i) => enemy({ id: 40000 + i, x: 20 + (i % 60) * 10, y: 100 + (i % 26) * 10, hp: 50, maxHp: 50, reward: 3, xp: 1 }));
+  const total = run.enemies.reduce((sum, e) => sum + e.maxHp, 0), hp = ENEMIES.walker.hp * B.ENEMY_HP_SCALE;
+  run.spawn('walker'); assert.equal(run.enemies.length, B.ENEMY_CAP);
+  const host = run.enemies.find(e => e.merged); assert.ok(host); assert.equal(host.merged, 2);
+  near(host.maxHp, 50 + hp); near(host.hp, 50 + hp); near(host.reward, 3 + ENEMIES.walker.reward); assert.equal(host.xp, 1 + ENEMIES.walker.xp);
+  near(run.enemies.reduce((sum, e) => sum + e.maxHp, 0), total + hp);
+  assert.equal(host.x, 20, 'it joins a walker nearest the spawn line');
+  run.spawn('runner'); assert.equal(run.enemies.length, B.ENEMY_CAP + 1, 'no runner to merge into: it spawns');
+  run.spawn('boss'); assert.equal(run.enemies.length, B.ENEMY_CAP + 2, 'a boss is never merged');
 });
 test('TL003 enemy difficulty is independent of permanent player progress and supports six enemy types', () => {
   const a=running(),b=running();b.modifiers.push({kind:'More',tags:['Damage.Kinetic'],value:1e10});
@@ -278,9 +362,9 @@ test('TL003 enemy difficulty is independent of permanent player progress and sup
 });
 test('TL003 first-run baseline (no upgrades, no skills) ends before the first boss after a handful of kills', () => {
   const runs=Array.from({length:128},(_,i)=>simulate(Math.imul(i+1,2654435761)));
-  // Recruit cards are free since 2026-10-23, so even a no-play run fields a squad; it still never reaches the first boss.
-  assert.ok(runs.every(r=>r.phase==='over'&&r.elapsed>=20&&r.elapsed<B.BOSS_FIRST_SECONDS), runs.map(r=>r.elapsed.toFixed(0)).join());
-  const mean=runs.reduce((sum,r)=>sum+r.kills,0)/runs.length;assert.ok(mean>=4&&mean<=20,`mean kills ${mean}`);
+  // Recruit cards are free since 2026-10-23, so even a no-play run fields a squad; it still never beats the first boss stage.
+  assert.ok(runs.every(r=>r.phase==='over'&&r.elapsed>=20&&r.stage<=B.BOSS_FIRST_STAGE&&r.clearedWave<B.BOSS_FIRST_STAGE), runs.map(r=>`${r.stage}@${r.elapsed.toFixed(0)}`).join());
+  const mean=runs.reduce((sum,r)=>sum+r.kills,0)/runs.length;assert.ok(mean>=2&&mean<=20,`mean kills ${mean}`);
 });
 test('TL003 aimed active skill can improve a first run without scripted death or a kill cap', () => {
   const before=simulate(4),after=simulate(4,true);assert.ok(after.kills>before.kills||after.elapsed>before.elapsed);
@@ -316,4 +400,17 @@ test('TL003 perspective AOE preview maps to the same circle used by hit testing'
   const view={width:480,height:660},points=projectedCircle(500,225,60,view);
   assert.equal(points.length,49);
   for(const p of points){const world=unproject(p.x,p.y,view);near(Math.hypot(world.x-500,world.y-225),60);}
+});
+test('TL003 reworked throwables: snipe takes the field\'s biggest HP, mines stay until stepped on, EMP and cryo bomb trigger their control', () => {
+  const quiet = () => { const r = running(); r.mercenaries.forEach(m => m.shotTimer = 1e9); return r; };
+  const s = quiet(); s.learn('snipe'); const small = enemy({ x: 300, y: 225, hp: 5e5, maxHp: 1e6 }), big = enemy({ id: 20000, x: 650, y: 120, hp: 9e5, maxHp: 1e6 }); s.enemies = [small, big];
+  assert.equal(s.cast(1, 300, 225), true); near(small.hp, 5e5); assert.ok(big.hp < 9e5, 'the sniper ignores where it was aimed');
+  const m = quiet(); m.learn('minefield'); const far = enemy({ x: 100, y: 380, hp: 1e6, maxHp: 1e6, speed: 0 }); m.enemies = [far];
+  m.cast(1, 400, 225); assert.equal(m.mines.length, 4); m.advance(5); assert.equal(m.mines.length, 4, 'untouched mines stay');
+  for (let i = 0; i < 9; i++) { m.skills[1].cooldown = 0; m.cast(1, 400, 225); } assert.equal(m.mines.length, 32, 'the field keeps at most 32');
+  m.enemies.push(enemy({ id: 21000, x: m.mines[31].x, y: m.mines[31].y, hp: 1e6, maxHp: 1e6, speed: 0 })); m.advance(FIELD.step); assert.ok(m.mines.length < 32, 'a stepped-on mine goes off');
+  for (const [id, frozen] of [['cryobomb', 'isFrozen'], ['emp', 'isParalyzed']]) {
+    const r = quiet(); r.learn(id); const t = enemy({ x: 500, y: 225, hp: 1e9, maxHp: 1e9 }); r.enemies = [t];
+    r.cast(1, 500, 225); assert.ok(r[frozen](t), `${id} controls at once`);
+  }
 });

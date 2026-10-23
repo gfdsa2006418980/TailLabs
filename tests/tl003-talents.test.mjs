@@ -14,9 +14,14 @@ function mirror(points = 1000, tree = emptyTree()) {
   return { meta: new LocalMetaMirror(storage), storage, data };
 }
 const treeWith = nodes => ({ ...emptyTree(), nodes });
+/** Every node at one level (breakthrough needs all of them at the cap). */
+const allAt = level => Object.fromEntries(TALENTS.map(n => [n.id, level]));
 const target = { defense: 0, toxin: 0 };
+const pick = run => run.choose(run.choices.find(c => c.id === 'kinetic')?.id ?? run.choices[0].id);
+/** One frame of a no-shopping player: picks cards, leaves each rest at once. */
 const step = run => {
-  if(run.phase === 'choice')run.choose(run.choices.find(c => c.id === 'kinetic')?.id ?? run.choices[0].id);
+  if(run.phase === 'choice')pick(run);
+  if(run.phase === 'intermission')run.nextStage();
   run.advance(FIELD.step);
 };
 function simulate(seed, effects) {
@@ -50,19 +55,24 @@ test('TL003 costs are ceil(1.12^Level) and repeated purchases spend the actual c
   const {meta}=mirror(10);for(let i=0;i<3;i++)assert.equal(meta.buyTalent('mercenary_damage').ok,true);
   assert.equal(meta.value.TalentPoints,5);assert.equal(meta.tree.nodes.mercenary_damage,3);
 });
-test('TL003 only an invested node reaching the current cap enables breakthrough', () => {
-  const {meta}=mirror(100);const before=structuredClone(meta.value);assert.equal(meta.breakthrough().ok,false);assert.deepEqual(meta.value,before);
-  assert.equal(canBreakthrough(treeWith({mercenary_damage:9})),false);assert.equal(canBreakthrough(treeWith({mercenary_damage:10})),true);
+test('TL003 breakthrough needs every node at the current cap', () => {
+  const {meta}=mirror(100);const before=structuredClone(meta.value);const refused=meta.breakthrough();assert.equal(refused.ok,false);assert.deepEqual(meta.value,before);
+  assert.ok(refused.message.includes('所有節點'),refused.message);
+  assert.equal(TALENTS.length,47);
+  assert.equal(canBreakthrough(treeWith({mercenary_damage:10})),false,'one node at the cap is no longer enough');
+  assert.equal(canBreakthrough(treeWith({...allAt(10),mercenary_damage:9})),false,'one node short blocks it');
+  assert.equal(canBreakthrough(treeWith(allAt(10))),true);
+  assert.equal(canBreakthrough({...treeWith(allAt(10)),tier:2,maxNodeLevel:20}),false,'the cap rises with the tier');
 });
 test('TL003 breakthrough keeps all levels and points, increases the tier and cap, and allows level eleven', () => {
-  const tree=treeWith({mercenary_damage:10,kinetic_damage:3,barricade_health:4});tree.unlockedCoreTalents=['coldsteel'];tree.activeCoreTalents=['coldsteel'];
+  const tree=treeWith(allAt(10));tree.unlockedCoreTalents=['coldsteel'];tree.activeCoreTalents=['coldsteel'];
   const {meta}=mirror(100,tree);assert.equal(meta.breakthrough().ok,true);assert.equal(meta.tree.tier,2);assert.equal(meta.tree.maxNodeLevel,20);assert.equal(meta.value.TalentPoints,100);
   assert.deepEqual(meta.tree.nodes,tree.nodes);assert.deepEqual(meta.tree.activeCoreTalents,['coldsteel']);
-  assert.equal(meta.buyTalent('mercenary_damage').ok,true);assert.equal(meta.tree.nodes.mercenary_damage,11);assert.equal(meta.value.TalentPoints,96);
+  assert.equal(meta.buyTalent('mercenary_damage').ok,true);assert.equal(meta.tree.nodes.mercenary_damage,11);assert.equal(meta.value.TalentPoints,100-talentCost(10));
   assert.equal(meta.breakthrough().ok,false);
 });
 test('TL003 later breakthroughs continue beyond tier two without resetting progress', () => {
-  const tree={...treeWith({mercenary_damage:30}),tier:3,maxNodeLevel:30};const {meta}=mirror(100,tree);
+  const tree={...treeWith(allAt(30)),tier:3,maxNodeLevel:30};const {meta}=mirror(100,tree);
   assert.equal(meta.breakthrough().ok,true);assert.equal(meta.tree.tier,4);assert.equal(meta.tree.maxNodeLevel,40);assert.equal(meta.tree.nodes.mercenary_damage,30);
   assert.equal(meta.buyTalent('mercenary_damage').ok,true);assert.equal(meta.tree.nodes.mercenary_damage,31);
 });
@@ -102,9 +112,12 @@ test('TL003 permanent wall health, repair and attack speed enter the actual Run'
   near(run.wallMaxHealth,40*1.08**2);near(run.wallHealth,run.wallMaxHealth);near(run.intervalFor('rifle'),1.25/1.03**4);
   run.wallHealth=1;run.money=100;run.repair();near(run.wallHealth,1+run.wallMaxHealth*.4*1.06**3);
 });
-test('TL003 permanent income multiplies real kill and completed Wave rewards and score earnings', () => {
+test('TL003 permanent income multiplies real kill and completed stage rewards and score earnings', () => {
   const a=new DefenseRun(123),b=new DefenseRun(123,compileTalents(treeWith({economy_income:3})));a.start();b.start();a.wallHealth=b.wallHealth=1e10;
-  for(let i=0;i<60*31;i++){step(a);step(b);}assert.equal(a.kills,b.kills);assert.ok(a.kills>0);assert.equal(a.clearedWave,1);
+  // Play stage 1 to its rest (the clear bonus is paid when the road is clear after the clock).
+  const toRest = run => { if(run.phase === 'choice')pick(run); run.advance(FIELD.step); };
+  for(let i=0;i<60*120&&(a.phase!=='intermission'||b.phase!=='intermission');i++){toRest(a);toRest(b);}
+  assert.equal(a.phase,'intermission');assert.equal(b.phase,'intermission');assert.equal(a.kills,b.kills);assert.ok(a.kills>0);assert.equal(a.clearedWave,1);
   near(b.totalEarnedMoney,a.totalEarnedMoney*1.06**3);near(b.money,a.money*1.06**3);
 });
 test('TL003 permanent haste stays unbounded and matches the displayed cooldown prediction', () => {
@@ -136,8 +149,8 @@ test('TL003 five repeat runs can earn, spend, retain growth and leave every new 
   assert.equal(runs,5);assert.ok(meta.tree.nodes.mercenary_damage>=2);assert.ok(deploymentStats(meta.effects).dps>4.16);
 });
 test('TL003 save round trip preserves purchases, revealed neighbors, tiers and reserved core data', () => {
-  const {meta,storage,data}=mirror(100,treeWith({mercenary_damage:10}));meta.breakthrough();meta.buyTalent('kinetic_damage');
-  const fresh=new LocalMetaMirror(storage);assert.equal(fresh.tree.tier,2);assert.equal(fresh.tree.nodes.kinetic_damage,1);assert.equal(isRevealed(fresh.tree,'fire_dot'),true);
+  const {meta,storage,data}=mirror(100,treeWith(allAt(10)));assert.equal(meta.breakthrough().ok,true);assert.equal(meta.buyTalent('kinetic_damage').ok,true);
+  const fresh=new LocalMetaMirror(storage);assert.equal(fresh.tree.tier,2);assert.equal(fresh.tree.nodes.kinetic_damage,11);assert.equal(isRevealed(fresh.tree,'fire_dot'),true);
   assert.deepEqual(Object.keys(JSON.parse(data.get(META_KEY))).sort(),['HighestClearedWave','TalentPoints','TalentTreeJson','version']);
   assert.deepEqual(Object.keys(fresh.tree).sort(),['activeCoreTalents','maxNodeLevel','nodes','tier','unlockedCoreTalents']);
 });

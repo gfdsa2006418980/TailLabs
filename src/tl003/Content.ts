@@ -1,5 +1,5 @@
 import type { DamageType, Modifier, Tag } from './Combat.ts';
-import { cardScale } from './Balance.ts';
+import { CARD_POWER, cardScale } from './Balance.ts';
 
 /**
  * Ten mercenaries (2026-10-23): three slots on the field, recruited from level-up cards.
@@ -59,14 +59,14 @@ export interface SkillDef {
 export const SKILLS: Record<SkillId, SkillDef> = {
   grenade: { name: '手榴彈', elements: ['爆裂'], color: '#f8b968', cooldown: 10, radius: 105, shape: 'circle', description: '範圍爆裂傷害並擊退，累積暈眩。', flavor: '拉環，數到三。' },
   molotov: { name: '燃燒瓶', elements: ['火焰'], color: '#e6764b', cooldown: 35, radius: 110, shape: 'circle', description: '留下 6 秒火區，進入者持續燃燒。', flavor: '整條路都會亮。' },
-  laser: { name: '貫穿雷射', elements: ['電能'], color: '#91e7ec', cooldown: 45, radius: 34, shape: 'beam', description: '直線貫穿所有敵人，大量累積感電。', flavor: '一條線，全部倒。' },
-  cryobomb: { name: '冰霜彈', elements: ['冷凍'], color: '#bfe8ff', cooldown: 30, radius: 95, shape: 'circle', description: '範圍冷凍傷害，凍結值累積 ×2。', flavor: '連呼吸都結冰。' },
+  laser: { name: '貫穿雷射', elements: ['電能'], color: '#91e7ec', cooldown: 45, radius: 55, shape: 'beam', description: '寬光束直線貫穿所有敵人，大量累積感電。', flavor: '一條線，全部倒。' },
+  cryobomb: { name: '冰霜彈', elements: ['冷凍'], color: '#bfe8ff', cooldown: 30, radius: 95, shape: 'circle', description: '範圍冷凍傷害，範圍內敵人直接冰凍。', flavor: '連呼吸都結冰。' },
   gas: { name: '毒氣彈', elements: ['毒素'], color: '#a6c46a', cooldown: 30, radius: 100, shape: 'circle', description: '6 秒毒雲，每秒疊毒素並造成毒素傷害。', flavor: '別吸太深。' },
   mortar: { name: '迫擊砲', elements: ['爆裂'], color: '#f0a35e', cooldown: 40, radius: 120, shape: 'circle', description: '5 發砲彈散落在範圍內，各自爆裂。', flavor: '座標已送出。' },
-  emp: { name: '電磁脈衝', elements: ['電能'], color: '#c7f5ff', cooldown: 45, radius: 160, shape: 'circle', description: '大範圍電能傷害，感電值累積 ×3。', flavor: '全頻段干擾。' },
+  emp: { name: '電磁脈衝', elements: ['電能'], color: '#c7f5ff', cooldown: 45, radius: 160, shape: 'circle', description: '大範圍電能傷害，範圍內敵人直接麻痺。', flavor: '全頻段干擾。' },
   strafe: { name: '機槍掃射', elements: ['動能'], color: '#ffd884', cooldown: 25, radius: 35, shape: 'band', description: '橫掃整條道路的一段，每名敵人中 6 發。', flavor: '從左掃到右。' },
-  snipe: { name: '致命狙擊', elements: ['動能', '冷凍'], color: '#e8f4ff', cooldown: 20, radius: 90, shape: 'circle', description: '狙擊範圍內生命最多的敵人，必定暴擊。', flavor: '一發，就一發。' },
-  minefield: { name: '地雷陣', elements: ['火焰', '爆裂'], color: '#d98a4a', cooldown: 40, radius: 70, shape: 'circle', description: '埋下 4 枚地雷，踩到就爆炸並點燃。', flavor: '小心腳下。' },
+  snipe: { name: '致命狙擊', elements: ['動能', '冷凍'], color: '#e8f4ff', cooldown: 20, radius: 90, shape: 'circle', description: '自動狙擊全場生命最多的敵人，必定暴擊。', flavor: '一發，就一發。' },
+  minefield: { name: '地雷陣', elements: ['火焰', '爆裂'], color: '#d98a4a', cooldown: 40, radius: 70, shape: 'circle', description: '埋下 4 枚地雷，一直留在場上，踩到就爆炸並點燃（最多 32 枚）。', flavor: '小心腳下。' },
 };
 export const SKILL_IDS = Object.keys(SKILLS) as SkillId[];
 
@@ -96,7 +96,7 @@ export const RARITIES: Record<Rarity, { name: string; mult: number; weight: numb
   legendary: { name: '傳說', mult: 5, weight: 2, color: '#ff4a3a' },
 };
 export const RARITY_ORDER: readonly Rarity[] = ['common', 'uncommon', 'rare', 'legendary'];
-export type CardEffect = 'speed' | 'haste' | 'radius' | 'wall' | 'repair' | 'crit' | 'critDamage' | 'pierce' | 'reduction'
+export type CardEffect = 'speed' | 'haste' | 'radius' | 'wall' | 'repair' | 'crit' | 'critDamage' | 'reduction'
   | 'thorns' | 'airdrop' | 'burnTime' | 'toxinGain' | 'shockGain' | 'chillGain' | 'stunGain' | 'synergy' | 'evolution' | 'curse' | 'merc' | 'skill';
 export type CardKind = 'normal' | 'synergy' | 'evolution' | 'curse' | 'merc' | 'skill';
 
@@ -140,14 +140,10 @@ export const CARD_DEFS: readonly CardDef[] = [
     short: v => `普攻附電 ${pct(v)}`, description: v => `普攻額外造成 ${pct(v)} 電能傷害，累積感電值：越滿受傷越重，滿了麻痺 4 秒（不能啃拒馬）。`, flavor: '帶電的東西都比較好打。' },
   { id: 'chill', kind: 'normal', name: '冷凍彈藥', category: '冷凍', color: C, value: 0.15, modifier: { kind: 'Special', tags: ['Skill.AutoAttack'], rule: 'chill' },
     short: v => `普攻附凍 ${pct(v)}`, description: v => `普攻額外造成 ${pct(v)} 冷凍傷害，累積凍結值：越滿越慢，滿了冰凍 2 秒並受到最大生命 10% 的凍傷。`, flavor: '槍管都結霜了。' },
-  { id: 'blastAmmo', kind: 'normal', name: '爆裂彈頭', category: '爆裂', color: X, value: 0.04, minRarity: 'rare', maxRarity: 'legendary', modifier: { kind: 'Special', tags: ['Skill.AutoAttack'], rule: 'blast' },
-    short: v => `普攻濺射 ${pct(v)}`, description: v => `普攻命中時爆炸，對周圍敵人造成 ${pct(v)} 爆裂傷害，累積暈眩值；滿了暈眩 4 秒。`, flavor: '打一個，震一圈。' },
   { id: 'crit', kind: 'normal', name: '精準射擊', category: '動能', color: K, value: 0.03, effect: 'crit',
     short: v => `暴擊率 +${pct(v)}`, description: v => `直接傷害暴擊率 +${pct(v)}。暴擊造成 150% 傷害。`, flavor: '呼吸，瞄準，扣扳機。' },
   { id: 'critDamage', kind: 'normal', name: '要害瞄準', category: '動能', color: K, value: 0.15, effect: 'critDamage',
     short: v => `暴擊傷害 +${pct(v)}`, description: v => `暴擊傷害 +${pct(v)}。`, flavor: '打頭。永遠打頭。' },
-  { id: 'pierce', kind: 'normal', name: '穿甲彈芯', category: '動能', color: K, value: 0.4, effect: 'pierce', minRarity: 'legendary', maxRarity: 'legendary',
-    short: v => `普攻穿透 +${Math.max(1, Math.floor(v))}`, description: v => `單發普攻命中後再打穿後方 ${Math.max(1, Math.floor(v))} 名敵人，每穿透一名傷害 −40%。`, flavor: '一發子彈，兩具屍體。' },
   { id: 'fire', kind: 'normal', name: '高濃度燃料', category: '火焰', color: F, value: 0.1, modifier: { kind: 'Add', tags: ['Damage.Fire', 'Mechanic.DOT'] },
     short: v => `燃燒傷害 +${pct(v)}`, description: v => `火焰持續傷害 +${pct(v)}，與其他火焰加成相加。`, flavor: '混了點不該混的東西。' },
   { id: 'burnTime', kind: 'normal', name: '持久燃劑', category: '火焰', color: F, value: 0.08, effect: 'burnTime',
@@ -224,7 +220,7 @@ export const CARD_DEFS: readonly CardDef[] = [
     short: () => '雷射傷害 ×2.5', description: () => '雷射傷害 ×2.5，冷卻 ×1.5。', flavor: '保險絲拔掉了。' },
   { id: 'hifreq', kind: 'evolution', fixedRarity: 'legendary', skill: 'laser', recipe: ['speed', 'shock', 'coil'], name: '高頻雷射', category: '質變', color: E, value: 0.3, effect: 'evolution',
     short: () => '改為 5 段連打', description: v => `雷射改為 5 段連打，每段 ×${v}，每段都會累積感電。`, flavor: '嗡——嗡——嗡——' },
-  { id: 'refract', kind: 'evolution', fixedRarity: 'legendary', skill: 'laser', recipe: ['pierce', 'coil', 'coil'], name: '折射', category: '質變', color: E, value: 0.6, effect: 'evolution',
+  { id: 'refract', kind: 'evolution', fixedRarity: 'legendary', skill: 'laser', recipe: ['crit', 'coil', 'coil'], name: '折射', category: '質變', color: E, value: 0.6, effect: 'evolution',
     short: () => '命中後分出 2 道射線', description: v => `雷射命中第一名敵人後分出 2 道副射線，各造成 ${pct(v)} 傷害。`, flavor: '光會轉彎，你只是沒看過。' },
   // Black-market curses (core 黑市補給 only): a strong bonus with a lasting penalty. Bonus = value × level scale × 2.5.
   { id: 'curse_powder', kind: 'curse', fixedRarity: 'rare', name: '血汗火藥', category: '詛咒', color: '#b23a48', value: 0.6, effect: 'curse',
@@ -254,8 +250,8 @@ export const CARD_DEFS: readonly CardDef[] = [
 export const cardDef = (id: string) => CARD_DEFS.find(def => def.id === id);
 /** A definition at a rarity: scaled magnitude, card face and rules text. */
 export function makeCard(def: CardDef, rarity: Rarity = def.fixedRarity ?? def.minRarity ?? 'common', level = 1): UpgradeCard {
-  // 2026-10-23: normal cards keep one fixed value at every level (the late picks were +1% / +0%).
-  const scale = 1;
+  // 2026-10-23: normal cards keep one fixed value at every level (the late picks were +1% / +0%), times CARD_POWER.
+  const scale = CARD_POWER;
   const value = def.kind === 'normal' ? def.value * RARITIES[rarity].mult * scale : def.kind === 'curse' ? Math.min(def.value, def.value * cardScale(level) * 2.5) : def.value;
   const scaled = def.modifier?.kind === 'More' ? (1 - def.value * scale) ** RARITIES[rarity].mult : value;
   const modifier: Modifier | undefined = !def.modifier ? undefined : def.modifier.kind === 'Special'

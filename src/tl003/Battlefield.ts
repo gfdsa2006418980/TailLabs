@@ -5,7 +5,6 @@ import * as B from './Balance.ts';
 import type { DefenseRun, VisualEvent } from './Run.ts';
 import { project, projectedCircle, unproject } from './Projection.ts';
 import type { Viewport } from './Projection.ts';
-import { burnSpeed } from './Burn.ts';
 import { ANIMS, FRAMES } from './generated/sprites.ts';
 import sheetUrl from './generated/tl003.png';
 import normalUrl from './generated/tl003_n.png';
@@ -13,7 +12,7 @@ import { createCompositor } from './Lighting.ts';
 import type { Atmosphere, Compositor, Layers, Light } from './Lighting.ts';
 import { BASE_ZOOM } from './Camera.ts';
 import type { CameraView } from './Camera.ts';
-import { Feedback, pixelText } from './Fx.ts';
+import { Feedback } from './Fx.ts';
 
 export interface Aim { slot: number; x: number; y: number; valid: boolean }
 
@@ -33,6 +32,10 @@ const MUZZLE: Record<MercKind, [number, number]> = {
 };
 /** Mercenaries whose guns throw brass casings. */
 const SHELLS = new Set<MercKind>(['rifle', 'gunner', 'sniper']);
+/** Zombies in the far 40% of the road (small on screen) are drawn as a bare body: no shadow, eyes or status marks. */
+const FAR_X = 0.4 * (FIELD.wallX + 20) - 20;
+/** At most this many damage numbers start per frame; the rest of that frame's hits get none. */
+const MAX_NEW_DAMAGE = 30;
 /** Status meter colours under the health bar: 凍結、感電、暈眩. */
 const METER_COLOR = { chill: '#9fd8f0', shock: '#bff1ea', stun: '#ffe9a8' } as const;
 const ICE: readonly [number, number, number] = [0.6, 0.85, 1], TOXIC: readonly [number, number, number] = [0.6, 1, 0.35];
@@ -305,10 +308,12 @@ export class Battlefield {
     this.sceneLights(real, run);
 
     // Fresh combat events: feedback numbers, coins, decals.
+    const hits: VisualEvent[] = [];
     for (const e of run.events) {
       if (this.seen.has(e)) continue; this.seen.add(e);
+      if (e.kind === 'hit' && e.amount) hits.push(e);
+      if (e.kind !== 'kill' && e.kind !== 'shot' && e.kind !== 'blast') continue;
       const p = this.at(e.x, e.y);
-      if (e.kind === 'hit' && e.amount) this.feedback.damage(p.x, p.y - 4 * p.scale, e.amount, e.target ?? 0, !!e.skill, !!e.crit);
       if (e.kind === 'kill') {
         if (e.amount) this.feedback.kill(p.x, p.y - 6 * p.scale, e.amount);
         const art = ENEMY_ART[e.enemy ?? ''] ?? ENEMY_ART.walker!, death = `${art.anim}_death`;
@@ -317,6 +322,12 @@ export class Battlefield {
       if (e.kind === 'shot' && e.merc && SHELLS.has(e.merc) && !this.reducedMotion) this.ejectShell(run, e);
       if (e.kind === 'blast') this.scorch(e.x, e.y, e.radius * 0.5);
     }
+    // Over the cap, keep crits, boss hits, skill hits and big numbers first.
+    if (hits.length > MAX_NEW_DAMAGE) {
+      const rank = (e: VisualEvent) => (e.crit ? 4 : 0) + (e.enemy === 'boss' ? 2 : 0) + (e.skill ? 1 : 0);
+      hits.sort((a, b) => rank(b) - rank(a) || b.amount! - a.amount!); hits.length = MAX_NEW_DAMAGE;
+    }
+    for (const e of hits) { const p = this.at(e.x, e.y); this.feedback.damage(p.x, p.y - 4 * p.scale, e.amount!, e.target ?? 0, !!e.skill, !!e.crit); }
     // Game time: a death frozen by hit-stop, a card choice or a pause keeps its body standing.
     for (const corpse of this.corpses) if (t >= corpse.at) {
       const d = ctx(this.decals); d.globalAlpha = 0.85; this.sprite(corpse.name, corpse.x, corpse.y, corpse.scale, { albedo: d }); d.globalAlpha = 1;
@@ -338,9 +349,12 @@ export class Battlefield {
     }
     let burningLights = 0;
     for (const enemy of [...run.enemies].sort((a, b) => a.x - b.x)) {
-      const art = ENEMY_ART[enemy.kind] ?? ENEMY_ART.walker!, p = this.at(enemy.x, enemy.y), s = p.scale / WALL_SCALE * art.scale;
-      const shadowW = Math.max(2, Math.round(12 * s));
-      A.fillStyle = '#0b0d0e90'; A.fillRect(Math.round(p.x - shadowW / 2), Math.round(p.y) - 1, shadowW, Math.max(1, Math.round(2 * s)));
+      const art = ENEMY_ART[enemy.kind] ?? ENEMY_ART.walker!, p = this.at(enemy.x, enemy.y), s = p.scale / WALL_SCALE * art.scale * (enemy.superBoss ? B.SUPER_BOSS_SCALE : 1);
+      const far = enemy.x < FAR_X && enemy.kind !== 'boss';
+      if (!far) {
+        const shadowW = Math.max(2, Math.round(12 * s));
+        A.fillStyle = '#0b0d0e90'; A.fillRect(Math.round(p.x - shadowW / 2), Math.round(p.y) - 1, shadowW, Math.max(1, Math.round(2 * s)));
+      }
       const flash = enemy.hitFlash > 0, knock = flash && !this.reducedMotion ? -1 : 0;
       // At the barricade they claw and chew; the boss roars when it first appears.
       if (enemy.kind === 'boss' && !this.bossSeen.has(enemy.id)) this.bossSeen.set(enemy.id, real);
@@ -352,23 +366,24 @@ export class Battlefield {
       const clock = roaring ? real - this.bossSeen.get(enemy.id)! : frozen ? enemy.id * 0.137 : t + enemy.id * 0.137;
       const name = this.animFrame(anim, clock, !roaring);
       const box = this.sprite(name, p.x, p.y + 1 + knock, s, this.lit());
-      if (ANIMS[`${anim}_eyes`]) this.sprite(this.animFrame(`${anim}_eyes`, clock, !roaring), p.x, p.y + 1 + knock, s, this.glow());
+      if (!far && ANIMS[`${anim}_eyes`]) this.sprite(this.animFrame(`${anim}_eyes`, clock, !roaring), p.x, p.y + 1 + knock, s, this.glow());
       if (flash && box.w) { E.globalAlpha = 0.85; this.sprite(name, p.x, p.y + 1 + knock, s, { emissive: E }, false, true); E.globalAlpha = 1; }
       if (enemy.kind === 'boss' && box.w) this.light(p.x, box.top + box.h * 0.3, 40 * s, [1, 0.2, 0.15], 0.5, 16);
       if (enemy.hp < enemy.maxHp && box.w) {
         const bw = Math.max(6, box.w - 2), bx = Math.round(p.x - bw / 2), by = box.top - 3;
         O.fillStyle = COLOR.hpBack; O.fillRect(bx - 1, by - 1, bw + 2, 3); O.fillStyle = enemy.kind === 'boss' ? '#ff7a5c' : COLOR.hp; O.fillRect(bx, by, Math.max(1, Math.round(bw * Math.max(0, enemy.hp / enemy.maxHp))), 1);
-        let sx = bx;
-        for (const [active, color] of [[enemy.burnDuration > 0, '#ee9d4f'], [enemy.toxin > 0, '#a6c46a'], [frozen, '#9fd8f0'], [paralyzed, '#bff1ea'], [stunned, '#ffe9a8']] as const)
-          if (active) { O.fillStyle = color; O.fillRect(sx, by - 3, 2, 2); sx += 3; }
-        // Build-up meters: one pixel row each under the health bar, filling towards the next control.
-        let my = by + 2;
-        for (const kind of METER_KINDS) {
-          const m = enemy.meters[kind]; if (m.value <= 0) continue;
-          const fill = Math.min(1, m.value / meterThreshold(enemy, kind, run.elapsed));
-          O.fillStyle = COLOR.hpBack; O.fillRect(bx - 1, my, bw + 2, 2); O.fillStyle = METER_COLOR[kind]; O.fillRect(bx, my, Math.max(1, Math.round(bw * fill)), 1); my += 2;
+        if (!far) {
+          let sx = bx;
+          for (const [active, color] of [[enemy.burnDuration > 0, '#ee9d4f'], [enemy.toxin > 0, '#a6c46a'], [frozen, '#9fd8f0'], [paralyzed, '#bff1ea'], [stunned, '#ffe9a8']] as const)
+            if (active) { O.fillStyle = color; O.fillRect(sx, by - 3, 2, 2); sx += 3; }
+          // Build-up meters: one pixel row each under the health bar, filling towards the next control.
+          let my = by + 2;
+          for (const kind of METER_KINDS) {
+            const m = enemy.meters[kind]; if (m.value <= 0) continue;
+            const fill = Math.min(1, m.value / meterThreshold(enemy, kind, run.elapsed));
+            O.fillStyle = COLOR.hpBack; O.fillRect(bx - 1, my, bw + 2, 2); O.fillStyle = METER_COLOR[kind]; O.fillRect(bx, my, Math.max(1, Math.round(bw * fill)), 1); my += 2;
+          }
         }
-        if (enemy.burnDuration > 0 && enemy.burnFlammability > 0) pixelText(O, `x${burnSpeed(enemy).toFixed(2)}`, p.x, by - 10, '#ffd884');
       }
       if (enemy.burnDuration > 0 && box.w) {
         this.sprite(this.animFrame('fire', t + enemy.id * 0.21), p.x, box.top + box.h * 0.55, Math.max(0.5, s * 0.8), this.glow());
@@ -376,6 +391,7 @@ export class Battlefield {
       }
       if (frozen && box.w) { this.sprite('fx_ice', p.x, box.top + box.h * 0.75, Math.max(0.6, s * 1.2), this.glow()); this.light(p.x, box.top + box.h * 0.5, 18 * s + 6, ICE, 0.7, 8); }
       if (stunned && box.w && ANIMS.fx_stun) this.sprite(this.animFrame('fx_stun', real + enemy.id * 0.3), p.x, box.top - 1, Math.max(0.6, s), this.glow());
+      if (far) continue;
       if (enemy.toxin > 0 && box.w && Math.floor(real * 6 + enemy.id) % 4 === 0) this.dot(E, p.x + (hash(enemy.id, Math.floor(real * 6)) - 0.5) * box.w, box.top + box.h * 0.3, '#a4dc4c');
       const sparks = paralyzed ? 2 : enemy.meters.shock.value > 0 ? 5 : 0;
       if (sparks && box.w && Math.floor(real * 20 + enemy.id) % sparks === 0) this.dot(E, p.x + (hash(enemy.id, Math.floor(real * 20)) - 0.5) * box.w, box.top + hash(Math.floor(real * 20), enemy.id) * box.h, '#bff1ea');

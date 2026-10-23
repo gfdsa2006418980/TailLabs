@@ -114,7 +114,7 @@ export class LocalMetaMirror {
   breakthrough(): { ok: boolean; message: string } {
     if (this.inRun) return { ok: false, message: '戰鬥中。回營再晉階。' };
     this.refresh(); const tree = this.tree;
-    if (!canBreakthrough(tree)) return { ok: false, message: `任一節點達 Lv${tree.maxNodeLevel} 即可晉階。` };
+    if (!canBreakthrough(tree)) return { ok: false, message: `所有節點都達 Lv${tree.maxNodeLevel} 才能晉階。` };
     tree.tier++; tree.maxNodeLevel += 10;
     this.persist({ ...this.value, TalentTreeJson: JSON.stringify(tree) });
     return { ok: true, message: `藍圖晉階 T${tree.tier}。節點上限 Lv${tree.maxNodeLevel}，等級全數保留。` };
