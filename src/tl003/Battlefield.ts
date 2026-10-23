@@ -8,8 +8,8 @@ import type { Viewport } from './Projection.ts';
 import { ANIMS, FRAMES } from './generated/sprites.ts';
 import sheetUrl from './generated/tl003.png';
 import normalUrl from './generated/tl003_n.png';
-import { createCompositor } from './Lighting.ts';
-import type { Atmosphere, Compositor, Layers, Light } from './Lighting.ts';
+import { createCompositor, SPRITE, SPRITE_FLOATS } from './Lighting.ts';
+import type { Atmosphere, Compositor, Layers, Light, SpriteBatch } from './Lighting.ts';
 import { BASE_ZOOM } from './Camera.ts';
 import type { CameraView } from './Camera.ts';
 import { Feedback } from './Fx.ts';
@@ -64,8 +64,13 @@ interface Targets { albedo?: CanvasRenderingContext2D; normal?: CanvasRenderingC
 export class Battlefield {
   readonly feedback = new Feedback();
   private compositor: Compositor;
-  private layers: Layers = { albedo: canvas(), normals: canvas(), emissive: canvas(), overlay: canvas() };
+  private layers: Layers = { albedo: canvas(), normals: canvas(), emissive: canvas(), overlay: canvas(), overAlbedo: canvas(), overNormals: canvas() };
   private c: Required<Targets>;
+  /** The albedo/normal contexts under the zombies, and (WebGL) the ones over them. */
+  private under: { albedo: CanvasRenderingContext2D; normal: CanvasRenderingContext2D };
+  private over: { albedo: CanvasRenderingContext2D; normal: CanvasRenderingContext2D };
+  /** WebGL: zombie bodies, eyes and hit flashes, drawn by the compositor in one instanced pass. */
+  private batch: SpriteBatch = { data: new Float32Array(SPRITE_FLOATS * 1024), count: 0 };
   private bg = { albedo: canvas(), normals: canvas(), emissive: canvas() };
   private decals = canvas();
   private sheet = new Image(); private normalSheet = new Image();
@@ -85,6 +90,8 @@ export class Battlefield {
   constructor(private screen: HTMLCanvasElement) {
     this.compositor = createCompositor(screen, new URLSearchParams(location.search).has('canvas2d'));
     this.c = { albedo: ctx(this.layers.albedo), normal: ctx(this.layers.normals), emissive: ctx(this.layers.emissive), overlay: ctx(this.layers.overlay) };
+    this.under = { albedo: this.c.albedo, normal: this.c.normal };
+    this.over = { albedo: ctx(this.layers.overAlbedo), normal: ctx(this.layers.overNormals) };
     screen.style.imageRendering = 'pixelated';
     const done = () => { if (++this.loaded === 2) this.prepareSheets(); };
     this.sheet.onload = done; this.normalSheet.onload = done;
@@ -107,6 +114,7 @@ export class Battlefield {
     const data = n.getImageData(0, 0, width, height);
     for (let i = 0; i < data.data.length; i += 4) data.data[i] = 255 - data.data[i]!;
     n.putImageData(data, 0, 0);
+    this.compositor.setSheets(this.sheet, this.normalSheet);
     this.view = { width: 480, height: 0 };
   }
 
@@ -156,8 +164,7 @@ export class Battlefield {
   /** Draws a sheet frame with its bottom-centre at (x, y), scaled and snapped to whole pixels, into the given layers. */
   private sprite(name: string, x: number, y: number, scale: number, to: Targets, flip = false, flash = false) {
     const f = FRAMES[name]; if (!f || !this.ready) return { left: 0, top: 0, w: 0, h: 0 };
-    const w = Math.max(1, Math.round(f[2] * scale)), h = Math.max(1, Math.round(f[3] * scale));
-    const left = Math.round(x - w / 2), top = Math.round(y - h);
+    const { left, top, w, h } = this.place(f, x, y, scale);
     const paint = (c: CanvasRenderingContext2D | undefined, image: CanvasImageSource) => {
       if (!c) return;
       if (flip) { c.save(); c.translate(left + w, top); c.scale(-1, 1); c.drawImage(image, f[0], f[1], f[2], f[3], 0, 0, w, h); c.restore(); }
@@ -166,6 +173,19 @@ export class Battlefield {
     paint(to.albedo, this.sheet); paint(to.normal, flip ? this.normalFlipped : this.normalSheet);
     paint(to.emissive, flash ? this.flashSheet : this.sheet); paint(to.overlay, this.sheet);
     return { left, top, w, h };
+  }
+  /** Where a frame lands: bottom-centre at (x, y), scaled and snapped to whole pixels. */
+  private place(f: readonly number[], x: number, y: number, scale: number) {
+    const w = Math.max(1, Math.round(f[2]! * scale)), h = Math.max(1, Math.round(f[3]! * scale));
+    return { left: Math.round(x - w / 2), top: Math.round(y - h), w, h };
+  }
+  /** WebGL: queues a frame for the batched sprite pass (same placement as sprite()). */
+  private queue(name: string, x: number, y: number, scale: number, kind: number) {
+    const f = FRAMES[name]; if (!f) return { left: 0, top: 0, w: 0, h: 0 };
+    const box = this.place(f, x, y, scale), b = this.batch;
+    if ((b.count + 1) * SPRITE_FLOATS > b.data.length) { const grown = new Float32Array(b.data.length * 2); grown.set(b.data); b.data = grown; }
+    b.data.set([box.left, box.top, box.w, box.h, f[0]!, f[1]!, f[2]!, f[3]!, kind], b.count++ * SPRITE_FLOATS);
+    return box;
   }
   private lit() { return { albedo: this.c.albedo, normal: this.c.normal }; }
   private glow() { return { emissive: this.c.emissive }; }
@@ -298,9 +318,12 @@ export class Battlefield {
     if (!this.ready) return;
     if (this.layers.albedo.height !== bufferHeight || this.view.height !== bufferHeight / PX) {
       for (const c of Object.values(this.layers)) { c.width = BUFFER_WIDTH; c.height = bufferHeight; }
-      for (const c of Object.values(this.c)) c.imageSmoothingEnabled = false;
+      for (const c of [...Object.values(this.c), ...Object.values(this.over)]) c.imageSmoothingEnabled = false;
       this.view = { width: 480, height: bufferHeight / PX }; this.paintBackground();
     }
+    // WebGL batches the zombies: until they are queued, albedo and normals paint the layers under them.
+    const gpu = this.compositor.webgl;
+    this.c.albedo = this.under.albedo; this.c.normal = this.under.normal; this.batch.count = 0;
     const { albedo: A, normal: N, emissive: E, overlay: O } = this.c, t = run.elapsed, real = this.realTime;
     this.lights = [];
     A.drawImage(this.bg.albedo, 0, 0); A.drawImage(this.decals, 0, 0);
@@ -380,9 +403,17 @@ export class Battlefield {
       const clock = roaring ? real - this.bossSeen.get(enemy.id)! : frozen ? enemy.id * 0.137 : t + enemy.id * 0.137;
       const name = this.animFrame(anim, clock, !roaring);
       // Far zombies skip the normal-map layer: they are small and dim, and it halves their cost.
-      const box = this.sprite(name, p.x, p.y + 1 + knock, s, far ? { albedo: this.c.albedo } : this.lit());
-      if (!far && ANIMS[`${anim}_eyes`]) this.sprite(this.animFrame(`${anim}_eyes`, clock, !roaring), p.x, p.y + 1 + knock, s, this.glow());
-      if (flash && box.w) { E.globalAlpha = 0.85; this.sprite(name, p.x, p.y + 1 + knock, s, { emissive: E }, false, true); E.globalAlpha = 1; }
+      const eyes = !far && ANIMS[`${anim}_eyes`] ? this.animFrame(`${anim}_eyes`, clock, !roaring) : undefined, y = p.y + 1 + knock;
+      let box;
+      if (gpu) {
+        box = this.queue(name, p.x, y, s, far ? SPRITE.albedo : SPRITE.lit);
+        if (eyes) this.queue(eyes, p.x, y, s, SPRITE.glow);
+        if (flash) this.queue(name, p.x, y, s, SPRITE.flash);
+      } else {
+        box = this.sprite(name, p.x, y, s, far ? { albedo: this.c.albedo } : this.lit());
+        if (eyes) this.sprite(eyes, p.x, y, s, this.glow());
+        if (flash && box.w) { E.globalAlpha = 0.85; this.sprite(name, p.x, y, s, { emissive: E }, false, true); E.globalAlpha = 1; }
+      }
       if (enemy.kind === 'boss' && box.w) this.light(p.x, box.top + box.h * 0.3, 40 * s, [1, 0.2, 0.15], 0.5, 16);
       if (enemy.hp < enemy.maxHp && box.w) {
         const bw = Math.max(6, box.w - 2), bx = Math.round(p.x - bw / 2), by = box.top - 3;
@@ -415,6 +446,11 @@ export class Battlefield {
     // The batched bars: every dark back first, then each colour once.
     O.fillStyle = COLOR.hpBack; for (let i = 0; i < barBacks.length; i += 4) O.fillRect(barBacks[i]!, barBacks[i + 1]!, barBacks[i + 2]!, barBacks[i + 3]!);
     for (const [color, list] of barFills) { O.fillStyle = color; for (let i = 0; i < list.length; i += 4) O.fillRect(list[i]!, list[i + 1]!, list[i + 2]!, list[i + 3]!); }
+    // WebGL: everything after the zombies paints the "over" albedo and normal layers.
+    if (gpu) {
+      this.c.albedo = this.over.albedo; this.c.normal = this.over.normal;
+      this.c.albedo.clearRect(0, 0, BUFFER_WIDTH, bufferHeight); this.c.normal.clearRect(0, 0, BUFFER_WIDTH, bufferHeight);
+    }
 
     // Core 亡者徵召: raised corpses walk back up the road, lit by a sickly green glow.
     for (const ally of run.allies) {
@@ -458,7 +494,8 @@ export class Battlefield {
 
     const horizon = this.at(0, 225).y, wall = this.at(FIELD.wallX, 225).y;
     const atmosphere: Atmosphere = { ...ATMOSPHERE, horizon, wall };
-    this.compositor.render(this.layers, this.lights, atmosphere, camera);
+    this.compositor.render(this.layers, this.lights, atmosphere, camera, this.batch);
+    this.c.albedo = this.under.albedo; this.c.normal = this.under.normal;
   }
 
   /** Brass casings fly out of the rifle, bounce once on the sandbags and fade. */

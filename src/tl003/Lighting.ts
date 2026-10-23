@@ -7,11 +7,25 @@
  * Pass 1 lights them at buffer resolution (cheap: ~125k pixels). Pass 2 applies the camera and
  * upsamples with sharp-bilinear filtering so pixels stay square at any screen size.
  * Without WebGL2 the same layers are combined with Canvas2D blend modes (no normal relief).
+ *
+ * With WebGL2 the zombies skip Canvas2D (2026-10-24, performance): hundreds of drawImage calls a frame were the cost.
+ * They arrive as a SpriteBatch and are drawn in one instanced pass into their own albedo/normal/emissive targets;
+ * the albedo and normal layers are split into "under" (the road, decals, shadows) and "over" (barricade, squad,
+ * effects) canvases, and pass 1 stacks under → zombies → over. Zombie emissive goes under the emissive canvas.
  */
 import type { CameraView } from './Camera.ts';
 
 export interface Light { x: number; y: number; z: number; radius: number; color: readonly [number, number, number]; intensity: number }
-export interface Layers { albedo: HTMLCanvasElement; normals: HTMLCanvasElement; emissive: HTMLCanvasElement; overlay: HTMLCanvasElement }
+export interface Layers {
+  albedo: HTMLCanvasElement; normals: HTMLCanvasElement; emissive: HTMLCanvasElement; overlay: HTMLCanvasElement;
+  /** WebGL only: what is painted after the batched sprites (left blank on the Canvas2D path). */
+  overAlbedo: HTMLCanvasElement; overNormals: HTMLCanvasElement;
+}
+/** Batched sprite kinds: which targets a sheet frame lands in. */
+export const SPRITE = { lit: 0, albedo: 1, glow: 2, flash: 3 } as const;
+/** Floats per batched sprite: left, top, width, height (buffer px), frame x, y, w, h (sheet px), kind. */
+export const SPRITE_FLOATS = 9;
+export interface SpriteBatch { data: Float32Array; count: number }
 export interface Atmosphere {
   ambient: readonly [number, number, number];
   fog: readonly [number, number, number];
@@ -28,7 +42,7 @@ void main() { uv = corner * 0.5 + 0.5; gl_Position = vec4(corner, 0.0, 1.0); }`;
 const LIGHT_PASS = `#version 300 es
 precision highp float;
 in vec2 uv; out vec4 color;
-uniform sampler2D albedo, normals, emissive, overlay;
+uniform sampler2D albedo, normals, emissive, overlay, overAlbedo, overNormals, spriteAlbedo, spriteNormals, spriteEmissive;
 uniform vec2 size;
 uniform vec4 lightA[${MAX_LIGHTS}]; // x, y, z, radius (buffer px, y down)
 uniform vec4 lightB[${MAX_LIGHTS}]; // r, g, b, intensity
@@ -36,13 +50,19 @@ uniform int lightCount;
 uniform vec3 ambient, fog;
 uniform float horizon, wall;
 const float BAYER[16] = float[16](0.,8.,2.,10.,12.,4.,14.,6.,3.,11.,1.,9.,15.,7.,13.,5.);
+// Canvas layers are straight alpha, sprite targets premultiplied: "over" in premultiplied terms.
+vec4 premul(vec4 c) { return vec4(c.rgb * c.a, c.a); }
+vec4 over(vec4 top, vec4 under) { return top + under * (1.0 - top.a); }
+// Emissive, premultiplied: the canvas layer over the zombies' eyes and hit flashes.
+vec4 glow(vec2 st) { return over(premul(texture(emissive, st)), texture(spriteEmissive, st)); }
 void main() {
   // Framebuffer row 0 holds the top image row, so pass 2 can sample with y-down coordinates.
   vec2 st = uv;
   vec2 px = floor(st * size) + 0.5;
-  vec4 a = texture(albedo, st);
-  vec4 nm = texture(normals, st);
-  vec3 rgb = a.rgb;
+  vec4 a = over(premul(texture(overAlbedo, st)), over(texture(spriteAlbedo, st), premul(texture(albedo, st))));
+  vec4 nm = over(premul(texture(overNormals, st)), over(texture(spriteNormals, st), premul(texture(normals, st))));
+  nm.rgb /= max(nm.a, 1e-4);
+  vec3 rgb = a.rgb / max(a.a, 1e-4);
   if (nm.a > 0.5) {
     vec3 n = normalize(vec3(nm.r * 2.0 - 1.0, -(nm.g * 2.0 - 1.0), max(0.05, nm.b * 2.0 - 1.0)));
     // Moonlight from above: surfaces facing up catch a little more.
@@ -65,17 +85,16 @@ void main() {
     rgb = mix(rgb, fog, (1.0 - depth) * (1.0 - depth) * 0.4);
   }
   // Emissive layer plus a small bloom (a few taps at buffer resolution).
-  vec4 e = texture(emissive, st);
+  vec4 e = glow(st);
   vec3 bloom = vec3(0.0);
   vec2 t = 1.0 / size;
   for (int k = 0; k < 8; k++) {
     float ang = float(k) * 0.785398;
     vec2 o = vec2(cos(ang), sin(ang));
-    vec4 s1 = texture(emissive, st + o * t * 2.0), s2 = texture(emissive, st + o * t * 4.5);
-    bloom += s1.rgb * s1.a * 0.09 + s2.rgb * s2.a * 0.05;
+    bloom += glow(st + o * t * 2.0).rgb * 0.09 + glow(st + o * t * 4.5).rgb * 0.05;
   }
   // Screen blend: bright effects glow without clipping everything under them to white.
-  vec3 add = min(vec3(1.0), e.rgb * e.a * 1.05 + bloom);
+  vec3 add = min(vec3(1.0), e.rgb * 1.05 + bloom);
   rgb = 1.0 - (1.0 - min(rgb, vec3(1.0))) * (1.0 - add);
   vec4 o = texture(overlay, st);
   rgb = mix(rgb, o.rgb, o.a);
@@ -110,9 +129,44 @@ void main() {
   color = vec4(rgb, 1.0);
 }`;
 
+// Batched sprites: one instanced quad per sheet frame, snapped to whole buffer pixels like Canvas2D drawImage.
+const SPRITE_VERTEX = `#version 300 es
+layout(location = 0) in vec2 corner;
+layout(location = 1) in vec4 dst;  // left, top, width, height (buffer px)
+layout(location = 2) in vec4 src;  // frame x, y, w, h (sheet px)
+layout(location = 3) in float kind;
+uniform vec2 size, sheetSize;
+out vec2 tex; flat out int mode;
+void main() {
+  vec2 c = corner * 0.5 + 0.5;
+  tex = (src.xy + c * src.zw) / sheetSize;
+  mode = int(kind + 0.5);
+  gl_Position = vec4((dst.xy + c * dst.zw) / size * 2.0 - 1.0, 0.0, 1.0);
+}`;
+const SPRITE_PASS = `#version 300 es
+precision highp float;
+in vec2 tex; flat in int mode;
+uniform sampler2D sheet, sheetNormals;
+layout(location = 0) out vec4 outAlbedo;
+layout(location = 1) out vec4 outNormals;
+layout(location = 2) out vec4 outEmissive;
+void main() {
+  vec4 a = texture(sheet, tex);
+  if (a.a < 0.004) discard;
+  vec4 p = vec4(a.rgb * a.a, a.a);
+  outAlbedo = vec4(0.0); outNormals = vec4(0.0); outEmissive = vec4(0.0);
+  if (mode <= ${SPRITE.albedo}) outAlbedo = p;
+  if (mode == ${SPRITE.lit}) { vec4 n = texture(sheetNormals, tex); outNormals = vec4(n.rgb * n.a, n.a); }
+  if (mode == ${SPRITE.glow}) outEmissive = p;
+  // Hit flash: the silhouette in warm white at 85%.
+  if (mode == ${SPRITE.flash}) outEmissive = vec4(1.0, 0.965, 0.863, 1.0) * a.a * 0.85;
+}`;
+
 export interface Compositor {
   readonly webgl: boolean;
-  render(layers: Layers, lights: readonly Light[], atmosphere: Atmosphere, view: CameraView): void;
+  /** WebGL only: the sprite sheet and its normal map, for batched sprites. */
+  setSheets(sheet: TexImageSource, normals: TexImageSource): void;
+  render(layers: Layers, lights: readonly Light[], atmosphere: Atmosphere, view: CameraView, sprites?: SpriteBatch): void;
 }
 
 const GL_OPTIONS: WebGLContextAttributes = { alpha: false, antialias: false, premultipliedAlpha: false, preserveDrawingBuffer: false };
@@ -138,44 +192,81 @@ export function createCompositor(canvas: HTMLCanvasElement, forceCanvas = false)
 class RecoveringGl implements Compositor {
   readonly webgl = true;
   private inner?: GlCompositor;
+  private sheets?: [TexImageSource, TexImageSource];
   constructor(canvas: HTMLCanvasElement, private gl: WebGL2RenderingContext) {
     this.inner = new GlCompositor(canvas, gl);
     canvas.addEventListener('webglcontextlost', event => { event.preventDefault(); this.inner = undefined; });
     canvas.addEventListener('webglcontextrestored', () => {
-      try { this.inner = new GlCompositor(canvas, gl); } catch (error) { console.error('TL003: could not restore WebGL lighting.', error); }
+      try {
+        this.inner = new GlCompositor(canvas, gl);
+        if (this.sheets) this.inner.setSheets(...this.sheets);
+      } catch (error) { console.error('TL003: could not restore WebGL lighting.', error); }
     });
   }
-  render(layers: Layers, lights: readonly Light[], atmosphere: Atmosphere, view: CameraView) {
-    if (this.inner && !this.gl.isContextLost()) this.inner.render(layers, lights, atmosphere, view);
+  setSheets(sheet: TexImageSource, normals: TexImageSource) {
+    this.sheets = [sheet, normals];
+    if (this.inner && !this.gl.isContextLost()) this.inner.setSheets(sheet, normals);
+  }
+  render(layers: Layers, lights: readonly Light[], atmosphere: Atmosphere, view: CameraView, sprites?: SpriteBatch) {
+    if (this.inner && !this.gl.isContextLost()) this.inner.render(layers, lights, atmosphere, view, sprites);
   }
 }
 
+/** Texture units: canvas layers 0–3 and 5–6, the lit buffer 4, sprite targets 7–9, the sheets 10–11. */
+const LAYER_UNITS = [0, 1, 2, 3, 5, 6], LIT_UNIT = 4, TARGET_UNITS = [7, 8, 9], SHEET_UNITS = [10, 11];
+
 class GlCompositor implements Compositor {
   readonly webgl = true;
-  private lightProgram: WebGLProgram; private screenProgram: WebGLProgram;
+  private lightProgram: WebGLProgram; private screenProgram: WebGLProgram; private spriteProgram: WebGLProgram;
   private textures: WebGLTexture[]; private litTexture: WebGLTexture; private framebuffer: WebGLFramebuffer;
+  private targets: WebGLTexture[]; private spriteFramebuffer: WebGLFramebuffer;
+  private sheets: WebGLTexture[]; private sheetSize = { width: 1, height: 1 };
+  private spriteVao: WebGLVertexArrayObject; private instances: WebGLBuffer; private instanceCapacity = 0;
   private litSize = { width: 0, height: 0 }; private uploaded = { width: 0, height: 0 };
   private lightA = new Float32Array(MAX_LIGHTS * 4); private lightB = new Float32Array(MAX_LIGHTS * 4);
   private uniforms = new Map<string, WebGLUniformLocation | null>();
   constructor(private canvas: HTMLCanvasElement, private gl: WebGL2RenderingContext) {
     this.lightProgram = this.program(LIGHT_PASS); this.screenProgram = this.program(SCREEN_PASS);
+    this.spriteProgram = this.program(SPRITE_PASS, SPRITE_VERTEX);
     const buffer = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
     for (const p of [this.lightProgram, this.screenProgram]) {
       const at = gl.getAttribLocation(p, 'corner'); gl.enableVertexAttribArray(at); gl.vertexAttribPointer(at, 2, gl.FLOAT, false, 0, 0);
     }
-    this.textures = [0, 1, 2, 3].map(() => this.texture(gl.NEAREST));
+    // The sprite pass keeps its own vertex array: the shared quad plus one instance record per sprite.
+    this.spriteVao = gl.createVertexArray()!; gl.bindVertexArray(this.spriteVao);
+    gl.bindBuffer(gl.ARRAY_BUFFER, buffer); gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+    this.instances = gl.createBuffer()!; gl.bindBuffer(gl.ARRAY_BUFFER, this.instances);
+    const stride = SPRITE_FLOATS * 4;
+    for (const [at, count, offset] of [[1, 4, 0], [2, 4, 16], [3, 1, 32]] as const) {
+      gl.enableVertexAttribArray(at); gl.vertexAttribPointer(at, count, gl.FLOAT, false, stride, offset); gl.vertexAttribDivisor(at, 1);
+    }
+    gl.bindVertexArray(null);
+    this.textures = LAYER_UNITS.map(() => this.texture(gl.NEAREST));
     this.litTexture = this.texture(gl.LINEAR);
     this.framebuffer = gl.createFramebuffer()!;
+    this.targets = TARGET_UNITS.map(() => this.texture(gl.NEAREST));
+    this.spriteFramebuffer = gl.createFramebuffer()!;
+    this.sheets = SHEET_UNITS.map(() => this.texture(gl.NEAREST));
   }
-  private program(fragment: string) {
+  setSheets(sheet: TexImageSource, normals: TexImageSource) {
+    const gl = this.gl;
+    gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+    [sheet, normals].forEach((source, i) => {
+      gl.activeTexture(gl.TEXTURE0 + SHEET_UNITS[i]!); gl.bindTexture(gl.TEXTURE_2D, this.sheets[i]!);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source);
+    });
+    const s = sheet as { width: number; height: number };
+    this.sheetSize = { width: s.width, height: s.height };
+  }
+  private program(fragment: string, vertex = VERTEX) {
     const gl = this.gl, shader = (type: number, source: string) => {
       const s = gl.createShader(type)!; gl.shaderSource(s, source); gl.compileShader(s);
       if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s) ?? 'shader');
       return s;
     };
     const p = gl.createProgram()!;
-    gl.attachShader(p, shader(gl.VERTEX_SHADER, VERTEX)); gl.attachShader(p, shader(gl.FRAGMENT_SHADER, fragment));
+    gl.attachShader(p, shader(gl.VERTEX_SHADER, vertex)); gl.attachShader(p, shader(gl.FRAGMENT_SHADER, fragment));
     gl.bindAttribLocation(p, 0, 'corner'); gl.linkProgram(p);
     if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p) ?? 'link');
     return p;
@@ -188,31 +279,54 @@ class GlCompositor implements Compositor {
     return t;
   }
   private u(program: WebGLProgram, name: string) {
-    const key = (program === this.lightProgram ? 'l:' : 's:') + name;
+    const key = (program === this.lightProgram ? 'l:' : program === this.spriteProgram ? 'p:' : 's:') + name;
     if (!this.uniforms.has(key)) this.uniforms.set(key, this.gl.getUniformLocation(program, name));
     return this.uniforms.get(key)!;
   }
-  render(layers: Layers, lights: readonly Light[], atmosphere: Atmosphere, view: CameraView) {
+  render(layers: Layers, lights: readonly Light[], atmosphere: Atmosphere, view: CameraView, sprites?: SpriteBatch) {
     const gl = this.gl, { width, height } = layers.albedo;
     gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
     const resized = this.uploaded.width !== width || this.uploaded.height !== height;
-    [layers.albedo, layers.normals, layers.emissive, layers.overlay].forEach((source, i) => {
-      gl.activeTexture(gl.TEXTURE0 + i); gl.bindTexture(gl.TEXTURE_2D, this.textures[i]!);
+    [layers.albedo, layers.normals, layers.emissive, layers.overlay, layers.overAlbedo, layers.overNormals].forEach((source, i) => {
+      gl.activeTexture(gl.TEXTURE0 + LAYER_UNITS[i]!); gl.bindTexture(gl.TEXTURE_2D, this.textures[i]!);
       if (resized) gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source);
       else gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, gl.RGBA, gl.UNSIGNED_BYTE, source);
     });
     this.uploaded = { width, height };
     if (this.litSize.width !== width || this.litSize.height !== height) {
-      gl.activeTexture(gl.TEXTURE4); gl.bindTexture(gl.TEXTURE_2D, this.litTexture);
+      gl.activeTexture(gl.TEXTURE0 + LIT_UNIT); gl.bindTexture(gl.TEXTURE_2D, this.litTexture);
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, width, height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
       gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffer);
       gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.litTexture, 0);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, this.spriteFramebuffer);
+      this.targets.forEach((target, i) => {
+        gl.activeTexture(gl.TEXTURE0 + TARGET_UNITS[i]!); gl.bindTexture(gl.TEXTURE_2D, target);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, width, height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+        gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0 + i, gl.TEXTURE_2D, target, 0);
+      });
+      gl.drawBuffers([gl.COLOR_ATTACHMENT0, gl.COLOR_ATTACHMENT1, gl.COLOR_ATTACHMENT2]);
       this.litSize = { width, height };
+    }
+    // Pass 0: the batched sprites, in order (far to near), premultiplied "over" into their own targets.
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.spriteFramebuffer); gl.viewport(0, 0, width, height);
+    gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT);
+    if (sprites && sprites.count > 0) {
+      const sp = this.spriteProgram; gl.useProgram(sp);
+      gl.uniform1i(this.u(sp, 'sheet'), SHEET_UNITS[0]!); gl.uniform1i(this.u(sp, 'sheetNormals'), SHEET_UNITS[1]!);
+      gl.uniform2f(this.u(sp, 'size'), width, height); gl.uniform2f(this.u(sp, 'sheetSize'), this.sheetSize.width, this.sheetSize.height);
+      gl.bindVertexArray(this.spriteVao); gl.bindBuffer(gl.ARRAY_BUFFER, this.instances);
+      const used = sprites.count * SPRITE_FLOATS;
+      if (used > this.instanceCapacity) { this.instanceCapacity = sprites.data.length; gl.bufferData(gl.ARRAY_BUFFER, this.instanceCapacity * 4, gl.DYNAMIC_DRAW); }
+      gl.bufferSubData(gl.ARRAY_BUFFER, 0, sprites.data, 0, used);
+      gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+      gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, sprites.count);
+      gl.disable(gl.BLEND); gl.bindVertexArray(null);
     }
     // Pass 1: light at buffer resolution.
     const p = this.lightProgram; gl.useProgram(p);
     gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffer); gl.viewport(0, 0, width, height);
-    ['albedo', 'normals', 'emissive', 'overlay'].forEach((name, i) => gl.uniform1i(this.u(p, name), i));
+    ['albedo', 'normals', 'emissive', 'overlay', 'overAlbedo', 'overNormals'].forEach((name, i) => gl.uniform1i(this.u(p, name), LAYER_UNITS[i]!));
+    ['spriteAlbedo', 'spriteNormals', 'spriteEmissive'].forEach((name, i) => gl.uniform1i(this.u(p, name), TARGET_UNITS[i]!));
     gl.uniform2f(this.u(p, 'size'), width, height);
     const count = Math.min(MAX_LIGHTS, lights.length);
     for (let i = 0; i < count; i++) {
@@ -227,7 +341,7 @@ class GlCompositor implements Compositor {
     // Pass 2: camera + sharp upscale to the screen.
     const s = this.screenProgram; gl.useProgram(s);
     gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, this.canvas.width, this.canvas.height);
-    gl.activeTexture(gl.TEXTURE4); gl.bindTexture(gl.TEXTURE_2D, this.litTexture); gl.uniform1i(this.u(s, 'lit'), 4);
+    gl.activeTexture(gl.TEXTURE0 + LIT_UNIT); gl.bindTexture(gl.TEXTURE_2D, this.litTexture); gl.uniform1i(this.u(s, 'lit'), LIT_UNIT);
     gl.uniform2f(this.u(s, 'size'), width, height); gl.uniform2f(this.u(s, 'screen'), this.canvas.width, this.canvas.height);
     gl.uniform3f(this.u(s, 'camera'), view.x, view.y, view.zoom);
     gl.uniform1f(this.u(s, 'angle'), view.angle); gl.uniform1f(this.u(s, 'letterbox'), view.letterbox);
@@ -246,6 +360,8 @@ class CanvasCompositor implements Compositor {
     if (!context) throw new Error('TL003: no 2D context on the battlefield canvas');
     this.context = context;
   }
+  /** Canvas2D draws every sprite itself; there is nothing to batch. */
+  setSheets() {}
   render(layers: Layers, lights: readonly Light[], atmosphere: Atmosphere, view: CameraView) {
     const { width, height } = layers.albedo;
     for (const c of [this.lit, this.lightMap]) if (c.width !== width || c.height !== height) { c.width = width; c.height = height; }
