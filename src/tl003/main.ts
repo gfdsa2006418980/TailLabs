@@ -183,14 +183,17 @@ function setAutoPick(on: boolean) {
 const RARITY_RANK: Record<string, number> = { common: 0, uncommon: 1, rare: 2, legendary: 3 };
 function pickBest() {
   const owner = run, level = run.level, left = run.pendingPicks;
-  setTimeout(() => {
+  const attempt = () => {
     if (!autoPick || !autoPickUnlocked || run !== owner || run.phase !== 'choice' || run.level !== level || run.pendingPicks !== left) return;
+    // The cards lock while they fly in; with reduced motion that unlock can land after this timer, so wait for it.
+    if (dialog.querySelector('.choice-screen.locked') || choiceResolving) { setTimeout(attempt, 50); return; }
     // Among several cards of the top rarity, one at random (2026-10-24), not always the leftmost.
     const rank = (i: number) => RARITY_RANK[run.choices[i]!.rarity ?? 'common']!;
     const indices = run.choices.map((_, i) => i), top = Math.max(...indices.map(rank));
     const best = indices.filter(i => rank(i) === top);
     resolveChoice(best[Math.floor(Math.random() * best.length)]!);
-  }, motionReduced() ? 0 : 700);
+  };
+  setTimeout(attempt, motionReduced() ? 0 : 700);
 }
 function resolveChoice(index: number) {
   const screen = dialog.querySelector<HTMLElement>('.choice-screen');
