@@ -77,7 +77,7 @@ const SPECS: Record<Branch, NodeSpec[]> = {
     { id: 'economy_income', name: '戰利品回收', growth: 1.06, describe: '擊殺與 Wave 獎金', flavor: '能用的都撿回來。' },
     { id: 'wave_bonus', name: '波次獎勵', growth: 1.08, describe: 'Wave 獎金', flavor: '撐過一波，賞一波。' },
     { id: 'bounty', name: '懸賞名單', growth: 1.08, describe: '精英與屍王的擊殺獎金', flavor: '頭目值錢。' },
-    { id: 'starting_funds', name: '作戰經費', growth: 1.1, describe: '開場資金（第 1 級 5，之後等比）', flavor: '出發前先領錢。' },
+    { id: 'starting_funds', name: '作戰經費', growth: 1.1, describe: '開場資金（第 1 級 5，之後等比）', flavor: '開戰前先領錢。' },
     { id: 'logistics', name: '後勤補給', growth: 1, describe: '每 5 級，每局免費重抽 +1', flavor: '補給官多給了一箱。' },
     { id: 'supply_line', name: '軍需運輸', growth: 1.06, describe: '每 10 秒被動收入', flavor: '卡車準時到。' },
     { id: 'lucky', name: '優先配給', growth: 1.03, describe: '稀有以上補給的出現權重', flavor: '好貨先留給我們。' },

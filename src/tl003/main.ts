@@ -42,11 +42,11 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
     <div class="hud-wall" aria-label="拒馬生命">${px('icon_fortify', 2)}<div class="hp-bar"><i id="wall-chip" class="hp-chip"></i><i id="wall-fill" class="hp-fill"></i><span id="wall-value">40</span></div></div>
     <div class="hud-clock" aria-label="本關剩餘時間與關卡"><strong id="time">00:00</strong><span id="wave">W01</span></div>
     <div class="hud-money" id="money-box" aria-label="資金">${px('icon_money', 2)}<strong id="money">0</strong></div>
-    <div class="hud-buttons"><button id="speed" class="icon-button speed-button" aria-label="遊戲速度" aria-pressed="false">×1</button><button id="mute" class="icon-button" aria-label="音效開關" aria-pressed="false"></button><button id="pause" class="icon-button" aria-label="暫停遊戲" disabled>${icon('pause')}</button></div>
+    <div class="hud-buttons"><button id="auto-upgrade" class="icon-button auto-button" aria-label="自動升級傭兵" aria-pressed="false" title="資金夠時自動升級最便宜的傭兵">自動</button><button id="speed" class="icon-button speed-button" aria-label="遊戲速度" aria-pressed="false">×1</button><button id="mute" class="icon-button" aria-label="音效開關" aria-pressed="false"></button><button id="pause" class="icon-button" aria-label="暫停遊戲" disabled>${icon('pause')}</button></div>
   </header>
   <div class="hud-xp" aria-label="戰術等級"><b id="level">1</b><div class="xp-track"><i id="xp-fill"></i></div><span id="dps" class="hud-dps" aria-label="本關每秒傷害"></span></div>
   <div id="boss-banner" class="boss-banner" role="status" hidden>${px('icon_wave', 2)}<div><strong id="boss-title">屍王</strong><div class="boss-track"><i id="boss-fill"></i></div></div><span id="boss-detail"></span></div>
-  <div id="stage-bar" class="stage-bar" role="status" hidden><strong id="stage-title">第 1 關完成</strong><b id="stage-dps" class="stage-dps"></b><span id="stage-detail"></span><button id="next-stage" class="primary">下一關 ▶</button><button id="stage-abandon" class="quiet-button abandon">放棄本局，返回標題</button></div>
+  <div id="stage-bar" class="stage-bar" role="status" hidden><small class="stage-kicker">INTERMISSION</small><strong id="stage-title">第 1 關守住了</strong><b id="stage-dps" class="stage-dps"></b><span id="stage-detail"></span><span class="stage-hint">趁屍潮還沒到，升級傭兵、補強拒馬。</span><button id="next-stage" class="primary">迎戰下一關 ▶</button><button id="stage-abandon" class="quiet-button abandon">放棄這座城市</button></div>
   <div id="toast" class="toast" aria-hidden="true"></div>
   <nav class="hud-bottom" aria-label="傭兵與防守">
     <button id="repair" class="side-action" aria-label="修復拒馬">${px('icon_repair', 2)}<span class="cost">${px('icon_money', 1)}<span id="repair-cost">6</span></span></button>
@@ -57,7 +57,6 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
         </button>
         <button class="chip" id="buy-${slot}" aria-label="升級傭兵欄 ${slot + 1}"><span class="chip-merc">${px('icon_merc_rifle', 1)}<b id="level-${slot}">1</b></span>${px('icon_money', 1)}<span id="buy-label-${slot}"></span></button>
       </div>`).join('')}</div>
-    <button id="auto-upgrade" class="auto-toggle" aria-pressed="false" title="資金夠時自動升級最便宜的傭兵">自動升級</button>
     <button id="fortify" class="side-action" aria-label="補強拒馬">${px('icon_fortify', 2)}<span class="cost">${px('icon_money', 1)}<span id="fortify-cost">10</span></span></button>
   </nav>
   <div id="drag-hint" class="drag-hint" hidden>${icon('hand')}</div>
@@ -229,7 +228,7 @@ function presentReport(first: boolean) {
 function bindAbandon(button: HTMLButtonElement) {
   let armed = false;
   button.onclick = () => {
-    if (!armed) { armed = true; button.textContent = '確定放棄？已得戰功照樣結算'; button.classList.add('armed'); return; }
+    if (!armed) { armed = true; button.textContent = '確定棄城？已得戰功照樣結算'; button.classList.add('armed'); return; }
     meta.settle(run, run.score, run.clearedWave, { danger: run.danger }); report = undefined; reset();
   };
 }
@@ -244,7 +243,7 @@ function pauseMenu() {
       <label class="setting"><span>減少畫面晃動</span><input id="motion" type="checkbox" ${reducedMotion ? 'checked' : ''}></label>
     </div>
     <button id="resume" class="primary">返回戰場 <span>→</span></button>
-    <button id="abandon" class="quiet-button abandon">放棄本局，返回標題</button>`, 'pause');
+    <button id="abandon" class="quiet-button abandon">放棄這座城市</button>`, 'pause');
   el('resume').onclick = () => { run.resume(); sync(); }; el('resume').focus();
   bindAbandon(el<HTMLButtonElement>('abandon'));
   el('mute-menu').onclick = toggleMute;
@@ -268,7 +267,7 @@ function syncPhase() {
     if (run.phase === 'over') audio.play('gameOver');
     if (run.phase === 'victory') audio.play('victory');
   }
-  text('announcement', run.phase === 'choice' ? '戰地補給到達，選擇一張。' : run.phase === 'intermission' ? `第 ${run.stage} 關完成。可以升級與補強，準備好就前往下一關。` : run.phase === 'over' ? '防線失守。本局結束。' : run.phase === 'running' ? `第 ${run.stage} 關開始。` : '');
+  text('announcement', run.phase === 'choice' ? '戰地補給到達，選擇一張。' : run.phase === 'intermission' ? `第 ${run.stage} 關守住了。趁屍潮還沒到，升級傭兵、補強拒馬。` : run.phase === 'over' ? '防線失守。本局結束。' : run.phase === 'running' ? `第 ${run.stage} 關開始。` : '');
   if (run.phase === 'ready') {
     const deploy = () => { displayedPhase = 'ready'; showModal(deployScreen(meta.effects, meta.value.TalentPoints, meta.tree.bestStage ?? meta.value.HighestClearedWave, !readFlag(TIPS_KEY), { unlocked: meta.tree.danger ?? 0, selected: selectedDanger() }), 'deploy'); bindDeploy(); };
     // First open: the briefing comes before the deploy screen.
@@ -381,11 +380,11 @@ function syncStageBar() {
   if (bar.hidden === open) bar.hidden = !open;
   if (!open) return;
   const next = run.stage + 1;
-  text('stage-title', run.stage === 0 ? '出擊準備' : `第 ${run.stage} 關完成`);
-  el('next-stage').textContent = run.stage === 0 ? '出擊 ▶' : '下一關 ▶';
+  text('stage-title', run.stage === 0 ? '佈防準備' : `第 ${run.stage} 關守住了`);
+  el('next-stage').textContent = run.stage === 0 ? '開始防守 ▶' : `迎戰第 ${next} 關 ▶`;
   const growth = run.prevStageDps > 0 ? run.lastStageDps / run.prevStageDps - 1 : 0;
   text('stage-dps', run.stage > 0 ? `本關 DPS ${formatNumber(run.lastStageDps)}${run.prevStageDps > 0 ? `（比上一關 ${growth >= 0 ? '+' : ''}${(growth * 100).toFixed(0)}%）` : ''}` : '');
-  text('stage-detail', `下一關：第 ${next} 關・${next === B.STAGE_COUNT ? `${B.stageSeconds(next)} 秒後超級屍王來襲` : B.isBossStage(next) ? `${B.stageSeconds(next)} 秒後屍王來襲` : `撐過 ${B.stageSeconds(next)} 秒`}。花資金升級、補強，準備好就出發。`);
+  text('stage-detail', `第 ${next} 關：${next === B.STAGE_COUNT ? `${B.stageSeconds(next)} 秒後超級屍王來襲` : B.isBossStage(next) ? `${B.stageSeconds(next)} 秒後屍王來襲` : `撐過 ${B.stageSeconds(next)} 秒的屍潮`}`);
 }
 function nextStage() { if (run.nextStage()) { audio.play('pick'); displayedPhase = ''; sync(); } }
 el('next-stage').onclick = nextStage;
@@ -565,9 +564,9 @@ function toggleMute() {
 }
 el('mute').onclick = toggleMute;
 // Game speed: only battle time runs faster; camera, UI motion and coins keep real time.
-// Players get ×1 / ×2. ×16 is for testing only: the dev server, or the page opened with ?test.
+// Players get ×1 / ×2 / ×4 / ×8 (2026-10-23). ×16 is for testing only: the dev server, or the page opened with ?test.
 const TEST_MODE = import.meta.env.DEV || new URLSearchParams(location.search).has('test');
-const SPEEDS = TEST_MODE ? [1, 2, 16] : [1, 2];
+const SPEEDS = TEST_MODE ? [1, 2, 4, 8, 16] : [1, 2, 4, 8];
 let gameSpeed = SPEEDS.includes(Number(readFlag(SPEED_KEY))) ? Number(readFlag(SPEED_KEY)) : 1;
 function syncSpeed() { const b = el('speed'); b.textContent = `×${gameSpeed}`; b.setAttribute('aria-pressed', String(gameSpeed > 1)); b.classList.toggle('fast', gameSpeed > 1); }
 el('speed').onclick = () => { gameSpeed = SPEEDS[(SPEEDS.indexOf(gameSpeed) + 1) % SPEEDS.length]!; writeFlag(SPEED_KEY, String(gameSpeed)); syncSpeed(); pop(el('speed'), 1.2, 180); audio.play('pick'); };

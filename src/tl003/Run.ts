@@ -158,7 +158,7 @@ export class DefenseRun {
   endless = false;
   /** Current stage (1-based), seconds into it, and level-ups banked for the next rest. */
   stage = 1; stageTime = 0; pendingPicks = 0;
-  /** Danger level chosen at deployment: every stage plays DANGER_STAGE_SHIFT × danger stages later. */
+  /** Danger level chosen at deployment: stages play progressively later (B.dangerShift) and zombies are tougher (B.DANGER_HP / DANGER_DEFENSE). */
   danger = 0;
   /**
    * What the squad actually did (v2): damage by source for the run and for the current stage, seconds of control
@@ -243,7 +243,7 @@ export class DefenseRun {
   /** Talent points this run pays: every cleared stage n pays n, × (1 + danger). */
   get score() { return B.stagePoints(this.clearedWave, this.danger); }
   /** The stage's place on the old per-minute curves (enemy strength, spawn rate, income): set by stage and danger, not the clock. */
-  get pace() { return (Math.max(1, this.stage) - 1 + this.danger * B.DANGER_STAGE_SHIFT) * B.STAGE_PACE_MINUTES; }
+  get pace() { return (Math.max(1, this.stage) - 1 + B.dangerShift(Math.max(1, this.stage), this.danger)) * B.STAGE_PACE_MINUTES; }
   /** Identifies the coming boss rush (one announcement each). */
   get nextBossAt() { return this.bossRushes + 1; }
   /** Seconds until this boss stage's rush while it is being announced; undefined otherwise. */
@@ -1042,7 +1042,7 @@ export class DefenseRun {
       }
     }
     const def = ENEMIES[kind], minutes = this.pace;
-    const hp = def.hp * B.ENEMY_HP_SCALE * B.ENEMY_HP_GROWTH_PER_MINUTE ** minutes * (kind === 'boss' ? B.BOSS_HP_FIRST * B.BOSS_HP_PER_STAGE ** (Math.max(1, this.stage) - 1 + this.danger * B.DANGER_STAGE_SHIFT) : 1);
+    const hp = def.hp * B.ENEMY_HP_SCALE * B.ENEMY_HP_GROWTH_PER_MINUTE ** minutes * (kind === 'boss' ? B.BOSS_HP_FIRST * B.BOSS_HP_PER_STAGE ** (Math.max(1, this.stage) - 1 + B.dangerShift(Math.max(1, this.stage), this.danger)) : 1) * B.DANGER_HP ** this.danger;
     // The boss charges down the centre of the road; everyone else picks a random lane.
     const y = kind === 'boss' ? 200 + this.random() * 50 : 100 + this.random() * 260;
     const reward = def.reward * B.KILL_REWARD_GROWTH_PER_MINUTE ** minutes;
@@ -1053,7 +1053,7 @@ export class DefenseRun {
       if (host) { host.hp += hp; host.maxHp += hp; host.reward += reward; host.xp += def.xp; host.merged = (host.merged ?? 1) + 1; return; }
     }
     // Each zombie's defense varies a little around its kind's value (drawn from the combat stream: the horde stays the same).
-    const defense = def.defense * (1 - B.DEFENSE_SPREAD + 2 * B.DEFENSE_SPREAD * this.combatRandom());
+    const defense = def.defense * B.DANGER_DEFENSE ** this.danger * (1 - B.DEFENSE_SPREAD + 2 * B.DEFENSE_SPREAD * this.combatRandom());
     this.invalidateGrid();
     this.enemies.push({ id: this.nextId++, kind, x: -20, y, hp, maxHp: hp, defense, resist: def.resist,
       speed: def.speed * (0.96 + this.random() * 0.08), attack: def.attack * B.ENEMY_ATTACK_GROWTH_PER_MINUTE ** minutes,
@@ -1163,7 +1163,7 @@ export class DefenseRun {
     if (this.bossStage ? !this.bossDown : !timeUp) {
       this.spawnTimer -= dt;
       // The opening seconds of the first stage stay slow; after that the rate is the stage's.
-      while (this.spawnTimer <= 0) { this.spawn(); this.spawnTimer += spawnIntervalAt(this.stage <= 1 && this.danger === 0 && this.stageTime < 12 ? this.stageTime : 12 + this.pace * 60); }
+      while (this.spawnTimer <= 0) { this.spawn(); this.spawnTimer += spawnIntervalAt(this.stage <= 1 && this.stageTime < 12 ? this.stageTime : 12 + this.pace * 60); }
     }
     if (this.bossStage && !this.bossSpawned && timeUp) this.bossRush();
     for (const event of this.events) event.life -= dt;

@@ -465,7 +465,10 @@ test('TL003 v2: enemy strength, spawns and income follow the stage and the dange
   const early = at(5), late = at(5, 0, 900);
   near(early.enemies[0].maxHp, late.enemies[0].maxHp, 'the clock does not grow the horde');
   near(early.pace, 4 * B.STAGE_PACE_MINUTES);
-  near(at(1, 2).pace, at(1 + 2 * B.DANGER_STAGE_SHIFT).pace, 'danger shifts every stage later');
+  // Danger builds up: stage 1 is as at danger 0, the last stage is DANGER_STAGE_SHIFT × danger stages later; HP and defense scale too.
+  near(at(1, 2).pace, at(1).pace, 'stage 1 plays as at danger 0');
+  near(at(B.STAGE_COUNT, 2).pace, at(B.STAGE_COUNT).pace + 2 * B.DANGER_STAGE_SHIFT * B.STAGE_PACE_MINUTES);
+  near(at(1, 2).enemies[0].maxHp, at(1).enemies[0].maxHp * B.DANGER_HP ** 2);
   assert.ok(at(12).enemies[0].maxHp >= at(2).enemies[0].maxHp, 'later stages are stronger');
   assert.equal(B.stagePoints(0), 0); assert.equal(B.stagePoints(4), 10); assert.equal(B.stagePoints(20), 210); assert.equal(B.stagePoints(20, 2), 630);
   const r = at(3); r.stage = 3; assert.equal(r.clearedWave, 2); assert.equal(r.score, 3);

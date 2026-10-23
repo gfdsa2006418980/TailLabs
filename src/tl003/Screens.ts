@@ -31,7 +31,7 @@ export function deployScreen(effects: PermanentEffects, talentPoints: number, be
     ${showTips ? `<ul class="deploy-tips">${tips.map(([icon, label]) => `<li>${px(icon, 2)}<span>${label}</span></li>`).join('')}</ul>` : ''}
     <div class="screen-actions">
       ${danger.unlocked > 0 ? `<div class="danger-pick" role="group" aria-label="危險等級">${levels.map(d => `<button type="button" data-danger="${d}" aria-pressed="${d === danger.selected}">${d === 0 ? '一般' : '危險 ' + d}</button>`).join('')}</div>
-      <p class="danger-note">${danger.selected === 0 ? '一般難度。' : `喪屍強度等於往後推 ${danger.selected * 10} 關，戰功 ×${danger.selected + 1}。`}</p>` : ''}
+      <p class="danger-note">${danger.selected === 0 ? '一般難度。' : `每過一關喪屍多強一點，到第 20 關等於往後推 ${danger.selected * 10} 關；喪屍血量 ×${Number((1.5 ** danger.selected).toFixed(2))}、防禦 ×${Number((1.2 ** danger.selected).toFixed(2))}。戰功 ×${danger.selected + 1}。`}</p>` : ''}
       <button id="start" class="primary go">部署 <span>▶</span></button>
       <button id="open-talents" class="camp-button">${px('icon_star', 2)}<b>指揮藍圖</b>${talentPoints > 0 ? `<span class="badge">${formatNumber(talentPoints)}</span>` : '<span></span>'}</button>
       ${bestWave > 0 ? `<p class="best">最佳 <b>第 ${bestWave} 關</b></p>` : ''}

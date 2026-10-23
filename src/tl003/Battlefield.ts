@@ -311,11 +311,13 @@ export class Battlefield {
     const hits: VisualEvent[] = [];
     for (const e of run.events) {
       if (this.seen.has(e)) continue; this.seen.add(e);
-      if (e.kind === 'hit' && e.amount) hits.push(e);
+      // Far up the road the horde stands packed at its spawn: numbers there piled into one blob over the HUD. Bosses still show.
+      if (e.kind === 'hit' && e.amount && (e.x >= FAR_X || e.enemy === 'boss')) hits.push(e);
       if (e.kind !== 'kill' && e.kind !== 'shot' && e.kind !== 'blast') continue;
       const p = this.at(e.x, e.y);
       if (e.kind === 'kill') {
-        if (e.amount) this.feedback.kill(p.x, p.y - 6 * p.scale, e.amount);
+        // Far kills pay without a floating number or coin (they piled up over the HUD); the money still counts.
+        if (e.amount && (e.x >= FAR_X || e.enemy === 'boss')) this.feedback.kill(p.x, p.y - 6 * p.scale, e.amount);
         const art = ENEMY_ART[e.enemy ?? ''] ?? ENEMY_ART.walker!, death = `${art.anim}_death`;
         if (ANIMS[death]) this.corpses.push({ name: ANIMS[death]!.frames.at(-1)!, x: p.x, y: p.y + 1, scale: p.scale / WALL_SCALE * art.scale, at: t + e.life });
       }

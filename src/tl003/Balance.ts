@@ -142,12 +142,20 @@ export const STAGE_COUNT = 20;
  * v2 (2026-10-23 retrospective): enemy strength, spawn rate and income follow the stage, never the clock. A stage is
  * "worth" STAGE_PACE_MINUTES of the old per-minute curves, so stage n plays like minute (n − 1) × pace of the old
  * curve whatever the time on the clock; replaying an early stage with more talents feels faster, not the same.
- * Danger level d (unlocked by clearing all stages at d − 1) plays every stage as if it were DANGER_STAGE_SHIFT × d
- * stages later and pays (1 + d) × the talent points.
+ * Danger level d (unlocked by clearing all stages at d − 1) plays later stages progressively later (dangerShift, up to
+ * DANGER_STAGE_SHIFT × d at the last stage), with tougher zombies, and pays (1 + d) × the talent points.
  */
 export const STAGE_PACE_MINUTES = 0.75;
 export const DANGER_STAGE_SHIFT = 10;
 export const DANGER_MAX = 10;
+/**
+ * Danger (2026-10-23 rework, the user's choice): stage 1 plays like danger 0 and the shift builds up stage by stage,
+ * reaching DANGER_STAGE_SHIFT × danger stages at the last stage, so progress is gradual instead of all-or-nothing at
+ * stage 1. On top, every zombie's HP × DANGER_HP^danger and defense × DANGER_DEFENSE^danger.
+ */
+export const DANGER_HP = 1.5;
+export const DANGER_DEFENSE = 1.2;
+export const dangerShift = (stage: number, danger: number) => danger * DANGER_STAGE_SHIFT * Math.max(0, stage - 1) / (STAGE_COUNT - 1);
 /** Talent points for a run: every cleared stage n pays n, × (1 + danger). A full clear at danger 0 pays 210. */
 export const stagePoints = (cleared: number, danger = 0) => Math.round(cleared * (cleared + 1) / 2 * (1 + danger));
 /** Core slots open on the first clear of these stages (one slot from the start). */
