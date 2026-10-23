@@ -37,7 +37,7 @@ const FAR_X = 0.4 * (FIELD.wallX + 20) - 20;
 /** At most this many damage numbers start per frame; the rest of that frame's hits get none. */
 const MAX_NEW_DAMAGE = 30;
 /** Status meter colours under the health bar: 凍結、感電、暈眩. */
-const METER_COLOR = { chill: '#9fd8f0', shock: '#bff1ea', stun: '#ffe9a8' } as const;
+const METER_COLOR = { chill: '#9fd8f0', shock: '#bff1ea', stun: '#ffe9a8' , ignite: '#ee9d4f' } as const;
 const ICE: readonly [number, number, number] = [0.6, 0.85, 1], TOXIC: readonly [number, number, number] = [0.6, 1, 0.35];
 /** The right-hand slot is mirrored so every weapon points in towards the road. */
 const FLIPPED_SLOT = 2;
@@ -327,7 +327,7 @@ export class Battlefield {
       const rank = (e: VisualEvent) => (e.crit ? 4 : 0) + (e.enemy === 'boss' ? 2 : 0) + (e.skill ? 1 : 0);
       hits.sort((a, b) => rank(b) - rank(a) || b.amount! - a.amount!); hits.length = MAX_NEW_DAMAGE;
     }
-    for (const e of hits) { const p = this.at(e.x, e.y); this.feedback.damage(p.x, p.y - 4 * p.scale, e.amount!, e.target ?? 0, !!e.skill, !!e.crit); }
+    for (const e of hits) { const p = this.at(e.x, e.y); this.feedback.damage(p.x, p.y - 4 * p.scale, e.amount!, e.target ?? 0, !!e.skill, !!e.crit, e.element); }
     // Game time: a death frozen by hit-stop, a card choice or a pause keeps its body standing.
     for (const corpse of this.corpses) if (t >= corpse.at) {
       const d = ctx(this.decals); d.globalAlpha = 0.85; this.sprite(corpse.name, corpse.x, corpse.y, corpse.scale, { albedo: d }); d.globalAlpha = 1;
@@ -374,7 +374,7 @@ export class Battlefield {
         O.fillStyle = COLOR.hpBack; O.fillRect(bx - 1, by - 1, bw + 2, 3); O.fillStyle = enemy.kind === 'boss' ? '#ff7a5c' : COLOR.hp; O.fillRect(bx, by, Math.max(1, Math.round(bw * Math.max(0, enemy.hp / enemy.maxHp))), 1);
         if (!far) {
           let sx = bx;
-          for (const [active, color] of [[enemy.burnDuration > 0, '#ee9d4f'], [enemy.toxin > 0, '#a6c46a'], [frozen, '#9fd8f0'], [paralyzed, '#bff1ea'], [stunned, '#ffe9a8']] as const)
+          for (const [active, color] of [[run.isBurning(enemy), '#ee9d4f'], [enemy.toxin > 0, '#a6c46a'], [frozen, '#9fd8f0'], [paralyzed, '#bff1ea'], [stunned, '#ffe9a8']] as const)
             if (active) { O.fillStyle = color; O.fillRect(sx, by - 3, 2, 2); sx += 3; }
           // Build-up meters: one pixel row each under the health bar, filling towards the next control.
           let my = by + 2;
@@ -385,7 +385,7 @@ export class Battlefield {
           }
         }
       }
-      if (enemy.burnDuration > 0 && box.w) {
+      if (run.isBurning(enemy) && box.w) {
         this.sprite(this.animFrame('fire', t + enemy.id * 0.21), p.x, box.top + box.h * 0.55, Math.max(0.5, s * 0.8), this.glow());
         if (burningLights++ < 10) this.light(p.x, box.top + box.h * 0.5, 22 * s + 6, FIRE, 0.7, 8);
       }

@@ -4,8 +4,9 @@ import { LocalMetaMirror, META_KEY, emptyMeta, emptyTree } from '../src/tl003/Me
 import { CORES, TALENTS, TALENT_LINKS, canBreakthrough, compileTalents, coreSlots, deploymentStats, isCoreRevealed, isRevealed, talentCost, talentMultiplier } from '../src/tl003/Talents.ts';
 import { calculateDamage, calculateValue, effectiveCooldown } from '../src/tl003/Combat.ts';
 import { MERCENARIES, SKILLS } from '../src/tl003/Content.ts';
+import * as B from '../src/tl003/Balance.ts';
 import { MERC_TUNING } from '../src/tl003/Balance.ts';
-import { DefenseRun, FIELD, SPAWN_GROWTH_SPEED, spawnIntervalAt , freshStatus } from '../src/tl003/Run.ts';
+import { DefenseRun, FIELD, SPAWN_GROWTH_SPEED, THROWABLE, spawnIntervalAt , freshStatus } from '../src/tl003/Run.ts';
 
 const near = (actual, expected) => assert.ok(Math.abs(actual - expected) < 1e-8, `${actual} != ${expected}`);
 function mirror(points = 1000, tree = emptyTree()) {
@@ -102,11 +103,19 @@ test('TL003 permanent damage uses multiplicative tag stages and strengthens all 
   const laser=calculateDamage({baseDamage:54,tags:['Damage.Electric','Skill.Active','Weapon.laser']},target,effects.modifiers);
   near(laser.final,54*1.06**2*1.08);
 });
-test('TL003 permanent Fire damage strengthens actual Burn and Molotov without double application', () => {
-  const effects=compileTalents(treeWith({mercenary_damage:1,fire_dot:2,active_skill_damage:1}));const run=new DefenseRun(1,effects);run.start();run.recruit('flame');run.learn('molotov');
-  const victim={id:999,kind:'walker',x:600,y:220,hp:200,maxHp:200,defense:0,speed:0,attack:0,reward:3,xp:1,burnPower:0,burnDuration:0,burnFlammability:0,...freshStatus(),hitFlash:0};run.enemies=[victim];run.advance(FIELD.step);
-  near(victim.burnPower,MERCENARIES.flame.damage*MERC_TUNING.flame*1.06*1.08**2);run.mercenaries.forEach(m=>m.shotTimer=100);const hp=victim.hp;run.advance(1);near(victim.hp,hp-victim.burnPower);
-  run.cast(1,600,220);near(run.zones[0].power,MERCENARIES.rifle.damage*3*1.06*1.08**2*1.08);
+test('TL003 permanent Fire damage strengthens actual burn ticks and Molotov without double application', () => {
+  const tree=treeWith({mercenary_damage:1,fire_dot:2,active_skill_damage:1}),m=id=>talentMultiplier(tree,id);
+  const effects=compileTalents(tree);const run=new DefenseRun(1,effects);run.start();run.recruit('flame');run.learn('molotov');run.mercenaries[0].shotTimer=100;
+  const victim={id:999,kind:'walker',x:600,y:220,hp:1e6,maxHp:1e6,defense:0,speed:0,attack:0,reward:3,xp:1,...freshStatus(),hitFlash:0};run.enemies=[victim];
+  // The flamer's hit is direct fire: the hub applies, the burn talent does not.
+  victim.meters.ignite.value=1e6*B.STATUS.ignite.threshold-1e-9;run.advance(FIELD.step);
+  near(1e6-victim.hp,MERCENARIES.flame.damage*MERC_TUNING.flame*m('mercenary_damage'));assert.ok(run.isBurning(victim));
+  // The burn tick is the fire DOT: only 高效燃料.
+  run.mercenaries.forEach(m=>m.shotTimer=100);const hp=victim.hp;run.advance(1);near(hp-victim.hp,1e6*B.STATUS.ignite.tick*m('fire_dot'));
+  // The Molotov pulse (direct fire, Skill.Active): the hub and 軍火專精, not the DOT talent.
+  run.cast(1,600,220);near(run.zones[0].power,MERCENARIES.rifle.damage*(B.SKILL_TUNING.molotov??1)*THROWABLE.molotov/6);
+  const zone=calculateValue(run.zones[0].power,['Damage.Fire','Mechanic.AOE','Skill.Active','Weapon.molotov'],run.modifiers);
+  near(zone,run.zones[0].power*m('mercenary_damage')*m('active_skill_damage'));
 });
 test('TL003 permanent wall health, repair and attack speed enter the actual Run', () => {
   const effects=compileTalents(treeWith({barricade_health:2,repair_efficiency:3,attack_speed:4}));const run=new DefenseRun(1,effects);run.start();

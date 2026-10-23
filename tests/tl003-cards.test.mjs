@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { DefenseRun, FIELD, PITY_DRAWS, rarityWeights , freshStatus } from '../src/tl003/Run.ts';
+import { DefenseRun, FIELD, PITY_DRAWS, THROWABLE, rarityWeights , freshStatus } from '../src/tl003/Run.ts';
 import { CARD_DEFS, MERCENARIES, RARITIES, SKILLS, cardDef, makeCard } from '../src/tl003/Content.ts';
 import * as B from '../src/tl003/Balance.ts';
 
@@ -8,7 +8,7 @@ const near = (a, b, e = 1e-6) => assert.ok(Math.abs(a - b) <= e * Math.max(1, Ma
 const running = (seed = 1) => { const run = new DefenseRun(seed); run.start(); run.mercenaries[0].shotTimer = 1e9; return run; };
 const take = (run, id, rarity) => { run.phase = 'choice'; run.choices = [makeCard(cardDef(id), rarity)]; assert.equal(run.choose(id), true); };
 const enemy = (over = {}) => ({ id: 9000, kind: 'walker', x: 500, y: 225, hp: 1e6, maxHp: 1e6, defense: 0, speed: 0, attack: 0, reward: 1, xp: 0,
-  burnPower: 0, burnDuration: 0, burnFlammability: 0, ...freshStatus(), hitFlash: 0, ...over });
+  ...freshStatus(), hitFlash: 0, ...over });
 // Level-ups are banked until the rest; card tests open one pick by hand (one level up, a fresh draw).
 const levelUp = run => { run.level++; run.rerollsThisLevel = 0; run.choices = run.draw(); run.phase = 'choice'; return run.choices; };
 
@@ -133,6 +133,48 @@ test('TL003 cards: evolutions change the skill (high explosive, double throw, ov
   hex.cast(0, 500, 225); assert.ok(hex.enemies[0].hp < 1e6, 'radius ×1.5 reaches 140 away'); near(hex.skills[0].cooldown, 10 * 1.3);
   const dbl = running(); dbl.evolutions.grenade = 'double'; dbl.cast(0, 500, 225); assert.equal(dbl.events.filter(e => e.kind === 'blast').length, 2);
   const over = running(); over.learn('laser'); over.evolutions.laser = 'overload'; over.cast(1, 200, 222); near(over.skills[1].cooldown, 45 * 1.5);
+});
+
+test('TL003 cards: the seven new evolutions (crossfire, barrage, absolute zero, cascade, nerve gas, cluster mines, marksman)', () => {
+  /** A run with this throwable in slot 1, optionally evolved. */
+  const evo = (skill, id) => { const r = running(); r.learn(skill); if (id) r.evolutions[skill] = id; return r; };
+  /** Per-target damage per cast from the THROWABLE table. */
+  const T = (r, id) => r.skillPower * THROWABLE[id] * (B.SKILL_TUNING[id] ?? 1);
+  const value = id => cardDef(id).value;
+  // 交叉火網: a second band 2 × depth behind; every hit × value.
+  for (const id of [undefined, 'crossfire']) {
+    const r = evo('strafe', id), depth = SKILLS.strafe.radius * r.skillRange;
+    const front = enemy({ x: 500 }), back = enemy({ id: 9001, x: 500 - 2 * depth }); r.enemies = [front, back]; r.cast(1, 500, 225);
+    near(1e6 - front.hp, T(r, 'strafe') * (id ? value('crossfire') : 1));
+    near(1e6 - back.hp, id ? T(r, 'strafe') * value('crossfire') : 0);
+  }
+  // 飽和轟炸: `value` shells instead of five.
+  const barrage = evo('mortar', 'barrage'); barrage.cast(1, 400, 225);
+  assert.equal(barrage.events.filter(e => e.kind === 'blast').length, value('barrage'));
+  // 絕對零度: radius × value, and the frozen stay frozen 2 s longer.
+  for (const id of [undefined, 'absolutezero']) {
+    const r = evo('cryobomb', id), radius = SKILLS.cryobomb.radius * r.skillRange;
+    const edge = enemy({ x: 500 + radius * (1 + value('absolutezero')) / 2 }); r.enemies = [edge]; r.cast(1, 500, 225);
+    assert.equal(r.isFrozen(edge), !!id, `${id} freezes the ring`);
+    if (id) near(edge.meters.chill.timer, B.STATUS.chill.duration + 2);
+  }
+  // 連鎖過載: each struck zombie arcs to its 2 nearest within 120 for value × the EMP damage.
+  for (const id of [undefined, 'cascade']) {
+    const r = evo('emp', id), struck = enemy({ x: 500 }), outside = enemy({ id: 9001, x: 600 }); r.enemies = [struck, outside];
+    r.cast(1, 500 - SKILLS.emp.radius * r.skillRange + 10, 225);
+    assert.ok(struck.hp < 1e6); near(1e6 - outside.hp, id ? T(r, 'emp') * value('cascade') : 0);
+  }
+  // 神經毒氣: 9 s of pulses, toxin × value.
+  const nerve = evo('gas', 'nerve'), n = enemy({ toxinBurst: true }); nerve.enemies = [n]; nerve.cast(1, 500, 225);
+  near(n.toxin, 6 * value('nerve')); near(nerve.zones[0].remaining, 9);
+  nerve.advance(10); near(1e6 - n.hp, 9 * T(nerve, 'gas') / 6);
+  // 集束地雷: `value` mines with a 65 blast radius.
+  const cluster = evo('minefield', 'cluster'); cluster.enemies = [enemy({ x: 50, y: 380 })]; cluster.cast(1, 400, 225);
+  assert.equal(cluster.mines.length, value('cluster')); assert.ok(cluster.mines.every(m => m.radius === 65));
+  // 連續狙擊: the `value` highest-HP zombies, each a forced crit.
+  const marks = evo('snipe', 'marksman'), crowd = [9, 8, 7, 6, 5].map((h, i) => enemy({ id: 9100 + i, x: 300 + i * 50, hp: h * 1e5, maxHp: 1e6 }));
+  marks.enemies = crowd; marks.cast(1, 300, 225);
+  crowd.forEach((e, i) => near(e.hp, (9 - i) * 1e5 - (i < value('marksman') ? T(marks, 'snipe') * marks.critDamage : 0)));
 });
 
 test('TL003 cards: crits, no pierce without 冷鋼紀律, plating, spikes and airdrop', () => {

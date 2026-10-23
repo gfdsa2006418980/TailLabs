@@ -53,10 +53,15 @@ export const MAX_SKILLS = 3;
 export const STATUS = {
   /** 冷凍: slows while filling, then freezes (no movement) and deals frostbite as cold damage. */
   chill: { rate: 2, threshold: 0.6, duration: 2, burst: 0.1, slow: 0.5 },
-  /** 電能: raises damage taken while filling, then paralyses (no barricade damage) with an electric burst. */
-  shock: { rate: 2, threshold: 0.6, duration: 4, burst: 0.05, vulnerability: 0.5 },
+  /** 電能: raises damage taken while filling, then paralyses (no barricade damage) with an electric burst of 10% max HP (2026-10-23). */
+  shock: { rate: 2, threshold: 0.6, duration: 4, burst: 0.1, vulnerability: 0.5 },
   /** 爆裂: stuns (no movement). */
   stun: { rate: 1.5, threshold: 0.8, duration: 4, burst: 0 },
+  /**
+   * 火焰 (2026-10-23, like 冷凍): fire hits fill the ignite meter; a full one ignites for `duration` seconds, burning
+   * `tick` of max HP once a second (as fire damage over time, so fire bonuses and resistance apply).
+   */
+  ignite: { rate: 2, threshold: 0.6, duration: 4, burst: 0, tick: 0.02 },
 } as const;
 export const STATUS_ESCALATION = 2;
 export const STATUS_WINDOW = 10;
@@ -211,8 +216,8 @@ export const CARD_SCALE_FLOOR = 0.04;
 export const cardScale = (level: number) => Math.max(CARD_SCALE_FLOOR, CARD_SCALE_START * CARD_SCALE_DECAY ** Math.max(0, level - CARD_SCALE_FULL_LEVELS));
 /** Synergy cards join the pool from this tactical level, evolutions from the next: payoffs for runs that last, not first-run lottery tickets. */
 export const SYNERGY_MIN_LEVEL = 10;
-/** Every normal card's value × this (2026-10-23: cards weaker overall so clearing 20 stages needs about half the blueprint). */
-export const CARD_POWER = 0.7;
+/** Every normal card's value × this. Back to 1 (2026-10-23): the user set each card's common value directly (Content.ts). */
+export const CARD_POWER = 1;
 export const EVOLUTION_MIN_LEVEL = 20;
 
 /**

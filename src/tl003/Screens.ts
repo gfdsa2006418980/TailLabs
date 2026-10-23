@@ -48,9 +48,12 @@ const ICON_ALIAS: Record<string, string> = {
   chemfire: 'fire', overheat: 'shock', conductor: 'bio', frag: 'radius', double: 'active', hex: 'active', napalm: 'fire',
   inferno: 'radius', wildfire: 'burn', overload: 'shock', hifreq: 'haste', refract: 'shock',
 };
+/** Evolutions without art of their own show their throwable. */
+const EVOLUTION_ICON: Record<string, string> = { crossfire: 'strafe', barrage: 'mortar', absolutezero: 'cryobomb', cascade: 'emp', nerve: 'gas', cluster: 'minefield', marksman: 'snipe' };
 export const cardIcon = (id: string) => {
   // Recruit and skill cards show the mercenary portrait or the skill icon.
   if ((id.startsWith('merc_') || id.startsWith('skill_')) && FRAMES['icon_' + id]) return 'icon_' + id;
+  if (EVOLUTION_ICON[id] && FRAMES['icon_skill_' + EVOLUTION_ICON[id]]) return 'icon_skill_' + EVOLUTION_ICON[id];
   return FRAMES['icon_card_' + id] ? 'icon_card_' + id : 'icon_card_' + (ICON_ALIAS[id] ?? 'kinetic');
 };
 const KIND_TAG: Record<string, string> = { synergy: '連動', evolution: '質變', curse: '詛咒', merc: '招募', skill: '主動' };
@@ -138,5 +141,5 @@ export function damageBreakdown(stats: BattleStats, limit = 8) {
   }).join('') : '<li class="empty"><span>還沒有傷害紀錄</span></li>';
   const sec = (v: number | undefined) => `${formatNumber(Math.round(v ?? 0))} 秒`;
   return `<ol class="breakdown">${rows}</ol>
-    <p class="control-recap">冰凍 <b>${sec(stats.control.chill)}</b> · 麻痺 <b>${sec(stats.control.shock)}</b> · 暈眩 <b>${sec(stats.control.stun)}</b> · 毒爆 <b>${formatNumber(stats.toxinBursts)}</b> 次<small>（控場秒數為所有喪屍合計）</small></p>`;
+    <p class="control-recap">點燃 <b>${sec(stats.control.ignite)}</b> · 冰凍 <b>${sec(stats.control.chill)}</b> · 麻痺 <b>${sec(stats.control.shock)}</b> · 暈眩 <b>${sec(stats.control.stun)}</b> · 毒爆 <b>${formatNumber(stats.toxinBursts)}</b> 次<small>（控場秒數為所有喪屍合計）</small></p>`;
 }

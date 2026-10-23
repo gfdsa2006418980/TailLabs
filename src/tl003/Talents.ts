@@ -29,9 +29,9 @@ const SPECS: Record<Branch, NodeSpec[]> = {
     { id: 'armor_breaker', name: '破甲戰術', growth: 1.06, describe: '對裝甲兵、精英與屍王的傷害', flavor: '大的先打。' },
   ],
   火焰: [
-    { id: 'fire_dot', name: '高效燃料', growth: 1.08, describe: '所有火焰持續傷害', flavor: '燒得更旺。' },
-    { id: 'slow_burn', name: '緩燃劑', growth: 1.04, describe: '燃燒持續時間', flavor: '慢慢燒，燒乾淨。' },
-    { id: 'igniter', name: '引燃技術', growth: 1.06, describe: '普攻造成的燃燒傷害', flavor: '每一發都帶火。' },
+    { id: 'fire_dot', name: '高效燃料', growth: 1.08, describe: '點燃後每秒的燃燒傷害', flavor: '燒得更旺。' },
+    { id: 'slow_burn', name: '緩燃劑', growth: 1.04, describe: '點燃持續時間', flavor: '慢慢燒，燒乾淨。' },
+    { id: 'igniter', name: '引燃技術', growth: 1.06, describe: '普攻附加的火焰傷害', flavor: '每一發都帶火。' },
     { id: 'firezone', name: '火區擴張', growth: 1.03, describe: '燃燒瓶火區半徑', flavor: '潑得更開。' },
     { id: 'fuel_stock', name: '汽油存量', growth: 1.04, describe: '燃燒瓶火區持續時間', flavor: '油還很多。' },
   ],
@@ -117,14 +117,14 @@ export interface CoreNode {
 interface CoreSpec { id: CoreId; name: string; kind: string; rule: string; price: string; flavor: string; cost: number; exclusive?: CoreId[] }
 const CORE_SPECS: { at: number; between: boolean; spec: CoreSpec }[] = [
   { at: 0, between: false, spec: { id: 'coldsteel', name: '冷鋼紀律', kind: '狀態', rule: '動能傷害無視敵人 50% 物理防禦，單發普攻必定穿透 2 名。', price: '永遠不會暴擊。', flavor: '不靠運氣，靠紀律。', cost: 15 } },
-  { at: 1, between: false, spec: { id: 'layers', name: '千層烈焰', kind: '狀態', rule: '燃燒不再只取最強，改為可以疊加，最多 10 層。', price: '每層威力 ×0.35。', flavor: '一層一層燒上去。', cost: 15 } },
+  { at: 1, between: false, spec: { id: 'layers', name: '千層烈焰', kind: '狀態', rule: '點燃中繼續累積點燃值會疊層並重置時間，最多 10 層。', price: '每層燃燒傷害只有原本的 35%。', flavor: '一層一層燒上去。', cost: 15 } },
   { at: 2, between: false, spec: { id: 'agony', name: '痛苦精通', kind: '轉換', rule: '暴擊時，這一擊的燃燒、毒素與冷凍／感電／暈眩累積 × 暴擊傷害。', price: '暴擊不再加倍直接傷害。', flavor: '讓它們痛得久一點。', cost: 25 } },
   { at: 3, between: false, spec: { id: 'rotation', name: '元素輪替', kind: '狀態', rule: '敵人受到與上一擊「不同屬性」的傷害 ×1.6。', price: '同屬性連打 ×0.7。', flavor: '換個方式打，它就扛不住。', cost: 25 } },
   { at: 4, between: false, spec: { id: 'lonewolf', name: '孤狼', kind: '陣容', rule: '只能部署 1 名傭兵；他的傷害 ×4、攻速 ×1.5、投擲物冷卻 ×0.5。', price: '另外兩個招募入口關閉。', flavor: '一個人就夠了。', cost: 40 } },
   { at: 5, between: false, spec: { id: 'autofire', name: '自動火控', kind: '投擲', rule: '投擲物就緒時自動朝最大的敵群投出，仍可手動拖曳。', price: '投擲物傷害 ×0.85。', flavor: '系統會自己找目標。', cost: 15 } },
   { at: 6, between: false, spec: { id: 'plunder', name: '掠奪者', kind: '經濟', rule: '每次擊殺回復拒馬 1% 最大生命，補強費用 ×0.6。', price: '「修復」停用。', flavor: '拆它們的骨頭補牆。', cost: 15 } },
   { at: 7, between: false, spec: { id: 'ammoeco', name: '彈藥經濟', kind: '經濟', rule: '動能傷害 ×（1 + log₂(1 + 資金) ÷ 4）。', price: '每發動能普攻消耗當前資金 1%；資金歸零時動能傷害 ×0.5。', flavor: '錢就是子彈。', cost: 25 } },
-  { at: 0, between: true, spec: { id: 'cremation', name: '焚化協議', kind: '轉換', rule: '所有直接傷害改為以 80% 威力掛上燃燒。', price: '不再造成任何直接傷害。', flavor: '全部燒掉，一個不留。', cost: 25 } },
+  { at: 0, between: true, spec: { id: 'cremation', name: '焚化協議', kind: '轉換', rule: '所有直接傷害改為 80% 威力的火焰傷害（累積點燃值）。', price: '不再造成原屬性的傷害。', flavor: '全部燒掉，一個不留。', cost: 25 } },
   { at: 1, between: true, spec: { id: 'corpseblast', name: '屍爆連鎖', kind: '連鎖', rule: '敵人死亡時爆炸，對周圍造成其最大生命 20% 的動能爆炸傷害，可以連鎖。', price: '擊殺獎金 ×0.7。', flavor: '一爆一整片。', cost: 25 } },
   { at: 2, between: true, spec: { id: 'raisedead', name: '亡者徵召', kind: '連鎖', rule: '被擊殺的一般喪屍有 30% 機率變成我方屍兵，往前衝進敵群爆炸。', price: '拒馬最大生命固定為 1，無法補強。', flavor: '它們會替我們走回去。', cost: 40 } },
   { at: 3, between: true, spec: { id: 'focusfire', name: '集火射擊', kind: '連鎖', rule: '連續射擊同一目標，每發射速 +15%，最多 ×4。', price: '換目標就歸零。', flavor: '所有人，打那一隻。', cost: 15 } },
@@ -194,7 +194,7 @@ export function compileTalents(tree: TalentTree): PermanentEffects {
   more(['Economy.KillReward'], m('economy_income'));
   more(['Economy.WaveReward'], m('economy_income') * m('wave_bonus'));
   more(['Defense.Repair'], m('repair_efficiency'));
-  more(['Skill.AutoAttack', 'Mechanic.DOT'], m('igniter'));
+  more(['Damage.Fire', 'Mechanic.Proc'], m('igniter'));
   more(['Mercenary.rifle'], m('rifle_specialist')); more(['Mercenary.flame'], m('flame_specialist')); more(['Mercenary.tesla'], m('tesla_specialist'));
   more(['Weapon.laser', 'Skill.Active'], m('laser_focus'));
   more(['Weapon.grenade', 'Skill.Active'], m('grenade_payload')); more(['Weapon.molotov', 'Skill.Active'], m('molotov_payload'));

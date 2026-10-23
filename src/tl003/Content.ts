@@ -30,7 +30,7 @@ export const MERCENARIES: Record<MercKind, MercDef> = {
   sniper: { name: '狙擊手', callSign: 'WINTER', role: '遠程・重擊・附凍', color: '#cfe3ee', elements: ['動能', '冷凍'], damage: 30, interval: 3.6, range: 720, pattern: 'heaviest',
     tags: tagsOf('sniper', ['Kinetic', 'Cold'], ['Mechanic.Projectile']), flavor: '先打最大的那隻。' },
   flame: { name: '焚燒兵', callSign: 'EMBER', role: '近程・扇形燃燒', color: '#ec865a', elements: ['火焰'], damage: 8.1, interval: 1.4, range: 260, pattern: 'cone', area: 70, targets: 4,
-    tags: tagsOf('flame', ['Fire'], ['Mechanic.DOT']), flavor: '等它們靠近一點。' },
+    tags: tagsOf('flame', ['Fire']), flavor: '等它們靠近一點。' },
   cryo: { name: '冷凍兵', callSign: 'FROST', role: '中遠程・緩速冰凍', color: '#9fd8f0', elements: ['冷凍'], damage: 4.7, interval: 1, range: 560, pattern: 'single',
     tags: tagsOf('cryo', ['Cold']), flavor: '冷靜，然後凍住。' },
   tesla: { name: '電磁兵', callSign: 'VOLT', role: '全場・感電輔助', color: '#83c9d4', elements: ['電能'], damage: 5.4, interval: 1.3, range: 800, pattern: 'single',
@@ -58,13 +58,13 @@ export interface SkillDef {
 }
 export const SKILLS: Record<SkillId, SkillDef> = {
   grenade: { name: '手榴彈', elements: ['爆裂'], color: '#f8b968', cooldown: 10, radius: 105, shape: 'circle', description: '範圍爆裂傷害並擊退，累積暈眩。', flavor: '拉環，數到三。' },
-  molotov: { name: '燃燒瓶', elements: ['火焰'], color: '#e6764b', cooldown: 35, radius: 110, shape: 'circle', description: '留下 6 秒火區，進入者持續燃燒。', flavor: '整條路都會亮。' },
+  molotov: { name: '燃燒瓶', elements: ['火焰'], color: '#e6764b', cooldown: 35, radius: 110, shape: 'circle', description: '留下 6 秒火區，區內敵人每秒受到火焰傷害並累積點燃值。', flavor: '整條路都會亮。' },
   laser: { name: '貫穿雷射', elements: ['電能'], color: '#91e7ec', cooldown: 45, radius: 55, shape: 'beam', description: '寬光束直線貫穿所有敵人，大量累積感電。', flavor: '一條線，全部倒。' },
   cryobomb: { name: '冰霜彈', elements: ['冷凍'], color: '#bfe8ff', cooldown: 30, radius: 95, shape: 'circle', description: '範圍冷凍傷害，範圍內敵人直接冰凍。', flavor: '連呼吸都結冰。' },
   gas: { name: '毒氣彈', elements: ['毒素'], color: '#a6c46a', cooldown: 30, radius: 100, shape: 'circle', description: '6 秒毒雲，每秒疊毒素並造成毒素傷害。', flavor: '別吸太深。' },
   mortar: { name: '迫擊砲', elements: ['爆裂'], color: '#f0a35e', cooldown: 40, radius: 120, shape: 'circle', description: '5 發砲彈散落在範圍內，各自爆裂。', flavor: '座標已送出。' },
   emp: { name: '電磁脈衝', elements: ['電能'], color: '#c7f5ff', cooldown: 45, radius: 160, shape: 'circle', description: '大範圍電能傷害，範圍內敵人直接麻痺。', flavor: '全頻段干擾。' },
-  strafe: { name: '機槍掃射', elements: ['動能'], color: '#ffd884', cooldown: 25, radius: 35, shape: 'band', description: '橫掃整條道路的一段，每名敵人中 6 發。', flavor: '從左掃到右。' },
+  strafe: { name: '機槍掃射', elements: ['動能'], color: '#ffd884', cooldown: 25, radius: 35, shape: 'band', description: '橫掃整條道路的一段，每名敵人連中 3 段動能傷害。', flavor: '從左掃到右。' },
   snipe: { name: '致命狙擊', elements: ['動能', '冷凍'], color: '#e8f4ff', cooldown: 20, radius: 90, shape: 'circle', description: '自動狙擊全場生命最多的敵人，必定暴擊。', flavor: '一發，就一發。' },
   minefield: { name: '地雷陣', elements: ['火焰', '爆裂'], color: '#d98a4a', cooldown: 40, radius: 70, shape: 'circle', description: '埋下 4 枚地雷，一直留在場上，踩到就爆炸並點燃（最多 32 枚）。', flavor: '小心腳下。' },
 };
@@ -132,22 +132,22 @@ export const CARD_DEFS: readonly CardDef[] = [
   // Ammo: the first choice of a run offers these (next to its mercenaries).
   { id: 'kinetic', kind: 'normal', name: '重型彈頭', category: '動能', color: K, value: 0.1, modifier: { kind: 'Add', tags: ['Damage.Kinetic'] },
     short: v => `動能傷害 +${pct(v)}`, description: v => `所有動能傷害 +${pct(v)}。`, flavor: '這批彈頭能把牆打穿。' },
-  { id: 'burn', kind: 'normal', name: '曳光燃燒彈', category: '火焰', color: F, value: 0.3, modifier: { kind: 'Special', tags: ['Skill.AutoAttack'], rule: 'ignite' },
-    short: v => `普攻點燃 ${pct(v)}/秒`, description: v => `普攻點燃：每秒造成該發傷害的 ${pct(v)}、持續 4 秒。保留最強燃燒；較弱或同強度命中續時並疊加易燃，每層燒快 25%（最多 12 層）。`, flavor: '曳光彈會指路，也會放火。' },
-  { id: 'bio', kind: 'normal', name: '毒素彈藥', category: '毒素', color: T, value: 3, modifier: { kind: 'Special', tags: ['Skill.AutoAttack'], rule: 'toxin' },
+  { id: 'burn', kind: 'normal', name: '曳光燃燒彈', category: '火焰', color: F, value: 0.1, modifier: { kind: 'Special', tags: ['Skill.AutoAttack'], rule: 'ignite' },
+    short: v => `普攻附火 ${pct(v)}`, description: v => `普攻額外造成 ${pct(v)} 火焰傷害，累積點燃值：滿了點燃 4 秒，每秒受到最大生命 2% 的燃燒傷害（共 4 次）。`, flavor: '曳光彈會指路，也會放火。' },
+  { id: 'bio', kind: 'normal', name: '毒素彈藥', category: '毒素', color: T, value: 5, modifier: { kind: 'Special', tags: ['Skill.AutoAttack'], rule: 'toxin' },
     short: v => `普攻毒素 +${n1(v)}`, description: v => `普攻附加 ${n1(v)} 毒素。毒素直接扣除防禦；防禦扣到 0 時毒爆一次，對周圍造成該喪屍最大生命 5% 的毒素傷害。`, flavor: '先融掉護甲，再談傷害。' },
-  { id: 'shock', kind: 'normal', name: '感電彈藥', category: '電能', color: E, value: 0.15, modifier: { kind: 'Special', tags: ['Skill.AutoAttack'], rule: 'shock' },
-    short: v => `普攻附電 ${pct(v)}`, description: v => `普攻額外造成 ${pct(v)} 電能傷害，累積感電值：越滿受傷越重，滿了麻痺 4 秒（不能啃拒馬）。`, flavor: '帶電的東西都比較好打。' },
-  { id: 'chill', kind: 'normal', name: '冷凍彈藥', category: '冷凍', color: C, value: 0.15, modifier: { kind: 'Special', tags: ['Skill.AutoAttack'], rule: 'chill' },
+  { id: 'shock', kind: 'normal', name: '感電彈藥', category: '電能', color: E, value: 0.1, modifier: { kind: 'Special', tags: ['Skill.AutoAttack'], rule: 'shock' },
+    short: v => `普攻附電 ${pct(v)}`, description: v => `普攻額外造成 ${pct(v)} 電能傷害，累積感電值：越滿受傷越重，滿了麻痺 4 秒（不能啃拒馬）並受到最大生命 10% 的電擊。`, flavor: '帶電的東西都比較好打。' },
+  { id: 'chill', kind: 'normal', name: '冷凍彈藥', category: '冷凍', color: C, value: 0.1, modifier: { kind: 'Special', tags: ['Skill.AutoAttack'], rule: 'chill' },
     short: v => `普攻附凍 ${pct(v)}`, description: v => `普攻額外造成 ${pct(v)} 冷凍傷害，累積凍結值：越滿越慢，滿了冰凍 2 秒並受到最大生命 10% 的凍傷。`, flavor: '槍管都結霜了。' },
   { id: 'crit', kind: 'normal', name: '精準射擊', category: '動能', color: K, value: 0.03, effect: 'crit',
     short: v => `暴擊率 +${pct(v)}`, description: v => `直接傷害暴擊率 +${pct(v)}。暴擊造成 150% 傷害。`, flavor: '呼吸，瞄準，扣扳機。' },
-  { id: 'critDamage', kind: 'normal', name: '要害瞄準', category: '動能', color: K, value: 0.15, effect: 'critDamage',
+  { id: 'critDamage', kind: 'normal', name: '要害瞄準', category: '動能', color: K, value: 0.1, effect: 'critDamage',
     short: v => `暴擊傷害 +${pct(v)}`, description: v => `暴擊傷害 +${pct(v)}。`, flavor: '打頭。永遠打頭。' },
-  { id: 'fire', kind: 'normal', name: '高濃度燃料', category: '火焰', color: F, value: 0.1, modifier: { kind: 'Add', tags: ['Damage.Fire', 'Mechanic.DOT'] },
-    short: v => `燃燒傷害 +${pct(v)}`, description: v => `火焰持續傷害 +${pct(v)}，與其他火焰加成相加。`, flavor: '混了點不該混的東西。' },
-  { id: 'burnTime', kind: 'normal', name: '持久燃劑', category: '火焰', color: F, value: 0.08, effect: 'burnTime',
-    short: v => `燃燒時間 +${pct(v)}`, description: v => `所有燃燒的持續時間 +${pct(v)}。`, flavor: '黏上去就甩不掉。' },
+  { id: 'fire', kind: 'normal', name: '高濃度燃料', category: '火焰', color: F, value: 0.05, modifier: { kind: 'Add', tags: ['Damage.Fire', 'Mechanic.DOT'] },
+    short: v => `燃燒傷害 +${pct(v)}`, description: v => `點燃後每秒的燃燒傷害 +${pct(v)}，與其他火焰加成相加。`, flavor: '混了點不該混的東西。' },
+  { id: 'burnTime', kind: 'normal', name: '持久燃劑', category: '火焰', color: F, value: 0.05, effect: 'burnTime',
+    short: v => `點燃時間 +${pct(v)}`, description: v => `點燃的持續時間 +${pct(v)}（每秒結算一次，時間越長燒越多次）。`, flavor: '黏上去就甩不掉。' },
   { id: 'acid', kind: 'normal', name: '強效毒劑', category: '毒素', color: T, value: 0.15, effect: 'toxinGain',
     short: v => `毒素強度 +${pct(v)}`, description: v => `每次施加的毒素 +${pct(v)}。`, flavor: '連鋼板都在冒煙。' },
   { id: 'toxinDmg', kind: 'normal', name: '神經毒素', category: '毒素', color: T, value: 0.1, modifier: { kind: 'Add', tags: ['Damage.Toxin'] },
@@ -164,17 +164,17 @@ export const CARD_DEFS: readonly CardDef[] = [
     short: v => `暈眩累積 +${pct(v)}`, description: v => `暈眩值累積速度 +${pct(v)}。`, flavor: '震到站不穩。' },
   { id: 'blastDmg', kind: 'normal', name: '爆破專家', category: '爆裂', color: X, value: 0.1, modifier: { kind: 'Add', tags: ['Damage.Blast'] },
     short: v => `爆裂傷害 +${pct(v)}`, description: v => `所有爆裂傷害 +${pct(v)}，包含手榴彈。`, flavor: '裝藥量加倍。' },
-  { id: 'elemental', kind: 'normal', name: '元素增幅', category: '元素', color: '#e9a2d0', value: 0.06, modifier: { kind: 'Add', tags: ['Damage.Elemental'] },
+  { id: 'elemental', kind: 'normal', name: '元素增幅', category: '元素', color: '#e9a2d0', value: 0.05, modifier: { kind: 'Add', tags: ['Damage.Elemental'] },
     short: v => `元素傷害 +${pct(v)}`, description: v => `火焰、冷凍、電能傷害同時 +${pct(v)}。`, flavor: '冰、火、雷，一起上。' },
-  { id: 'physical', kind: 'normal', name: '物理強化', category: '物理', color: '#c9b08a', value: 0.06, modifier: { kind: 'Add', tags: ['Damage.Physical'] },
+  { id: 'physical', kind: 'normal', name: '物理強化', category: '物理', color: '#c9b08a', value: 0.05, modifier: { kind: 'Add', tags: ['Damage.Physical'] },
     short: v => `物理傷害 +${pct(v)}`, description: v => `動能、毒素、爆裂傷害同時 +${pct(v)}。`, flavor: '子彈、毒、炸藥。' },
-  { id: 'speed', kind: 'normal', name: '快速供彈', category: '傭兵', color: S, value: 0.06, effect: 'speed',
+  { id: 'speed', kind: 'normal', name: '快速供彈', category: '傭兵', color: S, value: 0.05, effect: 'speed',
     short: v => `攻速 +${pct(v)}`, description: v => `全隊攻擊速度 +${pct(v)}，重複選取相加。`, flavor: '彈匣換快一點，命就長一點。' },
-  { id: 'training', kind: 'normal', name: '戰鬥訓練', category: '傭兵', color: S, value: 0.08, modifier: { kind: 'Add', tags: ['Skill.AutoAttack'] },
+  { id: 'training', kind: 'normal', name: '戰鬥訓練', category: '傭兵', color: S, value: 0.05, modifier: { kind: 'Add', tags: ['Skill.AutoAttack'] },
     short: v => `普攻傷害 +${pct(v)}`, description: v => `所有傭兵的普攻傷害 +${pct(v)}。`, flavor: '練到閉著眼也能打中。' },
-  { id: 'active', kind: 'normal', name: '軍用炸藥', category: '投擲物', color: F, value: 0.12, modifier: { kind: 'Add', tags: ['Skill.Active'] },
+  { id: 'active', kind: 'normal', name: '軍用炸藥', category: '投擲物', color: F, value: 0.1, modifier: { kind: 'Add', tags: ['Skill.Active'] },
     short: v => `投擲傷害 +${pct(v)}`, description: v => `所有投擲物傷害 +${pct(v)}。`, flavor: '比民用的多三倍火藥。' },
-  { id: 'haste', kind: 'normal', name: '軍火調度', category: '投擲物', color: E, value: 20, effect: 'haste',
+  { id: 'haste', kind: 'normal', name: '軍火調度', category: '投擲物', color: E, value: 10, effect: 'haste',
     short: v => `投擲急速 +${Math.round(v)}`, description: v => `投擲急速 +${Math.round(v)}，依等比例公式縮短投擲物冷卻。`, flavor: '後勤說下一批馬上到。' },
   { id: 'radius', kind: 'normal', name: '擴散裝藥', category: '投擲物', color: F, value: 0.05, effect: 'radius',
     short: v => `投擲範圍 ×${Number((1 + v).toFixed(2))}`, description: v => `投擲物範圍 ×${Number((1 + v).toFixed(2))}。`, flavor: '炸得更開，躲得更少。' },
@@ -188,19 +188,19 @@ export const CARD_DEFS: readonly CardDef[] = [
     short: v => `拒馬上限 +${pct(v)}`, description: v => `拒馬最大生命 +${pct(v)}（以目前上限計），並修復新增的生命。`, flavor: '再釘一層木板。' },
   { id: 'plating', kind: 'normal', name: '鋼板加固', category: '防守', color: B, value: 0.03, effect: 'reduction',
     short: v => `拒馬減傷 +${pct(v)}`, description: v => `拒馬受到的傷害 ×${Number((1 - v).toFixed(2))}，可無限疊乘，永遠不會到 0。`, flavor: '焊上去，別問哪裡拆來的。' },
-  { id: 'spikes', kind: 'normal', name: '尖刺拒馬', category: '防守', color: B, value: 0.15, effect: 'thorns',
+  { id: 'spikes', kind: 'normal', name: '尖刺拒馬', category: '防守', color: B, value: 0.1, effect: 'thorns',
     short: v => `每秒反傷 ${pct(v)}`, description: v => `啃咬拒馬的敵人每秒受到 ${pct(v)} 步槍普攻傷害的動能反傷。`, flavor: '咬下去之前最好想清楚。' },
   // Synergies (§37): only drawn once both elements are in the build (cards, mercenaries or skills).
   { id: 'phosphorus', kind: 'synergy', fixedRarity: 'rare', elements: ['動能', '火焰'], name: '白磷彈頭', category: '連動', color: F, value: 0.25, effect: 'synergy',
-    short: () => '動能普攻附加燃燒', description: v => `動能普攻命中時，以該發傷害的 ${pct(v)} 附加燃燒。`, flavor: '打中的地方會一直燒。' },
+    short: () => '動能普攻附火', description: v => `動能普攻命中時，追加該發 ${pct(v)} 的火焰傷害（累積點燃值）。`, flavor: '打中的地方會一直燒。' },
   { id: 'acidcore', kind: 'synergy', fixedRarity: 'rare', elements: ['動能', '毒素'], name: '毒蝕彈芯', category: '連動', color: T, value: 2, effect: 'synergy',
     short: () => '動能普攻附加毒素', description: v => `動能普攻命中時附加 ${n1(v)} 毒素。`, flavor: '彈芯灌了毒，鑽進去才化開。' },
   { id: 'railgun', kind: 'synergy', fixedRarity: 'rare', elements: ['動能', '電能'], name: '磁軌加速', category: '連動', color: E, value: 1, effect: 'synergy',
     short: () => '感電目標直傷再加乘', description: () => '對感電目標的直接動能傷害，再乘一次感電增傷倍率。', flavor: '電磁推一把，速度翻倍。' },
   { id: 'chemfire', kind: 'synergy', fixedRarity: 'rare', elements: ['火焰', '毒素'], name: '化學火災', category: '連動', color: F, value: 0.4, effect: 'synergy',
-    short: () => '毒素越深燒越痛', description: v => `每 10 點毒素使燃燒傷害 +${pct(v)}，最多 ×3。`, flavor: '毒和火，不要放在一起。' },
+    short: () => '毒素越深燒越痛', description: v => `每 10 點毒素使點燃的燃燒傷害 +${pct(v)}，最多 ×3。`, flavor: '毒和火，不要放在一起。' },
   { id: 'overheat', kind: 'synergy', fixedRarity: 'rare', elements: ['火焰', '電能'], name: '過熱電弧', category: '連動', color: E, value: 1, effect: 'synergy',
-    short: () => '命中感電目標加易燃', description: () => '普攻命中正在燃燒的感電目標時，燃燒加一層易燃。', flavor: '短路，然後起火。' },
+    short: () => '感電目標更易點燃', description: () => '對感電或麻痺中的目標，火焰傷害累積的點燃值 ×2。', flavor: '短路，然後起火。' },
   { id: 'conductor', kind: 'synergy', fixedRarity: 'rare', elements: ['毒素', '電能'], name: '腐蝕導體', category: '連動', color: T, value: 0.5, effect: 'synergy',
     short: () => '毒素提高感電累積', description: v => `每 10 點毒素使感電值累積 +${pct(v)}，最多 ×3。`, flavor: '鏽掉的金屬導電最好。' },
   // Evolutions (§24): legendary, guaranteed once the recipe is complete; one variant per skill per run.
@@ -211,17 +211,32 @@ export const CARD_DEFS: readonly CardDef[] = [
   { id: 'hex', kind: 'evolution', fixedRarity: 'legendary', skill: 'grenade', recipe: ['active', 'active', 'active'], name: '高爆炸藥', category: '質變', color: X, value: 1.5, effect: 'evolution',
     short: () => '範圍與傷害 ×1.5', description: () => '手榴彈半徑 ×1.5、傷害 ×1.5，冷卻 ×1.3。', flavor: '退後，再退後一點。' },
   { id: 'napalm', kind: 'evolution', fixedRarity: 'legendary', skill: 'molotov', recipe: ['fire', 'fire', 'fire'], name: '凝固汽油', category: '質變', color: F, value: 2, effect: 'evolution',
-    short: () => '火區威力 ×2', description: () => '燃燒瓶的燃燒威力 ×2，火區時間 ×0.7。', flavor: '黏在地上，燒到最後一滴。' },
+    short: () => '火區威力 ×2', description: () => '燃燒瓶火區每秒的火焰傷害 ×2，火區時間 ×0.7。', flavor: '黏在地上，燒到最後一滴。' },
   { id: 'inferno', kind: 'evolution', fixedRarity: 'legendary', skill: 'molotov', recipe: ['radius', 'burnTime', 'burnTime'], name: '火海', category: '質變', color: F, value: 1.6, effect: 'evolution',
     short: () => '火區 ×1.6、持續 8 秒', description: () => '燃燒瓶火區半徑 ×1.6，持續 8 秒。', flavor: '整條路都是火。' },
   { id: 'wildfire', kind: 'evolution', fixedRarity: 'legendary', skill: 'molotov', recipe: ['burn', 'fire', 'burnTime'], name: '延燒', category: '質變', color: F, value: 1, effect: 'evolution',
-    short: () => '燃燒死亡留下火區', description: () => '燃燒中的敵人死亡時，原地留下 3 秒小火區，以其 40% 燃燒強度點燃尚未著火的敵人。', flavor: '倒下的，也幫忙點火。' },
+    short: () => '燃燒死亡留下火區', description: () => '點燃中的敵人死亡時，原地留下 3 秒小火區，每秒對尚未點燃的敵人造成火焰傷害。', flavor: '倒下的，也幫忙點火。' },
   { id: 'overload', kind: 'evolution', fixedRarity: 'legendary', skill: 'laser', recipe: ['coil', 'coil', 'coil'], name: '過載', category: '質變', color: E, value: 2.5, effect: 'evolution',
     short: () => '雷射傷害 ×2.5', description: () => '雷射傷害 ×2.5，冷卻 ×1.5。', flavor: '保險絲拔掉了。' },
   { id: 'hifreq', kind: 'evolution', fixedRarity: 'legendary', skill: 'laser', recipe: ['speed', 'shock', 'coil'], name: '高頻雷射', category: '質變', color: E, value: 0.3, effect: 'evolution',
     short: () => '改為 5 段連打', description: v => `雷射改為 5 段連打，每段 ×${v}，每段都會累積感電。`, flavor: '嗡——嗡——嗡——' },
   { id: 'refract', kind: 'evolution', fixedRarity: 'legendary', skill: 'laser', recipe: ['crit', 'coil', 'coil'], name: '折射', category: '質變', color: E, value: 0.6, effect: 'evolution',
     short: () => '命中後分出 2 道射線', description: v => `雷射命中第一名敵人後分出 2 道副射線，各造成 ${pct(v)} 傷害。`, flavor: '光會轉彎，你只是沒看過。' },
+  // 2026-10-23: the other seven throwables get one evolution each.
+  { id: 'crossfire', kind: 'evolution', fixedRarity: 'legendary', skill: 'strafe', recipe: ['speed', 'kinetic', 'kinetic'], name: '交叉火網', category: '質變', color: K, value: 0.8, effect: 'evolution',
+    short: () => '同時掃兩條橫帶', description: v => `機槍掃射再多掃一條後方相鄰的橫帶，兩條每段傷害 ×${v}。`, flavor: '左一排，右一排，誰也別想過。' },
+  { id: 'barrage', kind: 'evolution', fixedRarity: 'legendary', skill: 'mortar', recipe: ['blastDmg', 'radius', 'haste'], name: '飽和轟炸', category: '質變', color: X, value: 8, effect: 'evolution',
+    short: () => '8 發砲彈、範圍 ×1.3', description: v => `迫擊砲改為 ${v} 發砲彈，散布範圍 ×1.3。`, flavor: '把整片地翻過來。' },
+  { id: 'absolutezero', kind: 'evolution', fixedRarity: 'legendary', skill: 'cryobomb', recipe: ['chill', 'coldDmg', 'radius'], name: '絕對零度', category: '質變', color: C, value: 1.4, effect: 'evolution',
+    short: () => '範圍 ×1.4、冰凍多 2 秒', description: v => `冰霜彈半徑 ×${v}，被它冰凍的敵人多凍 2 秒。`, flavor: '連時間都凍住了。' },
+  { id: 'cascade', kind: 'evolution', fixedRarity: 'legendary', skill: 'emp', recipe: ['shock', 'voltage', 'coil'], name: '連鎖過載', category: '質變', color: E, value: 0.5, effect: 'evolution',
+    short: () => '每個目標再電弧 2 名', description: v => `電磁脈衝打到的每名敵人，再向最近的 2 名敵人放出電弧，各造成 ${pct(v)} 傷害。`, flavor: '一個短路，整片短路。' },
+  { id: 'nerve', kind: 'evolution', fixedRarity: 'legendary', skill: 'gas', recipe: ['bio', 'acid', 'toxinDmg'], name: '神經毒氣', category: '質變', color: T, value: 2, effect: 'evolution',
+    short: () => '毒雲 9 秒、毒素 ×2', description: v => `毒氣彈毒雲持續 9 秒，每秒施加的毒素 ×${v}。`, flavor: '吸一口就忘了怎麼走路。' },
+  { id: 'cluster', kind: 'evolution', fixedRarity: 'legendary', skill: 'minefield', recipe: ['blastDmg', 'fire', 'radius'], name: '集束地雷', category: '質變', color: F, value: 6, effect: 'evolution',
+    short: () => '一次 6 枚、爆炸 ×1.3', description: v => `地雷陣一次埋 ${v} 枚，每枚爆炸半徑 ×1.3。`, flavor: '多埋幾顆總沒錯。' },
+  { id: 'marksman', kind: 'evolution', fixedRarity: 'legendary', skill: 'snipe', recipe: ['crit', 'critDamage', 'critDamage'], name: '連續狙擊', category: '質變', color: K, value: 3, effect: 'evolution',
+    short: () => '狙擊血最多的 3 名', description: v => `致命狙擊改為狙擊全場生命最多的 ${v} 名敵人，每發都必定暴擊。`, flavor: '一口氣，三發。' },
   // Black-market curses (core 黑市補給 only): a strong bonus with a lasting penalty. Bonus = value × level scale × 2.5.
   { id: 'curse_powder', kind: 'curse', fixedRarity: 'rare', name: '血汗火藥', category: '詛咒', color: '#b23a48', value: 0.6, effect: 'curse',
     short: v => `動能 +${pct(v)}・拒馬 ×0.85`, description: v => `所有動能傷害 +${pct(v)}；拒馬最大生命 ×0.85。`, flavor: '工廠沒人敢問這批火藥怎麼來的。' },
@@ -249,11 +264,13 @@ export const CARD_DEFS: readonly CardDef[] = [
 ];
 export const cardDef = (id: string) => CARD_DEFS.find(def => def.id === id);
 /** A definition at a rarity: scaled magnitude, card face and rules text. */
+/** Card values are shown and applied as whole percents (or whole points for values of 1 and up): no odd 4.8% after a rarity multiplier. */
+const clean = (v: number) => v >= 1 ? Math.round(v) : Math.round(v * 100) / 100;
 export function makeCard(def: CardDef, rarity: Rarity = def.fixedRarity ?? def.minRarity ?? 'common', level = 1): UpgradeCard {
-  // 2026-10-23: normal cards keep one fixed value at every level (the late picks were +1% / +0%), times CARD_POWER.
+  // 2026-10-23: normal cards keep one fixed value at every level (the late picks were +1% / +0%), times CARD_POWER, rounded clean.
   const scale = CARD_POWER;
-  const value = def.kind === 'normal' ? def.value * RARITIES[rarity].mult * scale : def.kind === 'curse' ? Math.min(def.value, def.value * cardScale(level) * 2.5) : def.value;
-  const scaled = def.modifier?.kind === 'More' ? (1 - def.value * scale) ** RARITIES[rarity].mult : value;
+  const value = def.kind === 'normal' ? clean(def.value * RARITIES[rarity].mult * scale) : def.kind === 'curse' ? Math.min(def.value, def.value * cardScale(level) * 2.5) : def.value;
+  const scaled = def.modifier?.kind === 'More' ? 1 - clean(1 - (1 - def.value * scale) ** RARITIES[rarity].mult) : value;
   const modifier: Modifier | undefined = !def.modifier ? undefined : def.modifier.kind === 'Special'
     ? { kind: 'Special', tags: [...def.modifier.tags], rule: def.modifier.rule!, value }
     : { kind: def.modifier.kind, tags: [...def.modifier.tags], value: scaled };

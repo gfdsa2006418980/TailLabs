@@ -3,7 +3,6 @@ import type { DamageInstance, Modifier, Tag } from './Combat.ts';
 import { CARD_DEFS, ELEMENTS, ENEMIES, MERCENARIES, RARITIES, RARITY_ORDER, SKILLS, cardDef, makeCard } from './Content.ts';
 import type { CardDef, Element, EnemyKind, MercKind, Rarity, SkillId, UpgradeCard } from './Content.ts';
 import type { CoreId, PermanentEffects } from './Talents.ts';
-import { advanceBurn, applyBurn, MAX_FLAMMABILITY } from './Burn.ts';
 import * as B from './Balance.ts';
 import { SPAWN_GROWTH_SPEED } from './Balance.ts';
 export { SPAWN_GROWTH_SPEED };
@@ -16,8 +15,8 @@ export function spawnIntervalAt(seconds: number) {
 /** 'intermission': between stages, picking banked cards and shopping before the next stage. */
 export type Phase = 'ready' | 'running' | 'choice' | 'intermission' | 'paused' | 'over' | 'victory';
 /** The three build-up meters: 冷凍 → 冰凍, 電能 → 麻痺, 爆裂 → 暈眩. */
-export type MeterKind = 'chill' | 'shock' | 'stun';
-export const METER_KINDS: readonly MeterKind[] = ['chill', 'shock', 'stun'];
+export type MeterKind = 'chill' | 'shock' | 'stun' | 'ignite';
+export const METER_KINDS: readonly MeterKind[] = ['chill', 'shock', 'stun', 'ignite'];
 export interface Meter {
   value: number;
   /** Seconds the control (freeze / paralysis / stun) still lasts. */
@@ -26,14 +25,16 @@ export interface Meter {
   count: number; last: number;
   /** Seconds since the meter was last fed. */
   idle: number;
+  /** Ignite only: seconds to the next burn tick. */
+  pulse?: number;
 }
 const newMeter = (): Meter => ({ value: 0, timer: 0, count: 0, last: -Infinity, idle: 0 });
 /** A zombie's status fields at spawn: no toxin, empty meters. Tests spread this into hand-built enemies. */
-export const freshStatus = () => ({ toxin: 0, toxinDuration: 0, toxinBurst: false, meters: { chill: newMeter(), shock: newMeter(), stun: newMeter() } as Record<MeterKind, Meter> });
+export const freshStatus = () => ({ toxin: 0, toxinDuration: 0, toxinBurst: false, meters: { chill: newMeter(), shock: newMeter(), stun: newMeter(), ignite: newMeter() } as Record<MeterKind, Meter> });
 export interface Enemy {
   /** `defense`: physical armor (toxin lowers it). `resist`: elemental resistance, a share of fire, cold and electric removed. */
   id: number; kind: EnemyKind; x: number; y: number; hp: number; maxHp: number; defense: number; resist: number;
-  speed: number; attack: number; reward: number; xp: number; burnPower: number; burnDuration: number; burnFlammability: number;
+  speed: number; attack: number; reward: number; xp: number;
   /** 毒素: flat points off defense; the zombie detonates once when its defense reaches zero. */
   toxin: number; toxinDuration: number; toxinBurst: boolean;
   meters: Record<MeterKind, Meter>;
@@ -53,21 +54,31 @@ export interface VisualEvent {
   kind: 'shot' | 'flame' | 'laser' | 'blast' | 'hit' | 'kill' | 'freeze' | 'paralyze' | 'stun' | 'toxic'; x: number; y: number; fromX?: number; fromY?: number; color: string; life: number; maxLife: number; radius: number;
   /** Presentation only: damage dealt ('hit') or money earned ('kill'). */
   amount?: number; enemy?: EnemyKind; target?: number; skill?: boolean; crit?: boolean; merc?: MercKind;
+  /** Hit numbers: the hit's element (kinetic, toxin, blast, fire, cold, electric), for its colour. */
+  element?: string;
 }
 /** Ground areas: a fire zone (燃燒瓶, 延燒) or a gas cloud (毒氣彈). */
-export interface FireZone { kind?: 'fire' | 'gas'; x: number; y: number; radius: number; remaining: number; power: number; pulseTimer: number; contacts: Set<number>; spread?: boolean }
+export interface FireZone { kind?: 'fire' | 'gas'; x: number; y: number; radius: number; remaining: number; power: number; pulseTimer: number; contacts: Set<number>; spread?: boolean; toxin?: number }
 /** 地雷陣: armed mines that stay on the road until an enemy steps close (a minefield that builds up over casts). */
-export interface Mine { x: number; y: number; damage: number; spent?: boolean }
+export interface Mine { x: number; y: number; damage: number; spent?: boolean; radius?: number }
 const mercY = (slot: number) => 130 + slot * 92;
 /** The very first choice of a run offers its mercenaries and one ammo card of an element. */
 const STARTERS = ['kinetic', 'burn', 'bio', 'shock', 'chill'];
 const THORN_TAGS: Tag[] = ['Damage.Kinetic', 'Damage.Physical', 'Defense.Barricade'];
 const BURN_TAGS: Tag[] = ['Damage.Fire', 'Damage.Elemental', 'Mechanic.DOT', 'Status.Burning'];
 /** Each throwable's damage per cast in units of the squad's reference shot, for the panel DPS. */
+/**
+ * Each throwable's damage to one target per cast, in units of the squad's reference shot (2026-10-23 rebalance). The
+ * grenade is the yardstick (5 every 10 s); the others are scaled by cooldown ÷ 10, divided by the square root of their
+ * area against the grenade's (bigger areas reach more of the crowd, which splits past 12 targets), and trimmed for
+ * control (freeze, paralysis, toxin) and for lingering (zones catch newcomers).
+ */
+export const THROWABLE = { grenade: 5, molotov: 14, strafe: 15, mortar: 12, laser: 16, cryobomb: 11, emp: 10, gas: 11, minefield: 10, snipe: 40 } as const;
+/** The panel DPS preview: each throwable's THROWABLE value per cast (a mortar target catches about 1.5 shells, a minefield cast is 4 mines). */
 const SKILL_PANEL: Record<SkillId, [number, Tag[]]> = {
-  grenade: [5, ['Damage.Blast']], molotov: [18, ['Damage.Fire', 'Mechanic.DOT']], laser: [9, ['Damage.Electric']], cryobomb: [4, ['Damage.Cold']],
-  gas: [3.6, ['Damage.Toxin']], mortar: [12.5, ['Damage.Blast']], emp: [3, ['Damage.Electric']], strafe: [4.8, ['Damage.Kinetic']],
-  snipe: [30, ['Damage.Kinetic', 'Damage.Cold']], minefield: [16, ['Damage.Blast', 'Damage.Fire']],
+  grenade: [THROWABLE.grenade, ['Damage.Blast']], molotov: [THROWABLE.molotov, ['Damage.Fire']], laser: [THROWABLE.laser, ['Damage.Electric']], cryobomb: [THROWABLE.cryobomb, ['Damage.Cold']],
+  gas: [THROWABLE.gas, ['Damage.Toxin']], mortar: [THROWABLE.mortar * 1.5, ['Damage.Blast']], emp: [THROWABLE.emp, ['Damage.Electric']], strafe: [THROWABLE.strafe, ['Damage.Kinetic']],
+  snipe: [THROWABLE.snipe, ['Damage.Kinetic', 'Damage.Cold']], minefield: [THROWABLE.minefield * 4, ['Damage.Blast', 'Damage.Fire']],
 };
 /**
  * Where a hit's damage is credited (v2 stats): a throwable, a mercenary's attack (its ammo procs included), or a
@@ -111,7 +122,10 @@ export function meterThreshold(enemy: Enemy, kind: MeterKind, elapsed: number) {
   const m = enemy.meters[kind], recent = elapsed - m.last <= B.STATUS_WINDOW ? m.count : 0;
   return enemy.maxHp * B.STATUS[kind].threshold * (1 + B.STATUS_ESCALATION * recent);
 }
-const PROC_TAGS: Record<'Cold' | 'Electric', Tag[]> = { Cold: ['Damage.Cold', 'Mechanic.Proc'], Electric: ['Damage.Electric', 'Mechanic.Proc'] };
+const PROC_TAGS: Record<'Cold' | 'Electric' | 'Fire', Tag[]> = { Cold: ['Damage.Cold', 'Mechanic.Proc'], Electric: ['Damage.Electric', 'Mechanic.Proc'], Fire: ['Damage.Fire', 'Mechanic.Proc'] };
+/** A hit's element for its damage number: its first damage type (the sniper's kinetic + cold shows kinetic). */
+const ELEMENT_OF: Partial<Record<Tag, string>> = { 'Damage.Kinetic': 'kinetic', 'Damage.Toxin': 'toxin', 'Damage.Blast': 'blast', 'Damage.Fire': 'fire', 'Damage.Cold': 'cold', 'Damage.Electric': 'electric' };
+const elementOf = (tags: readonly Tag[]) => { for (const t of tags) { const e = ELEMENT_OF[t]; if (e) return e; } return 'kinetic'; };
 const BLAST_SPLASH_RADIUS = 40;
 /** 地雷陣 (2026-10-23): mines never expire; past this many the oldest are cleared, so the field stays cheap to check. */
 const MINE_CAP = 32;
@@ -150,7 +164,7 @@ export class DefenseRun {
    * What the squad actually did (v2): damage by source for the run and for the current stage, seconds of control
    * applied, toxin bursts. Feeds the DPS panel, the rest summary and the battle report.
    */
-  stats = { damage: {} as Record<string, number>, stage: {} as Record<string, number>, control: { chill: 0, shock: 0, stun: 0 } as Record<MeterKind, number>, toxinBursts: 0 };
+  stats = { damage: {} as Record<string, number>, stage: {} as Record<string, number>, control: { chill: 0, shock: 0, stun: 0, ignite: 0 } as Record<MeterKind, number>, toxinBursts: 0 };
   /** Damage per second of the stage just cleared and of the one before it. */
   lastStageDps = 0; prevStageDps = 0;
   /** Card-driven rules. Bonuses add up; percentages are fractions. */
@@ -163,7 +177,7 @@ export class DefenseRun {
   perm: Required<Omit<PermanentEffects, 'modifiers' | 'wallHealth' | 'attackSpeed' | 'haste' | 'cores'>>;
   cores = new Set<CoreId>();
   freeRerolls = 0; picksLeft = 1; allies: Ally[] = [];
-  private passiveTimer = 0; private blasts: { x: number; y: number; damage: number; toxic?: boolean }[] = [];
+  private passiveTimer = 0; private spikeTimer = 0; private blasts: { x: number; y: number; damage: number; toxic?: boolean }[] = [];
   private seed: number; private combatSeed: number; private cardSeed: number;
   /** Evolutions offered but not taken come back after a few levels instead of blocking a slot forever. */
   private evolutionDeferred: Record<string, number> = {}; private accumulator = 0; private spawnTimer = 0;
@@ -515,9 +529,7 @@ export class DefenseRun {
     for (const merc of this.mercenaries) {
       const def = MERCENARIES[merc.kind], base = this.damageFor(merc.kind);
       const crowd = def.pattern === 'aoe' ? 3 : def.pattern === 'cone' ? (def.targets ?? 1) : def.pattern === 'chain' ? 1 + 0.7 * (def.targets ?? 0) : 1;
-      const hit = merc.kind === 'flame'
-        ? calculateValue(base * 3, withFamily(BURN_TAGS), this.modifiers)
-        : calculateValue(base, withFamily(def.tags), this.modifiers) * critFactor * (1 + procs) + calculateValue(base * (ignite + (def.ignite ?? 0)) * 3, withFamily(BURN_TAGS), this.modifiers);
+      const hit = calculateValue(base, withFamily(def.tags), this.modifiers) * critFactor * (1 + procs + ignite + (def.ignite ?? 0));
       total += hit * crowd / this.shotInterval(merc);
     }
     for (const skill of this.skills) {
@@ -535,7 +547,7 @@ export class DefenseRun {
     copy.mercenaries = this.mercenaries.map(m => ({ ...m })); copy.skills = this.skills.map(s => ({ ...s })); copy.levels = { ...this.levels };
     copy.synergies = new Set(this.synergies); copy.evolutions = { ...this.evolutions }; copy.evolutionDeferred = { ...this.evolutionDeferred };
     copy.choices = [...this.choices]; copy.events = []; copy.picksLeft = 1; copy.afterChoice = 'running';
-    copy.stats = { damage: {}, stage: {}, control: { chill: 0, shock: 0, stun: 0 }, toxinBursts: 0 };
+    copy.stats = { damage: {}, stage: {}, control: { chill: 0, shock: 0, stun: 0, ignite: 0 }, toxinBursts: 0 };
     copy.choose(id);
     return copy.panelDps() / before - 1;
   }
@@ -548,17 +560,17 @@ export class DefenseRun {
   /** Core 痛苦精通: while a crit resolves, the statuses it applies are this much stronger. */
   private statusBoost = 1;
   private get burnTimeScale() { return (1 + this.burnTimeBonus) * this.perm.burnTime; }
-  /** The strongest-burn rule, or stacked layers with core 千層烈焰. */
-  private applyBurnRun(enemy: Enemy, power: number, duration: number) {
-    if (!this.cores.has('layers')) { applyBurn(enemy, power, duration); return; }
-    if (!(power > 0) || !(duration > 0)) return;
-    if (enemy.burnDuration <= 0) { enemy.burnPower = 0; enemy.burnLayers = 0; enemy.burnFlammability = 0; }
-    if ((enemy.burnLayers ?? 0) < 10) { enemy.burnPower += power * 0.35; enemy.burnLayers = (enemy.burnLayers ?? 0) + 1; }
-    enemy.burnDuration = Math.max(enemy.burnDuration, duration);
+  /** An extra fire hit (ammo, white phosphorus, the sapper, cremation): direct fire damage that fills the ignite meter. */
+  private fireProc(enemy: Enemy, amount: number, sourceTags: readonly Tag[]) {
+    if (!(amount > 0) || enemy.hp <= 0) return;
+    this.hit(enemy, { baseDamage: amount, tags: [...PROC_TAGS.Fire, ...sourceTags.filter(t => t.startsWith('Mercenary.') || t.startsWith('Weapon.') || t === 'Skill.Active')] });
   }
-  private burn(enemy: Enemy, power: number, duration: number, sourceTags: readonly Tag[]) {
-    const tags = withFamily([...sourceTags.filter(t => !t.startsWith('Damage.') && t !== 'Mechanic.Projectile'), 'Damage.Fire', 'Mechanic.DOT', 'Status.Burning']);
-    this.applyBurnRun(enemy, calculateValue(power, tags, this.modifiers) * this.statusBoost, duration * this.burnTimeScale);
+  isBurning(enemy: Enemy) { return enemy.meters.ignite.timer > 0; }
+  /** One burn tick of an ignited zombie: a share of its max HP as fire damage over time (×toxin with 化學火災, ×layers with 千層烈焰). */
+  private igniteTick(enemy: Enemy) {
+    const chem = this.synergies.has('chemfire') ? Math.min(3, 1 + CHEMFIRE * enemy.toxin / 10) : 1;
+    const layers = this.cores.has('layers') ? 0.35 * Math.max(1, enemy.burnLayers ?? 1) : 1;
+    this.hit(enemy, { baseDamage: enemy.maxHp * B.STATUS.ignite.tick * chem * layers, tags: BURN_TAGS }, { build: 0 });
   }
   /** 毒素: flat points off defense. Reaching zero detonates the zombie once (queued, resolved after the step's hits). */
   private poison(enemy: Enemy, value: number) {
@@ -582,16 +594,25 @@ export class DefenseRun {
   /** Fills a meter; a full one triggers its control, empties, and escalates the next threshold. */
   private build(enemy: Enemy, kind: MeterKind, amount: number) {
     const m = enemy.meters[kind];
-    if (m.timer > 0 || !(amount > 0) || enemy.hp <= 0) return;
+    if (!(amount > 0) || enemy.hp <= 0) return;
+    if (m.timer > 0) {
+      // Core 千層烈焰: a burning zombie keeps filling its ignite meter; each fill adds a layer and restarts the burn.
+      if (kind !== 'ignite' || !this.cores.has('layers') || (enemy.burnLayers ?? 1) >= 10) return;
+      m.value += amount; m.idle = 0;
+      if (m.value < enemy.maxHp * B.STATUS.ignite.threshold) return;
+      m.value = 0; enemy.burnLayers = (enemy.burnLayers ?? 1) + 1; m.timer = B.STATUS.ignite.duration * this.burnTimeScale;
+      return;
+    }
     m.value += amount; m.idle = 0;
     if (m.value < meterThreshold(enemy, kind, this.elapsed)) return;
     m.count = (this.elapsed - m.last <= B.STATUS_WINDOW ? m.count : 0) + 1; m.last = this.elapsed; m.value = 0;
     const def = B.STATUS[kind];
-    m.timer = def.duration * (kind === 'shock' ? this.perm.shockTime : 1);
+    const burstTags: Tag[] = kind === 'chill' ? ['Damage.Cold', 'Status.Frozen'] : ['Damage.Electric', 'Status.Paralyzed'];
+    if (def.burst > 0) this.hit(enemy, { baseDamage: enemy.maxHp * def.burst, tags: burstTags }, { build: 0 });
+    m.timer = def.duration * (kind === 'shock' ? this.perm.shockTime : kind === 'ignite' ? this.burnTimeScale : 1);
+    if (kind === 'ignite') { m.pulse = 1; enemy.burnLayers = 1; this.stats.control.ignite += m.timer; return; }
     this.stats.control[kind] += m.timer;
-    const tags: Tag[] = kind === 'chill' ? ['Damage.Cold', 'Status.Frozen'] : kind === 'shock' ? ['Damage.Electric', 'Status.Paralyzed'] : ['Damage.Blast', 'Status.Stunned'];
     this.visual(kind === 'chill' ? 'freeze' : kind === 'shock' ? 'paralyze' : 'stun', enemy.x, enemy.y, kind === 'chill' ? '#bfe8ff' : kind === 'shock' ? '#c7f5ff' : '#ffe9a8', 20).target = enemy.id;
-    if (def.burst > 0) this.hit(enemy, { baseDamage: enemy.maxHp * def.burst, tags }, { build: 0 });
   }
   /** Fills a meter to its threshold at once (冰霜彈, 電磁脈衝); nothing happens to a zombie already under that control. */
   private trigger(enemy: Enemy, kind: MeterKind) {
@@ -608,6 +629,11 @@ export class DefenseRun {
       this.build(enemy, 'shock', dealt * B.STATUS.shock.rate * (1 + this.shockGain) * conductor * k);
     }
     if (tags.includes('Damage.Blast')) this.build(enemy, 'stun', dealt * B.STATUS.stun.rate * (1 + this.stunGain) * k);
+    if (tags.includes('Damage.Fire')) {
+      // Synergy (fire + electric): shocked or paralysed targets catch fire twice as fast.
+      const overheat = this.synergies.has('overheat') && (enemy.meters.shock.value > 0 || enemy.meters.shock.timer > 0) ? 2 : 1;
+      this.build(enemy, 'ignite', dealt * B.STATUS.ignite.rate * overheat * k);
+    }
   }
   /**
    * Grenade push. Bosses only budge a quarter (a hasted grenade spam held them in place for good), and
@@ -651,13 +677,11 @@ export class DefenseRun {
     if (inside.length > B.ZONE_CAP) inside = nearestFirst(inside, zone.x, zone.y).slice(0, B.ZONE_CAP);
     for (const enemy of inside) {
       contacts.add(enemy.id);
-      // First contact is immediate; remaining inside reapplies at 1 Hz, never once per frame.
-      if (zone.kind === 'gas') {
-        if (pulse || !zone.contacts.has(enemy.id)) { this.poison(enemy, 6); this.hit(enemy, { baseDamage: zone.power, tags: ['Damage.Toxin', 'Mechanic.AOE', 'Skill.Active', 'Weapon.gas'] }); }
-        continue;
-      }
-      if (zone.spread && enemy.burnDuration > 0) continue;
-      if (pulse || !zone.contacts.has(enemy.id)) this.applyBurnRun(enemy, zone.power, 3 * this.burnTimeScale);
+      // 2026-10-23: lingering areas settle once a second (the cast itself is the first pulse), never on contact.
+      if (!pulse) continue;
+      if (zone.kind === 'gas') { this.poison(enemy, zone.toxin ?? 6); this.hit(enemy, { baseDamage: zone.power, tags: ['Damage.Toxin', 'Mechanic.AOE', 'Skill.Active', 'Weapon.gas'] }); continue; }
+      if (zone.spread && this.isBurning(enemy)) continue;
+      this.hit(enemy, { baseDamage: zone.power, tags: ['Damage.Fire', 'Mechanic.AOE', 'Skill.Active', 'Weapon.molotov'] });
     }
     zone.contacts = contacts;
   }
@@ -669,6 +693,7 @@ export class DefenseRun {
     if (enemy.hp <= 0) return 0;
     const tags = withFamily(hit.tags);
     const direct = hit.baseDamage > 0 && !tags.includes('Mechanic.DOT') && !tags.some(t => t.startsWith('Status.'));
+    const proc = tags.includes('Mechanic.Proc');
     // Core 冷鋼紀律 never crits but its kinetic damage ignores half the armor; core 痛苦精通 moves the crit onto statuses.
     const crit = direct && !this.cores.has('coldsteel') && (!!opts.forceCrit || (this.critChance > 0 && this.combatRandom() < this.critChance));
     const agony = crit && this.cores.has('agony');
@@ -681,47 +706,41 @@ export class DefenseRun {
     if (this.synergies.has('railgun') && direct && kinetic) final *= result.shockMultiplier;
     // Core 彈藥經濟: money is ammunition for every kinetic hit.
     if (this.cores.has('ammoeco') && kinetic) final *= this.ammoFactor;
-    // Core 焚化協議: every direct hit becomes a burn at 80% instead of damage.
+    // Core 焚化協議: every direct hit (not its own fire) becomes fire damage at 80%.
     let cremation = 0;
-    if (direct && this.cores.has('cremation')) { cremation = final * 0.8; final = 0; }
+    if (direct && !proc && this.cores.has('cremation')) { cremation = (crit && !agony ? hit.baseDamage * this.critDamage : hit.baseDamage) * 0.8; final = 0; }
     this.record(tags, Math.min(final, Math.max(0, enemy.hp)));
     enemy.hp -= final; enemy.hitFlash = 0.1;
     // Hits under 0.1% of the target's max HP still count but create no event: late waves land thousands of
     // them a second, and their damage numbers were most of the drawing work.
     if (final > 0 && (crit || final >= enemy.maxHp * TINY_HIT)) this.events.push({ kind: 'hit', x: enemy.x, y: enemy.y, color: '', life: 0.12, maxLife: 0.12, radius: 0,
-      amount: final, enemy: enemy.kind, target: enemy.id, skill: tags.includes('Skill.Active'), crit });
+      amount: final, enemy: enemy.kind, target: enemy.id, skill: tags.includes('Skill.Active'), crit, element: elementOf(tags) });
     // A killing blow lands before any on-hit effect, so "died while burning" means it was already burning.
     if (enemy.hp <= 0) { this.kill(enemy); return final; }
     this.statusBoost = agony ? this.critDamage : 1;
     this.buildFrom(enemy, tags, final, opts.build ?? 1);
-    if (cremation > 0) this.burn(enemy, cremation, 3, tags);
-    // Several copies of a status card merge into one stronger application per hit (powers add up):
-    // ten ignite cards must not mean ten burns a shot, each adding a layer of flammability.
-    // Core 千層烈焰 keeps one layer per card, so its ten-layer cap still means ten cards' worth.
+    if (cremation > 0) this.fireProc(enemy, cremation, tags);
+    // Several copies of a status card merge into one stronger extra hit (powers add up).
     let ignite = 0, toxin = 0, shock = 0, chill = 0, blast = 0;
-    const layered = this.cores.has('layers');
     for (const modifier of result.specials) {
-      if (modifier.rule === 'ignite') { if (layered) this.burn(enemy, modifier.value * hit.baseDamage, 4, tags); else ignite += modifier.value; }
+      if (modifier.rule === 'ignite') ignite += modifier.value;
       if (modifier.rule === 'toxin') toxin += modifier.value;
       if (modifier.rule === 'shock') shock += modifier.value;
       if (modifier.rule === 'chill') chill += modifier.value;
       if (modifier.rule === 'blast') blast += modifier.value;
     }
-    if (ignite > 0 && hit.baseDamage > 0) this.burn(enemy, ignite * hit.baseDamage, 4, tags);
     if (toxin > 0) this.poison(enemy, toxin);
     const auto = tags.includes('Skill.AutoAttack');
     if (auto && direct && tags.includes('Damage.Kinetic')) {
-      if (this.synergies.has('phosphorus')) this.burn(enemy, final * PHOSPHORUS, 3, tags.filter(t => t !== 'Skill.AutoAttack'));
+      if (this.synergies.has('phosphorus')) this.fireProc(enemy, hit.baseDamage * PHOSPHORUS, tags);
       if (this.synergies.has('acidcore')) this.poison(enemy, ACIDCORE);
     }
-    if (this.synergies.has('overheat') && auto && (enemy.meters.shock.value > 0 || enemy.meters.shock.timer > 0) && enemy.burnDuration > 0)
-      enemy.burnFlammability = Math.min(MAX_FLAMMABILITY, enemy.burnFlammability + 1);
     this.statusBoost = 1;
     // Ammo that adds another element: a second, smaller hit of that element (never an auto attack itself, so no loops).
-    const extra = (type: 'Cold' | 'Electric', share: number) => {
+    const extra = (type: 'Cold' | 'Electric' | 'Fire', share: number) => {
       if (share > 0 && hit.baseDamage > 0 && enemy.hp > 0) this.hit(enemy, { baseDamage: hit.baseDamage * share, tags: [...PROC_TAGS[type], ...tags.filter(t => t.startsWith('Mercenary.'))] });
     };
-    extra('Electric', shock); extra('Cold', chill);
+    extra('Electric', shock); extra('Cold', chill); extra('Fire', ignite);
     if (blast > 0 && hit.baseDamage > 0) {
       const splash = this.within(enemy.x, enemy.y, BLAST_SPLASH_RADIUS).filter(o => o !== enemy);
       for (const { enemy: other, k } of this.share(splash, enemy.x, enemy.y, 'auto'))
@@ -748,8 +767,8 @@ export class DefenseRun {
       this.allies.push({ id: this.nextId++, x: enemy.x, y: enemy.y, power: enemy.maxHp * 1.5, age: 0 });
     // Evolution (wildfire): a burning death leaves a small fire behind. It only lights enemies that are not
     // burning yet, at 40% of the dead one's burn, so the chain dies out instead of running through every wave.
-    if (this.evolutions.molotov === 'wildfire' && enemy.burnDuration > 0 && enemy.burnPower > 0)
-      this.zones.push({ x: enemy.x, y: enemy.y, radius: 35, remaining: 3, power: enemy.burnPower * 0.4, pulseTimer: 1, contacts: new Set(), spread: true });
+    if (this.evolutions.molotov === 'wildfire' && this.isBurning(enemy))
+      this.zones.push({ x: enemy.x, y: enemy.y, radius: 35, remaining: 3, power: this.skillPower * (B.SKILL_TUNING.molotov ?? 1) * THROWABLE.molotov / 6 * 0.4, pulseTimer: FIELD.step / 2, contacts: new Set(), spread: true });
     this.kills++; this.earn(reward); this.xp += enemy.xp;
     Object.assign(this.visual('kill', enemy.x, enemy.y, ENEMIES[enemy.kind].color, 22), { amount: reward, enemy: enemy.kind, target: enemy.id });
   }
@@ -808,7 +827,7 @@ export class DefenseRun {
       case 'grenade': {
         const tags: Tag[] = ['Damage.Blast', 'Mechanic.AOE', 'Mechanic.Explosion', 'Mechanic.Knockback', 'Skill.Active', weapon];
         const radius = def.radius * range * (evolution === 'hex' ? 1.5 : 1);
-        const damage = base * 5 * (evolution === 'hex' ? 1.5 : evolution === 'double' ? cardDef('double')!.value : 1);
+        const damage = base * THROWABLE.grenade * (evolution === 'hex' ? 1.5 : evolution === 'double' ? cardDef('double')!.value : 1);
         const blast = (bx: number, by: number) => {
           for (const { enemy, k } of this.share(this.within(bx, by, radius), bx, by, 'skill')) { this.hit(enemy, { baseDamage: damage * k, tags }); this.knockBack(enemy, 40 * this.perm.knockback); }
           this.visual('blast', bx, by, def.color, radius);
@@ -828,11 +847,11 @@ export class DefenseRun {
         break;
       }
       case 'molotov': {
-        const tags: Tag[] = ['Damage.Fire', 'Mechanic.AOE', 'Mechanic.DOT', 'Skill.Active', weapon];
+        // A fire hit a second for whoever is inside (THROWABLE.molotov over the six seconds).
         const radius = def.radius * range * this.perm.molotovRadius * (evolution === 'inferno' ? 1.6 : 1);
-        const power = calculateValue(base * 3, withFamily(tags), this.modifiers) * (evolution === 'napalm' ? 2 : 1);
+        const power = base * THROWABLE.molotov / 6 * (evolution === 'napalm' ? 2 : 1);
         const zone: FireZone = { kind: 'fire', x, y, radius, remaining: (evolution === 'napalm' ? 4.2 : evolution === 'inferno' ? 8 : 6) * this.perm.molotovTime, power, pulseTimer: 1, contacts: new Set() };
-        this.igniteZone(zone, false); this.zones.push(zone);
+        this.igniteZone(zone, true); this.zones.push(zone);
         this.visual('blast', x, y, def.color, radius);
         break;
       }
@@ -840,7 +859,7 @@ export class DefenseRun {
         const radius = def.radius * range * this.perm.laserWidth;
         const tags: Tag[] = ['Damage.Electric', 'Mechanic.Pierce', 'Skill.Active', weapon];
         const ticks = evolution === 'hifreq' ? 5 : 1;
-        const damage = base * 9 * (evolution === 'overload' ? 2.5 : evolution === 'hifreq' ? cardDef('hifreq')!.value : 1);
+        const damage = base * THROWABLE.laser * (evolution === 'overload' ? 2.5 : evolution === 'hifreq' ? cardDef('hifreq')!.value : 1);
         const mainHits = new Set<Enemy>();
         const beam = (ox: number, oy: number, ux: number, uy: number, width: number, scale: number, skip?: Set<Enemy>, record?: Set<Enemy>) => {
           let first: Enemy | undefined, firstAlong = Infinity;
@@ -873,23 +892,29 @@ export class DefenseRun {
       case 'cryobomb': {
         const radius = def.radius * range, tags: Tag[] = ['Damage.Cold', 'Mechanic.AOE', 'Skill.Active', weapon];
         // 2026-10-23: freezes everyone it reaches outright (the escalation still applies to the next freeze).
-        for (const { enemy, k } of this.share(this.within(x, y, radius), x, y, 'skill')) { this.hit(enemy, { baseDamage: base * 4 * k, tags }, { build: 2 }); this.trigger(enemy, 'chill'); }
+        const zero = evolution === 'absolutezero';
+        for (const { enemy, k } of this.share(this.within(x, y, radius * (zero ? cardDef('absolutezero')!.value : 1)), x, y, 'skill')) {
+          this.hit(enemy, { baseDamage: base * THROWABLE.cryobomb * k, tags }, { build: 2 }); this.trigger(enemy, 'chill');
+          if (zero && this.isFrozen(enemy)) enemy.meters.chill.timer += 2;
+        }
         this.visual('blast', x, y, def.color, radius);
         break;
       }
       case 'gas': {
         const radius = def.radius * range;
-        const zone: FireZone = { kind: 'gas', x, y, radius, remaining: 6, power: base * 0.6, pulseTimer: 1, contacts: new Set() };
-        this.igniteZone(zone, false); this.zones.push(zone);
+        const nerve = evolution === 'nerve', seconds = nerve ? 9 : 6;
+        const zone: FireZone = { kind: 'gas', x, y, radius, remaining: seconds, power: base * THROWABLE.gas / 6, pulseTimer: 1, contacts: new Set(), toxin: 6 * (nerve ? cardDef('nerve')!.value : 1) };
+        this.igniteZone(zone, true); this.zones.push(zone);
         this.visual('toxic', x, y, def.color, radius);
         break;
       }
       case 'mortar': {
         const radius = def.radius * range, tags: Tag[] = ['Damage.Blast', 'Mechanic.AOE', 'Mechanic.Explosion', 'Skill.Active', weapon];
-        for (let i = 0; i < 5; i++) {
-          const a = this.combatRandom() * Math.PI * 2, r = Math.sqrt(this.combatRandom()) * radius;
+        const barrage = evolution === 'barrage', shells = barrage ? cardDef('barrage')!.value : 5;
+        for (let i = 0; i < shells; i++) {
+          const a = this.combatRandom() * Math.PI * 2, r = Math.sqrt(this.combatRandom()) * radius * (barrage ? 1.3 : 1);
           const sx = Math.min(FIELD.wallX, Math.max(0, x + Math.cos(a) * r)), sy = Math.min(390, Math.max(65, y + Math.sin(a) * r));
-          for (const { enemy, k } of this.share(this.within(sx, sy, 40 * range), sx, sy, 'skill')) this.hit(enemy, { baseDamage: base * 2.5 * k, tags });
+          for (const { enemy, k } of this.share(this.within(sx, sy, 40 * range), sx, sy, 'skill')) this.hit(enemy, { baseDamage: base * THROWABLE.mortar * k, tags });
           this.visual('blast', sx, sy, def.color, 40 * range);
         }
         break;
@@ -897,31 +922,46 @@ export class DefenseRun {
       case 'emp': {
         const radius = def.radius * range, tags: Tag[] = ['Damage.Electric', 'Mechanic.AOE', 'Skill.Active', weapon];
         // 2026-10-23: paralyses everyone it reaches outright.
-        for (const { enemy, k } of this.share(this.within(x, y, radius), x, y, 'skill')) { this.hit(enemy, { baseDamage: base * 3 * k, tags }, { build: 3 }); this.trigger(enemy, 'shock'); }
+        const struck = this.share(this.within(x, y, radius), x, y, 'skill');
+        for (const { enemy, k } of struck) { this.hit(enemy, { baseDamage: base * THROWABLE.emp * k, tags }, { build: 3 }); this.trigger(enemy, 'shock'); }
+        if (evolution === 'cascade') {
+          // Each target arcs to its two nearest neighbours.
+          const share = cardDef('cascade')!.value;
+          for (const { enemy, k } of struck) {
+            const seen = new Set<Enemy>([enemy]);
+            for (let i = 0; i < 2; i++) { const n = this.nearest(enemy, 120, seen); if (!n) break; seen.add(n); this.hit(n, { baseDamage: base * THROWABLE.emp * share * k, tags }); this.visual('shot', n.x, n.y, def.color, 0, enemy.x, enemy.y); }
+          }
+        }
         this.visual('blast', x, y, def.color, radius);
         break;
       }
       case 'strafe': {
         // A band across the whole road at the chosen depth.
         const depth = def.radius * range, tags: Tag[] = ['Damage.Kinetic', 'Mechanic.RapidFire', 'Skill.Active', weapon];
-        const band = this.enemies.filter(e => e.hp > 0 && Math.abs(e.x - x) <= depth);
-        for (const { enemy, k } of this.share(band, x, 225, 'skill'))
-          for (let i = 0; i < 6 && enemy.hp > 0; i++) this.hit(enemy, { baseDamage: base * 0.8 * k, tags });
-        this.visual('laser', x, 390, def.color, depth, x, 65);
+        // Three kinetic hits a target (THROWABLE.strafe in all); 交叉火網 sweeps a second band just behind.
+        const cross = evolution === 'crossfire', scale = cross ? cardDef('crossfire')!.value : 1;
+        for (const bx of cross ? [x, Math.max(0, x - 2 * depth)] : [x]) {
+          const band = this.enemies.filter(e => e.hp > 0 && Math.abs(e.x - bx) <= depth);
+          for (const { enemy, k } of this.share(band, bx, 225, 'skill'))
+            for (let i = 0; i < 3 && enemy.hp > 0; i++) this.hit(enemy, { baseDamage: base * THROWABLE.strafe / 3 * scale * k, tags });
+          this.visual('laser', bx, 390, def.color, depth, bx, 65);
+        }
         break;
       }
       case 'snipe': {
         const tags: Tag[] = ['Damage.Kinetic', 'Damage.Cold', 'Skill.Active', weapon];
         // 2026-10-23: always the living enemy with the most HP on the whole field, wherever it is aimed.
-        let target: Enemy | undefined;
-        for (const e of this.enemies) if (e.hp > 0 && (!target || e.hp > target.hp)) target = e;
-        if (target) { this.hit(target, { baseDamage: base * 30, tags }, { forceCrit: true }); this.visual('shot', target.x, target.y, def.color, 0, origin.x, origin.y); }
+        // 連續狙擊: the three with the most HP.
+        const count = evolution === 'marksman' ? cardDef('marksman')!.value : 1;
+        const targets = this.enemies.filter(e => e.hp > 0).sort((a, b) => b.hp - a.hp).slice(0, count);
+        for (const target of targets) { this.hit(target, { baseDamage: base * THROWABLE.snipe, tags }, { forceCrit: true }); this.visual('shot', target.x, target.y, def.color, 0, origin.x, origin.y); }
         break;
       }
       case 'minefield': {
-        for (let i = 0; i < 4; i++) {
-          const a = Math.PI / 4 + i * Math.PI / 2, r = def.radius * range;
-          this.mines.push({ x: Math.min(FIELD.wallX - 20, Math.max(0, x + Math.cos(a) * r)), y: Math.min(390, Math.max(65, y + Math.sin(a) * r)), damage: base * 4 });
+        const cluster = evolution === 'cluster', count = cluster ? cardDef('cluster')!.value : 4;
+        for (let i = 0; i < count; i++) {
+          const a = Math.PI / 4 + i * 2 * Math.PI / count, r = def.radius * range;
+          this.mines.push({ x: Math.min(FIELD.wallX - 20, Math.max(0, x + Math.cos(a) * r)), y: Math.min(390, Math.max(65, y + Math.sin(a) * r)), damage: base * THROWABLE.minefield, radius: cluster ? 65 : 50 });
         }
         if (this.mines.length > MINE_CAP) this.mines.splice(0, this.mines.length - MINE_CAP);
         break;
@@ -938,8 +978,8 @@ export class DefenseRun {
     const tags: Tag[] = ['Damage.Blast', 'Damage.Fire', 'Mechanic.AOE', 'Mechanic.Explosion', 'Skill.Active', 'Weapon.minefield'];
     for (const mine of this.mines) {
       if (!this.within(mine.x, mine.y, 22).length) continue;
-      for (const { enemy, k } of this.share(this.within(mine.x, mine.y, 50 * this.skillRange), mine.x, mine.y, 'skill')) { this.hit(enemy, { baseDamage: mine.damage * k, tags }); this.burn(enemy, mine.damage * 0.5 * k, 3, tags); }
-      this.visual('blast', mine.x, mine.y, SKILLS.minefield.color, 50 * this.skillRange).skill = true;
+      for (const { enemy, k } of this.share(this.within(mine.x, mine.y, (mine.radius ?? 50) * this.skillRange), mine.x, mine.y, 'skill')) { this.hit(enemy, { baseDamage: mine.damage * k, tags }); }
+      this.visual('blast', mine.x, mine.y, SKILLS.minefield.color, (mine.radius ?? 50) * this.skillRange).skill = true;
       mine.spent = true;
     }
     this.mines = this.mines.filter(m => !m.spent);
@@ -1017,8 +1057,8 @@ export class DefenseRun {
     this.invalidateGrid();
     this.enemies.push({ id: this.nextId++, kind, x: -20, y, hp, maxHp: hp, defense, resist: def.resist,
       speed: def.speed * (0.96 + this.random() * 0.08), attack: def.attack * B.ENEMY_ATTACK_GROWTH_PER_MINUTE ** minutes,
-      reward, xp: def.xp, burnPower: 0, burnDuration: 0, burnFlammability: 0,
-      toxin: 0, toxinDuration: 0, toxinBurst: false, meters: { chill: newMeter(), shock: newMeter(), stun: newMeter() }, hitFlash: 0 });
+      reward, xp: def.xp,
+      toxin: 0, toxinDuration: 0, toxinBurst: false, meters: { chill: newMeter(), shock: newMeter(), stun: newMeter(), ignite: newMeter() }, hitFlash: 0 });
   }
   /** A boss and its runner pack, on a fixed schedule independent of the player's power. The last stage's is a super boss. */
   private bossRush() {
@@ -1086,8 +1126,8 @@ export class DefenseRun {
     const bulwark = this.cores.has('blackmarket') ? this.wallHealth * B.BULWARK_SHARE * this.shotInterval(merc) : 0;
     const damage = this.damageFor(merc.kind) + bulwark;
     if (merc.kind === 'flame') {
-      // The flamer only sets fire: a zero hit carries the ammo cards, then each target in the cone burns.
-      for (const t of targets) { this.hit(t, { baseDamage: 0, tags: def.tags }); this.burn(t, damage, 3, def.tags); this.visual('flame', t.x, t.y, def.color, 0, origin.x, origin.y).merc = merc.kind; }
+      // The flamer's cone: direct fire damage to each target, filling their ignite meters.
+      for (const t of targets) { this.hit(t, { baseDamage: damage, tags: def.tags }); this.visual('flame', t.x, t.y, def.color, 0, origin.x, origin.y).merc = merc.kind; }
     } else if (def.pattern === 'chain') {
       let from = origin;
       targets.forEach((t, i) => {
@@ -1101,7 +1141,7 @@ export class DefenseRun {
       targets.forEach((t, i) => {
         this.hit(t, { baseDamage: damage * k, tags: def.tags }, { forceCrit: i === 0 && master && merc.kind === 'rifle' && merc.shots! % 3 === 0 });
         if (def.toxin) this.poison(t, def.toxin);
-        if (def.ignite) this.burn(t, damage * k * def.ignite, 3, def.tags);
+        if (def.ignite) this.fireProc(t, damage * k * def.ignite, def.tags);
       });
       if (def.pattern === 'aoe') this.visual('blast', target.x, target.y, def.color, def.area!);
       this.visual('shot', target.x, target.y, def.color, 0, origin.x, origin.y).merc = merc.kind;
@@ -1145,6 +1185,7 @@ export class DefenseRun {
     }
     // Once the spawns have stopped (clock out, or boss down), the leftovers charge at RUSH_SPEED so the mop-up is short.
     const rush = (this.bossStage ? this.bossDown : this.stageTime >= this.stageLength) ? B.RUSH_SPEED : 1;
+    this.spikeTimer += dt; const spikePulse = this.spikeTimer >= 1; if (spikePulse) this.spikeTimer -= 1;
     // Thorn damage only depends on run-wide modifiers: compute it once per step, apply defense per enemy.
     let thornRaw: number | undefined;
     for (const enemy of this.enemies) {
@@ -1154,20 +1195,16 @@ export class DefenseRun {
       if (!enemy.toxinDuration) enemy.toxin = 0;
       for (const kind of METER_KINDS) {
         const m = enemy.meters[kind];
+        // An ignited zombie burns once a second while the ignition lasts.
+        if (kind === 'ignite' && m.timer > 0) {
+          m.pulse = (m.pulse ?? 1) - dt;
+          if (m.pulse <= 1e-9) { m.pulse += 1; this.igniteTick(enemy); if (enemy.hp <= 0) break; }
+        }
         if (m.timer > 0) m.timer = Math.max(0, m.timer - dt);
         m.idle += dt;
         if (m.value > 0 && m.idle > B.METER_IDLE) m.value = Math.max(0, m.value - meterThreshold(enemy, kind, this.elapsed) * B.METER_DRAIN * dt);
       }
-      // All fire sources share the strongest burn; flammability changes its clock, not its base power.
-      const dot = advanceBurn(enemy, dt);
-      if (dot) {
-        // Synergy (fire + toxin): every 10 toxin deepens burns, at most ×3.
-        const chem = this.synergies.has('chemfire') ? Math.min(3, 1 + CHEMFIRE * enemy.toxin / 10) : 1;
-        const burned = calculateDamage({ baseDamage: dot * chem * this.dealtScale(enemy), tags: BURN_TAGS },
-          { defense: enemy.defense, toxin: enemy.toxin, resist: enemy.resist, vulnerability: this.vulnerability(enemy) }).final;
-        this.record(BURN_TAGS, Math.min(burned, Math.max(0, enemy.hp))); enemy.hp -= burned;
-        if (enemy.hp <= 0) { this.kill(enemy); continue; }
-      }
+      if (enemy.hp <= 0) continue;
       const shocked = enemy.meters.shock.value > 0 || this.isParalyzed(enemy);
       if (enemy.x < FIELD.wallX - 18) {
         // Frozen and stunned zombies stand still; the chill meter slows them while it fills.
@@ -1179,9 +1216,9 @@ export class DefenseRun {
         // Paralysed zombies cannot bite; frozen or stunned ones at the barricade still do.
         this.wallHealth -= enemy.attack * this.overtimeFactor * dt * (1 - this.wallReduction) * this.wallVulnerability * (enemy.toxin > 0 ? this.perm.bioShield : 1);
         if (this.wallHealth <= 0) { this.wallHealth = 0; this.phase = 'over'; break; }
-        if (this.thorns > 0) {
-          // Spikes: a share of the squad's reference shot per second, as kinetic damage (no per-tick events).
-          thornRaw ??= calculateValue(this.thorns * this.skillPower * dt, THORN_TAGS, this.modifiers);
+        if (this.thorns > 0 && spikePulse) {
+          // Spikes: a share of the squad's reference shot, once a second (2026-10-23), as kinetic damage (no events).
+          thornRaw ??= calculateValue(this.thorns * this.skillPower, THORN_TAGS, this.modifiers);
           const thorn = calculateDamage({ baseDamage: thornRaw * this.dealtScale(enemy), tags: THORN_TAGS }, { defense: enemy.defense, toxin: enemy.toxin, resist: enemy.resist }).final;
           this.record(THORN_TAGS, Math.min(thorn, Math.max(0, enemy.hp))); enemy.hp -= thorn;
           if (enemy.hp <= 0) { this.kill(enemy); continue; }

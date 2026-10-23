@@ -18,6 +18,10 @@ const GLYPHS: Record<string, number[]> = {
 };
 
 /** Draws pixel text centred at x with its top at y; `size` is the pixel scale, outlined in dark ink. */
+/** Damage numbers take their element's colour (2026-10-23); crits and throwables are drawn bigger, not recoloured. */
+export const ELEMENT_COLOR: Record<string, string> = {
+  kinetic: '#f2ead2', toxin: '#9be05a', blast: '#ffb347', fire: '#ff6a3d', cold: '#7fd4ff', electric: '#f3ef5a',
+};
 export function pixelText(c: CanvasRenderingContext2D, value: string, x: number, y: number, color: string, size = 1, outline = '#0b0d0e') {
   const advance = 4 * size, width = value.length * advance - size;
   const left = Math.round(x - width / 2), top = Math.round(y);
@@ -52,15 +56,16 @@ export class Feedback {
 
   clear() { this.popups = []; this.coins = []; }
 
-  damage(x: number, y: number, amount: number, target: number, big: boolean, crit = false) {
-    const recent = crit ? undefined : this.popups.find(p => p.target === target && p.age < MERGE_WINDOW && p.big === big);
+  damage(x: number, y: number, amount: number, target: number, big: boolean, crit = false, element = 'kinetic') {
+    const color = ELEMENT_COLOR[element] ?? ELEMENT_COLOR.kinetic!;
+    const recent = crit ? undefined : this.popups.find(p => p.target === target && p.age < MERGE_WINDOW && p.big === big && p.color === color);
     if (recent) { recent.amount += amount; recent.age = Math.min(recent.age, 0.04); return; }
     if (this.popups.length >= MAX_POPUPS) {
       // Drop the oldest small number first; big skill hits always get a slot.
       const index = this.popups.findIndex(p => !p.big); if (index < 0 && !big) return;
       this.popups.splice(index < 0 ? 0 : index, 1);
     }
-    this.popups.push({ x: x + (Math.random() - 0.5) * 6, y, amount, age: 0, target, big: big || crit, color: crit ? '#ff7a4a' : big ? '#ffd884' : '#eadfbd' });
+    this.popups.push({ x: x + (Math.random() - 0.5) * 6, y, amount, age: 0, target, big: big || crit, color });
   }
 
   /** Bursts a few coins from a kill; the reward is split across them. */

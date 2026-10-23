@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { DefenseRun, FIELD, freshStatus, searchlightAt } from '../src/tl003/Run.ts';
+import { DefenseRun, FIELD, THROWABLE, freshStatus, meterThreshold, searchlightAt } from '../src/tl003/Run.ts';
 import { compileTalents } from '../src/tl003/Talents.ts';
 import { emptyTree } from '../src/tl003/Meta.ts';
 import { SKILLS, cardDef, makeCard } from '../src/tl003/Content.ts';
@@ -11,7 +11,7 @@ const near = (a, b, e = 1e-6) => assert.ok(Math.abs(a - b) <= e * Math.max(1, Ma
 const withCores = (...cores) => { const tree = emptyTree(); tree.tier = 3; tree.unlockedCoreTalents = cores; tree.activeCoreTalents = cores; const run = new DefenseRun(1, compileTalents(tree)); run.start(); run.mercenaries[0].shotTimer = 1e9; return run; };
 const plain = () => withCores();
 const enemy = (over = {}) => ({ id: 9000, kind: 'walker', x: 500, y: 225, hp: 1e6, maxHp: 1e6, defense: 0, speed: 0, attack: 0, reward: 1, xp: 0,
-  burnPower: 0, burnDuration: 0, burnFlammability: 0, ...freshStatus(), hitFlash: 0, ...over });
+  ...freshStatus(), hitFlash: 0, ...over });
 const shoot = run => { run.mercenaries[0].shotTimer = 0; run.advance(FIELD.step); run.mercenaries[0].shotTimer = 1e9; };
 const take = (run, id) => { run.phase = 'choice'; run.choices = [makeCard(cardDef(id))]; run.choose(id); };
 
@@ -32,12 +32,19 @@ test('TL003 cores: cold steel: kinetic damage ignores half the armor, never crit
   near(1e6 - cryo.enemies[0].hp, cryo.damageFor('cryo') * 0.5, 1e-6);
 });
 
-test('TL003 cores: cremation turns direct damage into burns; layers stack burns up to ten', () => {
-  const fire = withCores('cremation'); fire.enemies = [enemy()]; shoot(fire);
-  near(fire.enemies[0].hp, 1e6); near(fire.enemies[0].burnPower, fire.damageFor('rifle') * 0.8);
+test('TL003 cores: cremation turns direct hits into fire at 80%; layers stack burns up to ten', () => {
+  // The rifle's kinetic hit deals nothing; an 80% fire hit replaces it (resistance applies, armor does not).
+  const fire = withCores('cremation'), c = enemy({ defense: 100, resist: 0.5 }); fire.enemies = [c]; shoot(fire);
+  const proc = fire.damageFor('rifle') * 0.8 * 0.5;
+  near(1e6 - c.hp, proc); near(c.meters.ignite.value, proc * B.STATUS.ignite.rate); near(fire.stats.damage['merc:rifle'], proc);
+  // While burning, every further fill of max HP × threshold adds a layer (max 10) and restarts the burn; a tick is 35% a layer.
   const layers = withCores('layers'); take(layers, 'burn'); const e = enemy(); layers.enemies = [e];
-  for (let i = 0; i < 14; i++) shoot(layers);
-  assert.equal(e.burnLayers, 10); near(e.burnPower, 10 * 0.35 * makeCard(cardDef('burn')).value * layers.damageFor('rifle'), 1e-3);
+  const fill = () => e.meters.ignite.value = (layers.isBurning(e) ? e.maxHp * B.STATUS.ignite.threshold : meterThreshold(e, 'ignite', layers.elapsed)) - 1e-6;
+  fill(); shoot(layers); assert.ok(layers.isBurning(e)); assert.equal(e.burnLayers, 1);
+  for (let i = 0; i < 13; i++) { fill(); shoot(layers); }
+  assert.equal(e.burnLayers, 10);
+  const hp = e.hp; layers.advance(1);
+  near(hp - e.hp, e.maxHp * B.STATUS.ignite.tick * 0.35 * 10);
 });
 
 test('TL003 cores: agony puts the crit on statuses instead of the hit', () => {
@@ -105,7 +112,8 @@ test('TL003 cores: ammo economy spends money per shot; autofire casts on its own
   const run = withCores('ammoeco'); run.money = 1000; run.enemies = [enemy()]; shoot(run);
   near(run.money, 990); near(1e6 - run.enemies[0].hp, run.damageFor('rifle') * (1 + Math.log2(991) / 4));
   const grenade = withCores('ammoeco'); grenade.money = 0; grenade.enemies = [enemy()]; grenade.learn('strafe'); grenade.cast(1, 500, 225);
-  near(1e6 - grenade.enemies[0].hp, grenade.skillPower * 0.8 * 6 * 0.5, 1e-6);
+  // Strafe: three kinetic hits of THROWABLE.strafe / 3, each halved with no money.
+  near(1e6 - grenade.enemies[0].hp, grenade.skillPower * (B.SKILL_TUNING.strafe ?? 1) * THROWABLE.strafe * 0.5, 1e-6);
   const auto = withCores('autofire'); auto.enemies = [enemy({ x: 400 })]; auto.advance(FIELD.step);
   assert.ok(auto.skills[0].cooldown > 0, 'the grenade went off without a drag');
 });
@@ -133,17 +141,27 @@ test('TL003 grenades push bosses a quarter as far and never push anyone off the 
   const edge = plain(), near0 = enemy({ x: 20 }); edge.enemies = [near0]; assert.equal(edge.cast(0, 20, 225), true); near(near0.x, 0);
 });
 
-test('TL003 wildfire lights only unburnt enemies, at 40% of the dead one\'s burn', () => {
+test('TL003 wildfire: an ignited zombie\'s death leaves a 3 s fire that hits only enemies not yet burning, once a second', () => {
   const run = plain(); run.evolutions.molotov = 'wildfire';
-  const dying = enemy({ hp: 1, burnPower: 100, burnDuration: 3 }), fresh = enemy({ id: 9001, x: 510 }), lit = enemy({ id: 9002, x: 490, burnPower: 5, burnDuration: 3 });
-  run.enemies = [dying, fresh, lit]; run.advance(FIELD.step); run.advance(FIELD.step);
-  assert.ok(dying.hp <= 0); near(fresh.burnPower, 40); near(lit.burnPower, 5); assert.equal(lit.burnFlammability, 0);
+  const tick = 1e6 * B.STATUS.ignite.tick;
+  const dying = enemy({ hp: 1 }), fresh = enemy({ id: 9001, x: 510 }), lit = enemy({ id: 9002, x: 490 });
+  dying.meters.ignite.timer = 10; lit.meters.ignite.timer = 10;
+  run.enemies = [dying, fresh, lit]; run.advance(1 + FIELD.step);
+  // The first burn tick kills it; the fire it leaves pulses on the next step, then once a second (three in its three seconds).
+  assert.ok(dying.hp <= 0); assert.equal(run.zones.filter(z => z.spread).length, 1);
+  assert.ok(fresh.hp < 1e6, 'the newcomer is set alight at once'); const first = 1e6 - fresh.hp;
+  near(fresh.meters.ignite.value, first * B.STATUS.ignite.rate);
+  run.advance(1); near(1e6 - fresh.hp, 2 * first, 1e-6, 'a second pulse a second later');
+  run.advance(3); near(1e6 - fresh.hp, 3 * first, 1e-6, 'three pulses in all');
+  near(1e6 - lit.hp, 5 * tick, 1e-6, 'the lit one only takes its own burn ticks');
+  // A death that was not burning leaves nothing.
+  const cold = plain(); cold.evolutions.molotov = 'wildfire'; cold.enemies = [enemy({ hp: 1 })]; cold.learn('cryobomb'); cold.cast(1, 500, 225);
+  assert.equal(cold.zones.length, 0);
 });
 
 test('TL003 balance: several status cards merge into one application per hit; the flamer grows FLAME_DAMAGE_PER_LEVEL a level', () => {
   const run = plain(); take(run, 'burn'); take(run, 'burn'); const e = enemy(); run.enemies = [e]; shoot(run);
-  near(e.burnPower, 2 * makeCard(cardDef('burn')).value * run.damageFor('rifle'), 1e-3); assert.equal(e.burnFlammability, 0);
-  const layers = withCores('layers'); take(layers, 'burn'); take(layers, 'burn'); const f = enemy(); layers.enemies = [f]; shoot(layers);
-  assert.equal(f.burnLayers, 2);
+  // One fire hit at the summed value, beside the shot itself.
+  near(1e6 - e.hp, run.damageFor('rifle') * (1 + 2 * makeCard(cardDef('burn')).value), 1e-6);
   const base = plain(); const lv1 = base.damageFor('flame'); base.levels.flame = 2; near(base.damageFor('flame'), lv1 * B.FLAME_DAMAGE_PER_LEVEL);
 });

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { calculateValue, calculateDamage, effectiveCooldown, runScore, formatNumber, withFamily } from '../src/tl003/Combat.ts';
-import { DefenseRun, FIELD, damageSource, freshStatus, meterThreshold } from '../src/tl003/Run.ts';
+import { DefenseRun, FIELD, THROWABLE, damageSource, freshStatus, meterThreshold } from '../src/tl003/Run.ts';
 import { MERCENARIES, CARDS, SKILLS, ENEMIES } from '../src/tl003/Content.ts';
 import { LocalMetaMirror, META_KEY, emptyMeta, normalizeMeta } from '../src/tl003/Meta.ts';
 import { project, unproject, projectedCircle } from '../src/tl003/Projection.ts';
@@ -17,12 +17,14 @@ const mods = [
 ];
 function enemy(overrides = {}) {
   return { id: 9999, kind: 'walker', x: 500, y: 220, hp: 200, maxHp: 200, defense: 0, speed: 0, attack: 0,
-    reward: 3, xp: 1, burnPower: 0, burnDuration: 0, burnFlammability: 0, ...freshStatus(),
+    reward: 3, xp: 1, ...freshStatus(),
     hitFlash: 0, ...overrides };
 }
 // Unit tests start with the opening skill ready; the deployment charge has its own test.
 function running() { const run = new DefenseRun(123); run.start(); run.skills[0].cooldown = 0; return run; }
 const R = MERCENARIES.rifle.damage;
+/** A throwable's damage to one target per cast at the opening skill power (R), from the THROWABLE table. */
+const T = id => R * THROWABLE[id] * (B.SKILL_TUNING[id] ?? 1);
 /** Card magnitudes at their base rarity, so the tests follow balance changes. */
 const V = id => CARDS.find(c => c.id === id).value;
 function choose(run, id) { run.phase = 'choice'; run.choices = [CARDS.find(c => c.id === id)]; assert.equal(run.choose(id), true); }
@@ -149,7 +151,8 @@ test('TL003 Kinetic, Burn, Toxin, Shock and Chill ammo affect actual live enemie
   for (const id of ['kinetic','burn','bio','shock','chill']) {
     const run = running(); choose(run,id); const target = enemy({ hp: 1e6, maxHp: 1e6, defense: 50 }), side = enemy({ id: 10000, x: 480, hp: 1e6, maxHp: 1e6 }); run.enemies = [target, side]; run.advance(FIELD.step);
     if(id==='kinetic') near(1e6-target.hp,R*(1+V('kinetic'))*100/150);
-    if(id==='burn') { near(target.burnPower,V('burn')*R); const hp=target.hp; run.mercenaries[0].shotTimer=100; run.advance(1); near(hp-target.hp,V('burn')*R); /* burns are elemental: armor 50 does not apply */ }
+    // Burn ammo: a fire hit of the shot × value (elemental: armor 50 does not apply) that fills the ignite meter.
+    if(id==='burn') { near(1e6-target.hp,R*100/150+R*V('burn')); near(target.meters.ignite.value,R*V('burn')*B.STATUS.ignite.rate); }
     // The rifle's hit lands first (defense 50), then the ammo adds toxin.
     if(id==='bio') { near(target.toxin,V('bio')); near(1e6-target.hp,R*100/150); }
     // Electric and cold ammo add a second, smaller hit of their element; that hit fills its meter.
@@ -192,7 +195,7 @@ test('TL003 ranges: the flamer waits for close enemies, the electric gunner reac
   const run = running(); run.mercenaries[0].shotTimer = 1e9; run.recruit('flame'); run.recruit('tesla');
   const far = enemy({ x: 0, hp: 1e6, maxHp: 1e6 }); run.enemies = [far];
   run.mercenaries.forEach(m => { m.shotTimer = 0; }); run.mercenaries[0].shotTimer = 1e9; run.advance(FIELD.step);
-  assert.equal(far.burnPower, 0, 'out of the flamer\'s reach'); assert.ok(far.hp < 1e6, 'the tesla hits at the spawn line');
+  assert.equal(far.meters.ignite.value, 0, 'out of the flamer\'s reach'); assert.ok(far.hp < 1e6, 'the tesla hits at the spawn line');
   assert.ok(MERCENARIES.tesla.range > MERCENARIES.rifle.range && MERCENARIES.rifle.range > MERCENARIES.flame.range);
 });
 test('TL003 patterns: the flamer burns a cone, the grenadier splashes, the signaller chains', () => {
@@ -202,15 +205,15 @@ test('TL003 patterns: the flamer burns a cone, the grenadier splashes, the signa
     const run = running(); run.mercenaries[0].shotTimer = 1e9; run.recruit(kind); run.mercenaries[1].shotTimer = 0;
     run.enemies = Array.from({ length: 5 }, (_, i) => close(i)); run.advance(FIELD.step);
     // Only the five placed zombies (a natural spawn may join the list this frame).
-    const touched = run.enemies.filter(e => e.id >= 20000 && (e.hp < 1e6 || e.burnPower > 0)).length;
+    const touched = run.enemies.filter(e => e.id >= 20000 && e.hp < 1e6).length;
     assert.equal(touched, expected, `${kind} reached ${touched}`);
   }
 });
-test('TL003 equal Burn refreshes and accelerates the strongest power, applying Fire bonuses once', () => {
-  const run = running(); choose(run,'burn'); choose(run,'fire'); const target = enemy(); run.enemies=[target]; run.advance(FIELD.step);
-  near(target.burnPower,V('burn')*R*(1+V('fire'))); run.mercenaries[0].shotTimer=0; run.advance(FIELD.step); near(target.burnPower,V('burn')*R*(1+V('fire'))); near(target.burnFlammability,1);
-  run.mercenaries[0].shotTimer=100; const hp=target.hp; run.advance(1); near(target.hp,hp-V('burn')*R*(1+V('fire'))*1.25);
-  run.advance(4); near(target.burnPower,0); near(target.burnDuration,0); near(target.burnFlammability,0);
+test('TL003 the Fire DOT card strengthens burn ticks only, not the burn ammo\'s direct fire hit', () => {
+  const run = running(); choose(run,'burn'); choose(run,'fire'); const target = enemy({ hp: 1e6, maxHp: 1e6 }); run.enemies=[target]; run.advance(FIELD.step);
+  near(1e6-target.hp,R*(1+V('burn'))); run.mercenaries[0].shotTimer=100;
+  target.meters.ignite.value=meterThreshold(target,'ignite',run.elapsed); target.meters.ignite.value-=1e-9; run.mercenaries[0].shotTimer=0; run.advance(FIELD.step); run.mercenaries[0].shotTimer=100;
+  assert.ok(run.isBurning(target)); const hp=target.hp; run.advance(1); near(hp-target.hp,1e6*B.STATUS.ignite.tick*(1+V('fire')));
 });
 test('TL003 Toxin expires on its own clock; an unfed meter drains after a short pause', () => {
   const run=running(); const target=enemy({toxin:2,toxinDuration:.2,hp:1e6,maxHp:1e6}); target.meters.shock.value=1000; run.enemies=[target]; run.mercenaries[0].shotTimer=100;
@@ -219,33 +222,35 @@ test('TL003 Toxin expires on its own clock; an unfed meter drains after a short 
 });
 test('TL003 Grenade uses Blast + Active modifiers, AOE geometry, knockback and cooldown', () => {
   const run=running(); choose(run,'blastDmg'); choose(run,'active'); const a=enemy({hp:1e6,maxHp:1e6}), b=enemy({id:10000,x:650}); run.enemies=[a,b];
-  assert.equal(run.cast(0,500,220),true); near(1e6-a.hp,R*5*(1+V('blastDmg')+V('active'))); near(b.hp,200); near(a.x,460); near(run.skills[0].cooldown,SKILLS.grenade.cooldown);
+  assert.equal(run.cast(0,500,220),true); near(1e6-a.hp,T('grenade')*(1+V('blastDmg')+V('active'))); near(b.hp,200); near(a.x,460); near(run.skills[0].cooldown,SKILLS.grenade.cooldown);
   assert.ok(a.meters.stun.value>0,'blast fills the stun meter'); assert.equal(run.cast(0,500,220),false);
 });
 test('TL003 invalid drag releases do not consume cooldown; haste applies to valid casts', () => {
   const run=running(); for(const [x,y] of [[-1,200],[751,200],[200,64],[200,391],[NaN,200],[200,Infinity]]) assert.equal(run.cast(0,x,y),false);
   near(run.skills[0].cooldown,0); run.haste=2900; assert.equal(run.cast(0,500,220),true); near(run.skills[0].cooldown,SKILLS.grenade.cooldown/30);
 });
-test('TL003 Molotov deals DOT through the shared defense/shock calculator and honors Active tags', () => {
-  // Burns are elemental: resistance 1/3 (not armor) gives the ×1/1.5.
+test('TL003 Molotov pulses go through the shared resistance/shock calculator and honor Active tags', () => {
+  // Fire is elemental: resistance 1/3 (not armor) gives the ×1/1.5; a half-full shock meter adds +25%.
   const run=running(); run.learn('molotov'); choose(run,'active'); const target=enemy({defense:100,resist:1/3,toxin:50,toxinDuration:10,toxinBurst:true,hp:1000,maxHp:1000});run.enemies=[target];
   target.meters.shock.value=0.5*meterThreshold(target,'shock',0);
-  run.mercenaries.forEach(m=>m.shotTimer=100); assert.equal(run.cast(1,500,220),true); near(target.hp,1000);
-  near(target.burnPower,R*3*(1+V('active'))); run.advance(.5); near(target.hp,1000-.5*R*3*(1+V('active'))/1.5*1.25); assert.equal(run.zones.length,1); run.advance(6); assert.equal(run.zones.length,0);
+  run.mercenaries.forEach(m=>m.shotTimer=100); assert.equal(run.cast(1,500,220),true);
+  // The cast is the first pulse; the next comes a second later, not on contact.
+  const pulse=T('molotov')/6*(1+V('active'))/1.5*1.25; near(1000-target.hp,pulse);
+  run.advance(.5); near(1000-target.hp,pulse); assert.equal(run.zones.length,1); run.advance(6); assert.equal(run.zones.length,0);
 });
 test('TL003 area falloff: instant blasts split a budget over a crowd and only touch the nearest ones', () => {
   const crowd = (n, spread) => Array.from({ length: n }, (_, i) => enemy({ id: 30000 + i, x: 500 + (i % 10) * spread - 4.5 * spread, y: 225 + Math.floor(i / 10) * spread - spread, hp: 1e6, maxHp: 1e6 }));
   const { full, cap } = B.AREA.skill;
   // Up to the budget: full damage each.
   const small = running(); small.enemies = crowd(full, 6); small.cast(0, 500, 225);
-  for (const e of small.enemies) near(1e6 - e.hp, R * 5);
+  for (const e of small.enemies) near(1e6 - e.hp, T('grenade'));
   // A bigger crowd inside the radius splits the same total.
   const big = running(); big.enemies = crowd(30, 6); big.cast(0, 500, 225);
-  for (const e of big.enemies) near(1e6 - e.hp, R * 5 * full / 30);
+  for (const e of big.enemies) near(1e6 - e.hp, T('grenade') * full / 30);
   // Past the cap, only the nearest are processed; the outer ring is untouched.
   const huge = running(); huge.enemies = crowd(60, 6); huge.cast(0, 500, 225);
   const hurt = huge.enemies.filter(e => e.hp < 1e6);
-  assert.equal(hurt.length, cap); for (const e of hurt) near(1e6 - e.hp, R * 5 * full / cap);
+  assert.equal(hurt.length, cap); for (const e of hurt) near(1e6 - e.hp, T('grenade') * full / cap);
   const far = Math.min(...hurt.map(e => Math.hypot(e.x - 500, e.y - 225)));
   assert.ok(huge.enemies.filter(e => e.hp === 1e6).every(e => Math.hypot(e.x - 500, e.y - 225) >= far), 'the untouched ones are the farthest');
 });
@@ -257,7 +262,42 @@ test('TL003 area falloff: auto-attack splash uses the smaller budget; lingering 
   const fire = running(); fire.learn('molotov');
   fire.enemies = Array.from({ length: 30 }, (_, i) => enemy({ id: 32000 + i, x: 500 + (i % 6) * 12 - 30, y: 225 + Math.floor(i / 6) * 12 - 24, hp: 1e6, maxHp: 1e6 }));
   fire.cast(1, 500, 225);
-  assert.equal(fire.enemies.filter(e => e.burnPower > 0).length, B.ZONE_CAP);
+  // Every pulse hits the same nearest ZONE_CAP at full strength.
+  const lit = fire.enemies.filter(e => e.hp < 1e6); assert.equal(lit.length, B.ZONE_CAP);
+  for (const e of lit) near(1e6 - e.hp, T('molotov') / 6);
+  fire.mercenaries[0].shotTimer = 1e9; fire.advance(1);
+  assert.equal(fire.enemies.filter(e => e.id >= 32000 && e.hp < 1e6).length, B.ZONE_CAP);
+  for (const e of lit) near(1e6 - e.hp, 2 * T('molotov') / 6);
+});
+test('TL003 lingering zones: gas settles once a second for six seconds (poison + toxin hit); strafe is three kinetic hits', () => {
+  const run = running(); run.mercenaries[0].shotTimer = 1e9; run.learn('gas');
+  const target = enemy({ x: 500, y: 225, hp: 1e6, maxHp: 1e6, toxinBurst: true }); run.enemies = [target];
+  run.cast(1, 500, 225); near(target.toxin, 6); near(1e6 - target.hp, T('gas') / 6);
+  run.advance(0.5); near(target.toxin, 6, 'no contact damage');
+  run.advance(7); near(target.toxin, 36); near(1e6 - target.hp, T('gas')); assert.equal(run.zones.length, 0);
+  const s = running(); s.mercenaries[0].shotTimer = 1e9; s.learn('strafe');
+  // Small enough that each hit makes an event (hits under 0.1% of max HP do not).
+  const H = T('strafe') * 100, t = enemy({ x: 500, hp: H, maxHp: H }); s.enemies = [t];
+  s.cast(1, 500, 225); near(H - t.hp, T('strafe'));
+  const hits = s.events.filter(e => e.kind === 'hit' && e.target === t.id); assert.equal(hits.length, 3); for (const h of hits) near(h.amount, T('strafe') / 3);
+});
+test('TL003 spikes bite back once a second; a paralysis burst is B.STATUS.shock.burst of max HP', () => {
+  const run = running(); run.mercenaries[0].shotTimer = 1e9; choose(run, 'spikes'); const chewer = enemy({ x: FIELD.wallX - 18, hp: 1e6, maxHp: 1e6 }); run.enemies = [chewer];
+  run.advance(0.9); near(chewer.hp, 1e6);
+  run.advance(0.2); near(1e6 - chewer.hp, V('spikes') * R);
+  run.advance(1); near(1e6 - chewer.hp, 2 * V('spikes') * R);
+  const emp = running(); emp.mercenaries[0].shotTimer = 1e9; emp.learn('emp'); const t = enemy({ hp: 1e6, maxHp: 1e6 }); emp.enemies = [t];
+  emp.cast(1, 500, 220); assert.ok(emp.isParalyzed(t));
+  near(emp.stats.damage.shockburst, 1e6 * B.STATUS.shock.burst, 'a flat share: the burst lands before the paralysis bonus');
+});
+test('TL003 hit events carry the element of their first damage type, for the damage-number colour', () => {
+  const run = running(); run.mercenaries[0].shotTimer = 1e9; run.recruit('flame'); run.recruit('sniper');
+  const target = enemy({ x: 640, hp: 1000, maxHp: 1000 }); run.enemies = [target];
+  run.mercenaries.forEach(m => m.shotTimer = 0); run.advance(FIELD.step);
+  const elements = new Set(run.events.filter(e => e.kind === 'hit').map(e => e.element));
+  assert.ok(elements.has('kinetic') && elements.has('fire'), [...elements].join());
+  const cold = running(); cold.learn('cryobomb'); const c = enemy({ hp: 1000, maxHp: 1000 }); cold.enemies = [c]; cold.mercenaries[0].shotTimer = 1e9; cold.cast(1, 500, 220);
+  assert.ok(cold.events.some(e => e.kind === 'hit' && e.element === 'cold'));
 });
 test('TL003 Laser hits only enemies along the aimed direction, fills the shock meter and pierces', () => {
   const run=running(); run.learn('laser'); const big={hp:1e6,maxHp:1e6}; const a=enemy({x:500,y:222,...big}), b=enemy({id:10000,x:350,y:222,...big}), c=enemy({id:10001,x:500,y:350,...big}); run.enemies=[a,b,c];
